@@ -64,17 +64,34 @@ vendas_por_dia = vendas_por_dia[vendas_por_dia["DATA DE INÍCIO"].dt.weekday != 
 vendas_por_dia = vendas_por_dia.sort_values("DATA DE INÍCIO")
 
 # Gráfico de linha diário
+# --- Gráficos ---
+st.subheader("📊 Vendas por Dia com Tendência (Linha, sem domingos)")
+
+# Agrupa por data e soma as vendas
+vendas_por_dia = df_filtrado.groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
+
+# Remove domingos (weekday=6)
+vendas_por_dia = vendas_por_dia[vendas_por_dia["DATA DE INÍCIO"].dt.weekday != 6]
+
+# Ordena por data
+vendas_por_dia = vendas_por_dia.sort_values("DATA DE INÍCIO")
+
+# Calcula média móvel de 7 dias para tendência
+vendas_por_dia["Tendência"] = vendas_por_dia["VALOR (R$)"].rolling(window=7, min_periods=1).mean()
+
+# Gráfico de linha com duas séries: vendas diárias + tendência
 graf1 = px.line(
     vendas_por_dia,
     x="DATA DE INÍCIO",
-    y="VALOR (R$)",
-    title="Vendas por Dia (sem domingos)",
-    labels={"DATA DE INÍCIO": "Data", "VALOR (R$)": "Vendas (R$)"},
+    y=["VALOR (R$)", "Tendência"],
+    title="Vendas por Dia com Linha de Tendência",
+    labels={"DATA DE INÍCIO": "Data", "value": "Vendas (R$)", "variable": "Legenda"},
     markers=True
 )
 
-# Linha fina e elegante
-graf1.update_traces(line=dict(width=2, color='cyan'), marker=dict(color='cyan', size=6))
+# Personaliza cores e linhas
+graf1.update_traces(selector=dict(name="VALOR (R$)"), line=dict(width=2, color='cyan'), marker=dict(color='cyan', size=6))
+graf1.update_traces(selector=dict(name="Tendência"), line=dict(width=3, color='orange', dash='dash'))
 
 # Fundo preto e layout limpo
 graf1.update_layout(
@@ -87,6 +104,7 @@ graf1.update_layout(
 )
 
 st.plotly_chart(graf1, use_container_width=True)
+
 
 # --- Gráficos auxiliares ---
 col1, col2 = st.columns(2)
