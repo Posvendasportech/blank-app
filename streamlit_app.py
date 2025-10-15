@@ -70,3 +70,25 @@ with col2:
         title="Total de Vendas por Produto"
     )
     st.plotly_chart(graf3, use_container_width=True)
+
+
+# --- Gráfico de crescimento de vendas ---
+st.subheader("📈 Crescimento do Volume de Vendas")
+
+# Agrupa por data e soma o valor das vendas
+vendas_por_data = df_filtrado.groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
+
+# Ordena por data
+vendas_por_data = vendas_por_data.sort_values("DATA DE INÍCIO")
+
+# Cria gráfico de linha
+graf_crescimento = px.line(
+    vendas_por_data,
+    x="DATA DE INÍCIO",
+    y="VALOR (R$)",
+    title="Crescimento do Volume de Vendas",
+    labels={"DATA DE INÍCIO": "Data", "VALOR (R$)": "Total de Vendas (R$)"},
+    markers=True
+)
+
+st.plotly_chart(graf_crescimento, use_container_width=True)
