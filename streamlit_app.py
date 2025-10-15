@@ -322,7 +322,12 @@ st.plotly_chart(graf_comparacao, use_container_width=True)
 # --- Crescimento Diário, Semanal e Mensal ---
 st.subheader("📊 Crescimento das Vendas (%)")
 
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
 # Crescimento diário
+vendas_diarias = df_filtrado.groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
+vendas_diarias = vendas_diarias.sort_values("DATA DE INÍCIO")
 vendas_diarias["Crescimento Diário (%)"] = vendas_diarias["VALOR (R$)"].pct_change() * 100
 
 # Crescimento semanal
@@ -333,11 +338,11 @@ vendas_semanais["Crescimento Semanal (%)"] = vendas_semanais["VALOR (R$)"].pct_c
 vendas_mensais = df_filtrado.resample("M", on="DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
 vendas_mensais["Crescimento Mensal (%)"] = vendas_mensais["VALOR (R$)"].pct_change() * 100
 
-# Gráficos de linha
-graf_crescimento = make_subplots(rows=3, cols=1, shared_xaxes=False, vertical_spacing=0.1,
-                                 subplot_titles=("Crescimento Diário (%)", "Crescimento Semanal (%)", "Crescimento Mensal (%)"))
-
-import plotly.graph_objects as go
+# Cria subplots
+graf_crescimento = make_subplots(
+    rows=3, cols=1, shared_xaxes=False, vertical_spacing=0.1,
+    subplot_titles=("Crescimento Diário (%)", "Crescimento Semanal (%)", "Crescimento Mensal (%)")
+)
 
 # Linha diária
 graf_crescimento.add_trace(go.Scatter(
