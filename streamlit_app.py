@@ -71,25 +71,26 @@ with col2:
     )
     st.plotly_chart(graf3, use_container_width=True)
 
+# --- Gráfico de crescimento semanal ---
+st.subheader("📈 Crescimento Semanal de Vendas")
 
-# --- Gráfico de crescimento mensal ---
-st.subheader("📈 Crescimento Mensal de Vendas")
+# Cria coluna de semana (início da semana)
+df_filtrado["SEMANA"] = df_filtrado["DATA DE INÍCIO"].dt.to_period("W").apply(lambda r: r.start_time)
 
-# Agrupa por mês
-df_filtrado["MÊS"] = df_filtrado["DATA DE INÍCIO"].dt.to_period("M").dt.to_timestamp()
-vendas_mensal = df_filtrado.groupby("MÊS")["VALOR (R$)"].sum().reset_index()
+# Agrupa por semana
+vendas_semanal = df_filtrado.groupby("SEMANA")["VALOR (R$)"].sum().reset_index()
 
-# Calcula acumulado mensal (opcional)
-vendas_mensal["Vendas Acumuladas"] = vendas_mensal["VALOR (R$)"].cumsum()
+# Calcula acumulado semanal
+vendas_semanal["Vendas Acumuladas"] = vendas_semanal["VALOR (R$)"].cumsum()
 
 # Cria gráfico de linha
-graf_mensal = px.line(
-    vendas_mensal,
-    x="MÊS",
-    y="Vendas Acumuladas",  # ou use "VALOR (R$)" se quiser só por mês
-    title="Curva de Crescimento Mensal de Vendas",
-    labels={"MÊS": "Mês", "Vendas Acumuladas": "Total Acumulado (R$)"},
+graf_semanal = px.line(
+    vendas_semanal,
+    x="SEMANA",
+    y="Vendas Acumuladas",  # ou "VALOR (R$)" se quiser só semanal
+    title="Curva de Crescimento Semanal de Vendas",
+    labels={"SEMANA": "Semana", "Vendas Acumuladas": "Total Acumulado (R$)"},
     markers=True
 )
 
-st.plotly_chart(graf_mensal, use_container_width=True)
+st.plotly_chart(graf_semanal, use_container_width=True)
