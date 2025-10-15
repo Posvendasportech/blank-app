@@ -1,12 +1,21 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import time
 
-st.set_page_config(page_title="Dashboard de Vendas", layout="wide")
-
-# --- Carregar a planilha ---
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1d07rdyAfCzyV2go0V4CJkXd53wUmoA058WeqaHfGPBk/export?format=csv"
-df = pd.read_csv(SHEET_URL)
+
+st.sidebar.title("⚙️ Controles")
+
+if st.sidebar.button("🔄 Atualizar dados agora"):
+    st.cache_data.clear()
+    st.experimental_rerun()
+
+@st.cache_data(ttl=60)  # guarda os dados por 60 segundos
+def carregar_dados():
+    return pd.read_csv(SHEET_URL)
+
+df = carregar_dados()
+st.success(f"Dados atualizados às {time.strftime('%H:%M:%S')}")
 
 # --- Limpeza dos dados ---
 df["DATA DE INÍCIO"] = pd.to_datetime(df["DATA DE INÍCIO"], errors="coerce")
