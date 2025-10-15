@@ -101,7 +101,7 @@ graf_semanal.update_layout(
     yaxis_title="Vendas (R$)",
     xaxis=dict(showgrid=True, gridcolor='lightgray'),
     yaxis=dict(showgrid=True, gridcolor='lightgray'),
-    plot_bgcolor='white'
+    plot_bgcolor='black'
 )
 
 st.plotly_chart(graf_semanal, use_container_width=True)
