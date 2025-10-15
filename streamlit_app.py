@@ -70,27 +70,23 @@ with col2:
         title="Total de Vendas por Produto"
     )
     st.plotly_chart(graf3, use_container_width=True)
-
-# --- Gráfico de crescimento semanal ---
-st.subheader("📈 Crescimento Semanal de Vendas")
+# --- Gráfico de vendas semana a semana ---
+st.subheader("📊 Vendas Semanais")
 
 # Cria coluna de semana (início da semana)
 df_filtrado["SEMANA"] = df_filtrado["DATA DE INÍCIO"].dt.to_period("W").apply(lambda r: r.start_time)
 
-# Agrupa por semana
+# Agrupa por semana e soma as vendas
 vendas_semanal = df_filtrado.groupby("SEMANA")["VALOR (R$)"].sum().reset_index()
 
-# Calcula acumulado semanal
-vendas_semanal["Vendas Acumuladas"] = vendas_semanal["VALOR (R$)"].cumsum()
-
-# Cria gráfico de linha
-graf_semanal = px.line(
+# Cria gráfico de barras para mostrar desenvolvimento semanal
+graf_semanal = px.bar(
     vendas_semanal,
     x="SEMANA",
-    y="Vendas Acumuladas",  # ou "VALOR (R$)" se quiser só semanal
-    title="Curva de Crescimento Semanal de Vendas",
-    labels={"SEMANA": "Semana", "Vendas Acumuladas": "Total Acumulado (R$)"},
-    markers=True
+    y="VALOR (R$)",
+    title="Vendas Semanais",
+    labels={"SEMANA": "Semana", "VALOR (R$)": "Vendas (R$)"},
+    text="VALOR (R$)"
 )
 
 st.plotly_chart(graf_semanal, use_container_width=True)
