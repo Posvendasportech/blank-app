@@ -341,34 +341,42 @@ st.plotly_chart(graf_comparacao, use_container_width=True)
 
 
 # --- Crescimento Diário, Semanal e Mensal ---
-st.subheader("📈 Crescimento Acumulado Comparando com Mês Anterior")
+# --- Crescimento Acumulado Corretamente ---
+st.subheader("📈 Crescimento Acumulado: Este Mês vs Mês Anterior")
 
-# Definir períodos
+from datetime import datetime, timedelta
+
+# Define períodos
 hoje = datetime.today()
 primeiro_dia_mes_atual = hoje.replace(day=1)
 primeiro_dia_mes_anterior = (primeiro_dia_mes_atual - timedelta(days=1)).replace(day=1)
+dias_ate_hoje = hoje.day
 
-# Filtra vendas
+# Cria range de datas para alinhamento
+datas_atual = pd.date_range(start=primeiro_dia_mes_atual, periods=dias_ate_hoje)
+datas_anterior = pd.date_range(start=primeiro_dia_mes_anterior, periods=dias_ate_hoje)
+
+# Vendas acumuladas do mês atual
 vendas_atual = df_filtrado[
     (df_filtrado["DATA DE INÍCIO"] >= primeiro_dia_mes_atual) &
     (df_filtrado["DATA DE INÍCIO"] <= hoje)
-].groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().cumsum().reset_index()
+].groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().reindex(datas_atual, fill_value=0).cumsum().reset_index()
+vendas_atual.columns = ["DATA", "Acumulado"]
 
+# Vendas acumuladas do mês anterior
 vendas_anterior = df_filtrado[
     (df_filtrado["DATA DE INÍCIO"] >= primeiro_dia_mes_anterior) &
-    (df_filtrado["DATA DE INÍCIO"] < primeiro_dia_mes_anterior + timedelta(days=hoje.day))
-].groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().cumsum().reset_index()
+    (df_filtrado["DATA DE INÍCIO"] <= primeiro_dia_mes_anterior + timedelta(days=dias_ate_hoje-1))
+].groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().reindex(datas_anterior, fill_value=0).cumsum().reset_index()
+vendas_anterior.columns = ["DATA", "Acumulado"]
 
-# Ajusta datas do mês anterior para alinhar com mês atual
-vendas_anterior["DATA DE INÍCIO"] = vendas_atual["DATA DE INÍCIO"].values
+# Gráfico comparativo
+import plotly.express as px
 
-# Gráfico de linhas comparativo
-graf_crescimento = px.line(
-    title=f"Crescimento Acumulado: Este Mês vs Mês Anterior",
-)
-graf_crescimento.add_scatter(x=vendas_atual["DATA DE INÍCIO"], y=vendas_atual["VALOR (R$)"],
+graf_crescimento = px.line(title="Crescimento Acumulado: Este Mês vs Mês Anterior")
+graf_crescimento.add_scatter(x=vendas_atual["DATA"], y=vendas_atual["Acumulado"],
                              mode="lines+markers", name="Este Mês", line=dict(color="cyan", width=2))
-graf_crescimento.add_scatter(x=vendas_anterior["DATA DE INÍCIO"], y=vendas_anterior["VALOR (R$)"],
+graf_crescimento.add_scatter(x=vendas_anterior["DATA"], y=vendas_anterior["Acumulado"],
                              mode="lines+markers", name="Mês Anterior", line=dict(color="orange", width=2))
 
 graf_crescimento.update_layout(
