@@ -344,7 +344,7 @@ st.subheader("📊 Crescimento Real de Vendas com Percentual")
 
 import plotly.graph_objects as go
 
-# --- Crescimento Semanal ---
+# Crescimento semanal
 vendas_semanais = df_filtrado.resample("W-MON", on="DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
 vendas_semanais["Crescimento (%)"] = vendas_semanais["VALOR (R$)"].pct_change() * 100
 
@@ -385,10 +385,11 @@ fig_semanal.update_layout(
 
 st.plotly_chart(fig_semanal, use_container_width=True)
 
-# --- Crescimento Mensal ---
+# Crescimento mensal
 vendas_mensais = df_filtrado.resample("M", on="DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
 vendas_mensais["Crescimento (%)"] = vendas_mensais["VALOR (R$)"].pct_change() * 100
 
+# Gráfico mensal
 fig_mensal = go.Figure()
 
 # Barra: valor das vendas
@@ -419,6 +420,8 @@ fig_mensal.update_layout(
     font=dict(color='white'),
     xaxis=dict(showgrid=True, gridcolor='gray'),
     yaxis=dict(title="Vendas (R$)", showgrid=True, gridcolor='gray'),
-    yaxis2=dict(title="Crescimento (%)", overlaying="y", side="right", showgrid=F
+    yaxis2=dict(title="Crescimento (%)", overlaying="y", side="right", showgrid=False),
+    legend=dict(font=dict(color='white'))
+)
 
-
+st.plotly_chart(fig_mensal, use_container_width=True)
