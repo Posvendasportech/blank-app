@@ -173,3 +173,189 @@ graf_semanal.update_layout(
 )
 
 st.plotly_chart(graf_semanal, use_container_width=True)
+
+# --- Vendas por Dia da Semana ---
+st.subheader("📊 Vendas por Dia da Semana")
+
+# Adiciona coluna com nome do dia da semana
+df_filtrado["DIA_DA_SEMANA"] = df_filtrado["DATA DE INÍCIO"].dt.day_name()
+
+# Agrupa vendas por dia da semana
+vendas_dia_semana = df_filtrado.groupby("DIA_DA_SEMANA")["VALOR (R$)"].sum().reindex(
+    ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
+).reset_index()
+
+# Gráfico de barras
+graf_dia_semana = px.bar(
+    vendas_dia_semana,
+    x="DIA_DA_SEMANA",
+    y="VALOR (R$)",
+    title="Vendas por Dia da Semana (excluindo domingos)",
+    labels={"DIA_DA_SEMANA":"Dia da Semana", "VALOR (R$)":"Vendas (R$)"},
+    text="VALOR (R$)"
+)
+
+graf_dia_semana.update_traces(marker_color='cyan')
+graf_dia_semana.update_layout(
+    plot_bgcolor='black',
+    paper_bgcolor='black',
+    font=dict(color='white'),
+    xaxis=dict(showgrid=True, gridcolor='gray'),
+    yaxis=dict(showgrid=True, gridcolor='gray')
+)
+
+st.plotly_chart(graf_dia_semana, use_container_width=True)
+
+
+# --- Comparação entre Grupos RFM ---
+st.subheader("📊 Análise por Grupo RFM")
+
+# Agrupa por Grupo RFM
+rfm_analise = df_filtrado.groupby("GRUPO RFM").agg({
+    "VALOR (R$)": "sum",
+    "NOME COMPLETO": "nunique"
+}).reset_index()
+
+# Calcula ticket médio por grupo
+rfm_analise["Ticket Médio"] = rfm_analise["VALOR (R$)"] / rfm_analise["NOME COMPLETO"]
+
+# Gráfico de barras: total de vendas por grupo
+graf_rfm_vendas = px.bar(
+    rfm_analise,
+    x="GRUPO RFM",
+    y="VALOR (R$)",
+    title="Total de Vendas por Grupo RFM",
+    labels={"GRUPO RFM": "Grupo RFM", "VALOR (R$)":"Vendas (R$)"},
+    text="VALOR (R$)"
+)
+graf_rfm_vendas.update_traces(marker_color='cyan')
+graf_rfm_vendas.update_layout(
+    plot_bgcolor='black',
+    paper_bgcolor='black',
+    font=dict(color='white'),
+    xaxis=dict(showgrid=True, gridcolor='gray'),
+    yaxis=dict(showgrid=True, gridcolor='gray')
+)
+
+st.plotly_chart(graf_rfm_vendas, use_container_width=True)
+
+# KPIs por grupo RFM
+st.subheader("Métricas por Grupo RFM")
+for index, row in rfm_analise.iterrows():
+    st.markdown(f"**{row['GRUPO RFM']}**: Total Vendas = R$ {row['VALOR (R$)']:.2f} | "
+                f"Clientes = {row['NOME COMPLETO']} | Ticket Médio = R$ {row['Ticket Médio']:.2f}")
+
+
+# --- Heatmap: Dia da Semana x Mês ---
+st.subheader("📊 Heatmap de Vendas: Dia da Semana x Mês")
+
+# Adiciona colunas de mês e dia da semana
+df_filtrado["MÊS"] = df_filtrado["DATA DE INÍCIO"].dt.strftime("%Y-%m")
+df_filtrado["DIA_DA_SEMANA"] = df_filtrado["DATA DE INÍCIO"].dt.day_name()
+
+# Agrupa por mês e dia da semana
+heatmap_data = df_filtrado.groupby(["MÊS","DIA_DA_SEMANA"])["VALOR (R$)"].sum().reset_index()
+
+# Pivot para formato de heatmap
+heatmap_pivot = heatmap_data.pivot(index="DIA_DA_SEMANA", columns="MÊS", values="VALOR (R$)")
+
+# Ordena os dias da semana corretamente
+dias_ordem = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
+heatmap_pivot = heatmap_pivot.reindex(dias_ordem)
+
+# Gráfico de heatmap
+import plotly.figure_factory as ff
+
+z = heatmap_pivot.values
+x = heatmap_pivot.columns
+y = heatmap_pivot.index
+
+heatmap = ff.create_annotated_heatmap(
+    z=z,
+    x=x,
+    y=y,
+    colorscale='Viridis',
+    showscale=True,
+    font_colors=['white'],
+    reversescale=False
+)
+
+# Layout fundo preto
+heatmap.update_layout(
+    plot_bgcolor='black',
+    paper_bgcolor='black',
+    font=dict(color='white', size=12),
+    title=dict(text="Heatmap de Vendas por Dia da Semana e Mês", font=dict(color='white', size=18))
+)
+
+st.plotly_chart(heatmap, use_container_width=True)
+
+
+# --- Gráfico de Funil ---
+st.subheader("🎯 Funil de Clientes até Vendas")
+
+# Calcula métricas para o funil
+total_clientes = df_filtrado["NOME COMPLETO"].nunique()  # clientes únicos
+clientes_compras = df_filtrado.groupby("NOME COMPLETO")["VALOR (R$)"].sum().reset_index()
+clientes_compras = clientes_compras[clientes_compras["VALOR (R$)"] > 0]
+total_clientes_compraram = clientes_compras.shape[0]
+total_vendas = df_filtrado["VALOR (R$)"].sum()
+
+# Cria DataFrame para funil
+funil_data = pd.DataFrame({
+    "Etapa": ["Clientes Totais", "Clientes que Compraram", "Total de Vendas (R$)"],
+    "Valor": [total_clientes, total_clientes_compraram, total_vendas]
+})
+
+# Gráfico de funil
+import plotly.express as px
+
+graf_funil = px.funnel(
+    funil_data,
+    x="Valor",
+    y="Etapa",
+    text="Valor",
+    title="Funil: Do Número de Clientes até Vendas Realizadas"
+)
+
+graf_funil.update_layout(
+    plot_bgcolor='black',
+    paper_bgcolor='black',
+    font=dict(color='white', size=12),
+    title=dict(font=dict(color='white', size=18))
+)
+
+st.plotly_chart(graf_funil, use_container_width=True)
+
+
+# --- Correlação: Número de Clientes vs Vendas ---
+st.subheader("📊 Correlação: Número de Clientes vs Vendas")
+
+# Agrupa por dia
+correl_data = df_filtrado.groupby("DATA DE INÍCIO").agg({
+    "NOME COMPLETO": "nunique",  # número de clientes únicos
+    "VALOR (R$)": "sum"          # vendas totais
+}).reset_index().rename(columns={"NOME COMPLETO": "Clientes", "VALOR (R$)": "Vendas"})
+
+# Gráfico de dispersão com linha de tendência
+graf_corr = px.scatter(
+    correl_data,
+    x="Clientes",
+    y="Vendas",
+    trendline="ols",  # linha de tendência linear
+    title="Número de Clientes vs Vendas Diárias",
+    labels={"Clientes": "Clientes Únicos", "Vendas": "Vendas (R$)"}
+)
+
+# Fundo preto e layout
+graf_corr.update_layout(
+    plot_bgcolor='black',
+    paper_bgcolor='black',
+    font=dict(color='white'),
+    title=dict(font=dict(color='white', size=18)),
+    xaxis=dict(showgrid=True, gridcolor='gray'),
+    yaxis=dict(showgrid=True, gridcolor='gray')
+)
+
+st.plotly_chart(graf_corr, use_container_width=True)
+
