@@ -243,36 +243,136 @@ st.plotly_chart(graf_rfm_vendas, use_container_width=True)
 
 
 
-# --- Total de Vendas por Dia da Semana ---
-st.subheader("📊 Total de Vendas por Dia da Semana")
+# --- Curva de Crescimento Acumulada ---
+st.subheader("📈 Curva de Crescimento Acumulada de Vendas")
 
-# Adiciona coluna com dia da semana
-df_filtrado["DIA_DA_SEMANA"] = df_filtrado["DATA DE INÍCIO"].dt.day_name()
+# Agrupa vendas por dia e soma
+vendas_diarias = df_filtrado.groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
 
-# Agrupa e soma vendas por dia da semana
-vendas_dia = df_filtrado.groupby("DIA_DA_SEMANA")["VALOR (R$)"].sum().reindex(
-    ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
-).reset_index()
+# Ordena por data
+vendas_diarias = vendas_diarias.sort_values("DATA DE INÍCIO")
 
-# Gráfico de barras
-graf_vendas_dia = px.bar(
-    vendas_dia,
-    x="DIA_DA_SEMANA",
-    y="VALOR (R$)",
-    title="Total de Vendas por Dia da Semana",
-    labels={"DIA_DA_SEMANA":"Dia da Semana", "VALOR (R$)":"Vendas (R$)"},
-    text="VALOR (R$)"
+# Calcula vendas acumuladas
+vendas_diarias["Acumulado"] = vendas_diarias["VALOR (R$)"].cumsum()
+
+# Gráfico de linha
+graf_acumulado = px.line(
+    vendas_diarias,
+    x="DATA DE INÍCIO",
+    y="Acumulado",
+    title="Curva de Crescimento Acumulada de Vendas",
+    labels={"DATA DE INÍCIO":"Data", "Acumulado":"Vendas Acumuladas (R$)"},
+    markers=True
 )
 
-# Personaliza cores e layout
-graf_vendas_dia.update_traces(marker_color='cyan')
-graf_vendas_dia.update_layout(
+# Estilo
+graf_acumulado.update_traces(line=dict(width=2, color='cyan'))
+graf_acumulado.update_layout(
     plot_bgcolor='black',
     paper_bgcolor='black',
     font=dict(color='white'),
     xaxis=dict(showgrid=True, gridcolor='gray'),
-    yaxis=dict(showgrid=True, gridcolor='gray'),
-    title=dict(font=dict(color='white', size=18))
+    yaxis=dict(showgrid=True, gridcolor='gray')
 )
 
-st.plotly_chart(graf_vendas_dia, use_container_width=True)
+st.plotly_chart(graf_acumulado, use_container_width=True)
+
+
+# --- Comparação de Meses ---
+st.subheader("📊 Comparação de Vendas: Este Mês vs Mês Anterior")
+
+# Adiciona coluna de mês
+df_filtrado["MÊS"] = df_filtrado["DATA DE INÍCIO"].dt.to_period("M")
+
+# Agrupa vendas por mês
+vendas_mensais = df_filtrado.groupby("MÊS")["VALOR (R$)"].sum().reset_index()
+vendas_mensais["MÊS"] = vendas_mensais["MÊS"].dt.to_timestamp()
+
+# Seleciona últimos 2 meses
+ultimos_2_meses = vendas_mensais.sort_values("MÊS").tail(2)
+
+# Calcula crescimento percentual
+crescimento = ((ultimos_2_meses["VALOR (R$)"].iloc[1] - ultimos_2_meses["VALOR (R$)"].iloc[0]) /
+               ultimos_2_meses["VALOR (R$)"].iloc[0] * 100)
+
+st.metric(
+    label=f"Crescimento de {ultimos_2_meses['MÊS'].iloc[0].strftime('%b/%Y')} → {ultimos_2_meses['MÊS'].iloc[1].strftime('%b/%Y')}",
+    value=f"R$ {ultimos_2_meses['VALOR (R$)'].iloc[1]:,.2f}",
+    delta=f"{crescimento:.2f}%"
+)
+
+# Gráfico de barras comparativo
+graf_comparacao = px.bar(
+    ultimos_2_meses,
+    x="MÊS",
+    y="VALOR (R$)",
+    text="VALOR (R$)",
+    title="Comparação de Vendas Mensais",
+    labels={"MÊS":"Mês", "VALOR (R$)":"Vendas (R$)"}
+)
+graf_comparacao.update_traces(marker_color='cyan')
+graf_comparacao.update_layout(
+    plot_bgcolor='black',
+    paper_bgcolor='black',
+    font=dict(color='white')
+)
+st.plotly_chart(graf_comparacao, use_container_width=True)
+
+
+# --- Crescimento Diário, Semanal e Mensal ---
+st.subheader("📊 Crescimento das Vendas (%)")
+
+# Crescimento diário
+vendas_diarias["Crescimento Diário (%)"] = vendas_diarias["VALOR (R$)"].pct_change() * 100
+
+# Crescimento semanal
+vendas_semanais = df_filtrado.resample("W-MON", on="DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
+vendas_semanais["Crescimento Semanal (%)"] = vendas_semanais["VALOR (R$)"].pct_change() * 100
+
+# Crescimento mensal
+vendas_mensais = df_filtrado.resample("M", on="DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
+vendas_mensais["Crescimento Mensal (%)"] = vendas_mensais["VALOR (R$)"].pct_change() * 100
+
+# Gráficos de linha
+graf_crescimento = make_subplots(rows=3, cols=1, shared_xaxes=False, vertical_spacing=0.1,
+                                 subplot_titles=("Crescimento Diário (%)", "Crescimento Semanal (%)", "Crescimento Mensal (%)"))
+
+import plotly.graph_objects as go
+
+# Linha diária
+graf_crescimento.add_trace(go.Scatter(
+    x=vendas_diarias["DATA DE INÍCIO"],
+    y=vendas_diarias["Crescimento Diário (%)"],
+    mode="lines+markers",
+    line=dict(color="cyan", width=2),
+    name="Diário"
+), row=1, col=1)
+
+# Linha semanal
+graf_crescimento.add_trace(go.Scatter(
+    x=vendas_semanais["DATA DE INÍCIO"],
+    y=vendas_semanais["Crescimento Semanal (%)"],
+    mode="lines+markers",
+    line=dict(color="orange", width=2),
+    name="Semanal"
+), row=2, col=1)
+
+# Linha mensal
+graf_crescimento.add_trace(go.Scatter(
+    x=vendas_mensais["DATA DE INÍCIO"],
+    y=vendas_mensais["Crescimento Mensal (%)"],
+    mode="lines+markers",
+    line=dict(color="lime", width=2),
+    name="Mensal"
+), row=3, col=1)
+
+# Layout
+graf_crescimento.update_layout(
+    height=900,
+    plot_bgcolor='black',
+    paper_bgcolor='black',
+    font=dict(color='white'),
+    title_text="Crescimento Diário, Semanal e Mensal (%)"
+)
+
+st.plotly_chart(graf_crescimento, use_container_width=True)
