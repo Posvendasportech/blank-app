@@ -278,37 +278,56 @@ graf_acumulado.update_layout(
 st.plotly_chart(graf_acumulado, use_container_width=True)
 
 
-# --- Comparação de Meses ---
-st.subheader("📊 Comparação de Vendas: Este Mês vs Mês Anterior")
+# --- Comparação de Períodos Iguais ---
+st.subheader("📊 Comparação de Vendas: Período Atual vs Período Igual do Mês Anterior")
 
-# Adiciona coluna de mês
-df_filtrado["MÊS"] = df_filtrado["DATA DE INÍCIO"].dt.to_period("M")
+from datetime import datetime, timedelta
 
-# Agrupa vendas por mês
-vendas_mensais = df_filtrado.groupby("MÊS")["VALOR (R$)"].sum().reset_index()
-vendas_mensais["MÊS"] = vendas_mensais["MÊS"].dt.to_timestamp()
+# Define período atual (até hoje)
+hoje = datetime.today()
+primeiro_dia_mes_atual = hoje.replace(day=1)
+dia_atual = hoje.day
 
-# Seleciona últimos 2 meses
-ultimos_2_meses = vendas_mensais.sort_values("MÊS").tail(2)
+# Define período equivalente do mês anterior
+primeiro_dia_mes_anterior = (primeiro_dia_mes_atual - timedelta(days=1)).replace(day=1)
+ultimo_dia_mes_anterior = primeiro_dia_mes_anterior.replace(day=dia_atual)
 
-# Calcula crescimento percentual
-crescimento = ((ultimos_2_meses["VALOR (R$)"].iloc[1] - ultimos_2_meses["VALOR (R$)"].iloc[0]) /
-               ultimos_2_meses["VALOR (R$)"].iloc[0] * 100)
+# Filtra vendas do período atual e mês anterior
+vendas_mes_atual = df_filtrado[
+    (df_filtrado["DATA DE INÍCIO"] >= primeiro_dia_mes_atual) &
+    (df_filtrado["DATA DE INÍCIO"] <= hoje)
+]["VALOR (R$)"].sum()
 
+vendas_mes_anterior = df_filtrado[
+    (df_filtrado["DATA DE INÍCIO"] >= primeiro_dia_mes_anterior) &
+    (df_filtrado["DATA DE INÍCIO"] <= ultimo_dia_mes_anterior)
+]["VALOR (R$)"].sum()
+
+# Calcula variação percentual
+delta = ((vendas_mes_atual - vendas_mes_anterior) / vendas_mes_anterior) * 100 if vendas_mes_anterior != 0 else 0
+
+# Exibe métricas
 st.metric(
-    label=f"Crescimento de {ultimos_2_meses['MÊS'].iloc[0].strftime('%b/%Y')} → {ultimos_2_meses['MÊS'].iloc[1].strftime('%b/%Y')}",
-    value=f"R$ {ultimos_2_meses['VALOR (R$)'].iloc[1]:,.2f}",
-    delta=f"{crescimento:.2f}%"
+    label=f"Vendas: {primeiro_dia_mes_atual.strftime('%d/%m')} até {hoje.strftime('%d/%m')} (este mês vs mês anterior)",
+    value=f"R$ {vendas_mes_atual:,.2f}",
+    delta=f"{delta:.2f}%"
 )
 
-# Gráfico de barras comparativo
+# Gráfico comparativo
+comparacao = pd.DataFrame({
+    "Período": [f"Mês Anterior (até {dia_atual})", f"Este Mês (até {dia_atual})"],
+    "Vendas (R$)": [vendas_mes_anterior, vendas_mes_atual]
+})
+
+import plotly.express as px
+
 graf_comparacao = px.bar(
-    ultimos_2_meses,
-    x="MÊS",
-    y="VALOR (R$)",
-    text="VALOR (R$)",
-    title="Comparação de Vendas Mensais",
-    labels={"MÊS":"Mês", "VALOR (R$)":"Vendas (R$)"}
+    comparacao,
+    x="Período",
+    y="Vendas (R$)",
+    text="Vendas (R$)",
+    title=f"Comparação de Vendas até o Dia {dia_atual}",
+    labels={"Vendas (R$)":"Vendas (R$)", "Período":"Período"}
 )
 graf_comparacao.update_traces(marker_color='cyan')
 graf_comparacao.update_layout(
@@ -316,7 +335,9 @@ graf_comparacao.update_layout(
     paper_bgcolor='black',
     font=dict(color='white')
 )
+
 st.plotly_chart(graf_comparacao, use_container_width=True)
+
 
 
 # --- Crescimento Diário, Semanal e Mensal ---
