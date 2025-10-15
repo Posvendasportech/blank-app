@@ -52,10 +52,13 @@ col2.metric("👥 Clientes Únicos", clientes)
 col3.metric("🎯 Ticket Médio", f"R$ {ticket_medio:,.2f}")
 
 # --- Gráficos ---
-st.subheader("📊 Vendas por Dia (Linha)")
+st.subheader("📊 Vendas por Dia (Linha, sem domingos)")
 
 # Agrupa por data e soma as vendas
 vendas_por_dia = df_filtrado.groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
+
+# Remove domingos (weekday=6)
+vendas_por_dia = vendas_por_dia[vendas_por_dia["DATA DE INÍCIO"].dt.weekday != 6]
 
 # Ordena por data
 vendas_por_dia = vendas_por_dia.sort_values("DATA DE INÍCIO")
@@ -65,7 +68,7 @@ graf1 = px.line(
     vendas_por_dia,
     x="DATA DE INÍCIO",
     y="VALOR (R$)",
-    title="Vendas por Dia",
+    title="Vendas por Dia (sem domingos)",
     labels={"DATA DE INÍCIO": "Data", "VALOR (R$)": "Vendas (R$)"},
     markers=True
 )
