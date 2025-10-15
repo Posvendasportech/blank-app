@@ -99,8 +99,8 @@ graf_semanal.update_traces(line=dict(width=2, color='blue'))
 graf_semanal.update_layout(
     xaxis_title="Semana",
     yaxis_title="Vendas (R$)",
-    xaxis=dict(showgrid=True, gridcolor='lightgray'),
-    yaxis=dict(showgrid=True, gridcolor='lightgray'),
+    xaxis=dict(showgrid=True, gridcolor='gray'),
+    yaxis=dict(showgrid=True, gridcolor='gray'),
     plot_bgcolor='black'
 )
 
