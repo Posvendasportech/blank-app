@@ -72,23 +72,26 @@ with col2:
     st.plotly_chart(graf3, use_container_width=True)
 
 
-# --- Gráfico de crescimento de vendas ---
-st.subheader("📈 Crescimento do Volume de Vendas")
+# --- Gráfico de crescimento acumulado ---
+st.subheader("📈 Curva de Crescimento de Vendas (Acumulada)")
 
-# Agrupa por data e soma o valor das vendas
+# Agrupa por data e soma as vendas
 vendas_por_data = df_filtrado.groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
 
 # Ordena por data
 vendas_por_data = vendas_por_data.sort_values("DATA DE INÍCIO")
 
-# Cria gráfico de linha
-graf_crescimento = px.line(
+# Calcula o valor acumulado das vendas
+vendas_por_data["Vendas Acumuladas"] = vendas_por_data["VALOR (R$)"].cumsum()
+
+# Cria gráfico de linha acumulada
+graf_crescimento_acumulado = px.line(
     vendas_por_data,
     x="DATA DE INÍCIO",
-    y="VALOR (R$)",
-    title="Crescimento do Volume de Vendas",
-    labels={"DATA DE INÍCIO": "Data", "VALOR (R$)": "Total de Vendas (R$)"},
+    y="Vendas Acumuladas",
+    title="Curva de Crescimento de Vendas (Acumulada)",
+    labels={"DATA DE INÍCIO": "Data", "Vendas Acumuladas": "Total Acumulado (R$)"},
     markers=True
 )
 
-st.plotly_chart(graf_crescimento, use_container_width=True)
+st.plotly_chart(graf_crescimento_acumulado, use_container_width=True)
