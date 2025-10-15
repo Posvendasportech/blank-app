@@ -72,32 +72,24 @@ with col2:
     st.plotly_chart(graf3, use_container_width=True)
 
 
-# --- Gráfico combinado: vendas diárias + acumuladas ---
-st.subheader("📊 Vendas Diárias e Curva de Crescimento Acumulada")
+# --- Gráfico de crescimento mensal ---
+st.subheader("📈 Crescimento Mensal de Vendas")
 
-# Agrupa por data e soma as vendas
-vendas_por_data = df_filtrado.groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
+# Agrupa por mês
+df_filtrado["MÊS"] = df_filtrado["DATA DE INÍCIO"].dt.to_period("M").dt.to_timestamp()
+vendas_mensal = df_filtrado.groupby("MÊS")["VALOR (R$)"].sum().reset_index()
 
-# Ordena por data
-vendas_por_data = vendas_por_data.sort_values("DATA DE INÍCIO")
+# Calcula acumulado mensal (opcional)
+vendas_mensal["Vendas Acumuladas"] = vendas_mensal["VALOR (R$)"].cumsum()
 
-# Calcula acumulado
-vendas_por_data["Vendas Acumuladas"] = vendas_por_data["VALOR (R$)"].cumsum()
-
-# Cria gráfico de linha com duas séries
-graf_combinado = px.line(
-    vendas_por_data,
-    x="DATA DE INÍCIO",
-    y=["VALOR (R$)", "Vendas Acumuladas"],
-    title="Vendas Diárias e Crescimento Acumulado",
-    labels={
-        "DATA DE INÍCIO": "Data",
-        "value": "Valor (R$)",
-        "variable": "Tipo"
-    },
+# Cria gráfico de linha
+graf_mensal = px.line(
+    vendas_mensal,
+    x="MÊS",
+    y="Vendas Acumuladas",  # ou use "VALOR (R$)" se quiser só por mês
+    title="Curva de Crescimento Mensal de Vendas",
+    labels={"MÊS": "Mês", "Vendas Acumuladas": "Total Acumulado (R$)"},
     markers=True
 )
 
-st.plotly_chart(graf_combinado, use_container_width=True)
-
-st.plotly_chart(graf_crescimento_acumulado, use_container_width=True)
+st.plotly_chart(graf_mensal, use_container_width=True)
