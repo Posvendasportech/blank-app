@@ -245,8 +245,7 @@ for index, row in rfm_analise.iterrows():
     st.markdown(f"**{row['GRUPO RFM']}**: Total Vendas = R$ {row['VALOR (R$)']:.2f} | "
                 f"Clientes = {row['NOME COMPLETO']} | Ticket Médio = R$ {row['Ticket Médio']:.2f}")
 
-
-# --- Heatmap: Dia da Semana x Mês ---
+# --- Heatmap: Dia da Semana x Mês (corrigido) ---
 st.subheader("📊 Heatmap de Vendas: Dia da Semana x Mês")
 
 # Adiciona colunas de mês e dia da semana
@@ -258,6 +257,9 @@ heatmap_data = df_filtrado.groupby(["MÊS","DIA_DA_SEMANA"])["VALOR (R$)"].sum()
 
 # Pivot para formato de heatmap
 heatmap_pivot = heatmap_data.pivot(index="DIA_DA_SEMANA", columns="MÊS", values="VALOR (R$)")
+
+# Substitui NaN por 0
+heatmap_pivot = heatmap_pivot.fillna(0)
 
 # Ordena os dias da semana corretamente
 dias_ordem = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
@@ -289,73 +291,3 @@ heatmap.update_layout(
 )
 
 st.plotly_chart(heatmap, use_container_width=True)
-
-
-# --- Gráfico de Funil ---
-st.subheader("🎯 Funil de Clientes até Vendas")
-
-# Calcula métricas para o funil
-total_clientes = df_filtrado["NOME COMPLETO"].nunique()  # clientes únicos
-clientes_compras = df_filtrado.groupby("NOME COMPLETO")["VALOR (R$)"].sum().reset_index()
-clientes_compras = clientes_compras[clientes_compras["VALOR (R$)"] > 0]
-total_clientes_compraram = clientes_compras.shape[0]
-total_vendas = df_filtrado["VALOR (R$)"].sum()
-
-# Cria DataFrame para funil
-funil_data = pd.DataFrame({
-    "Etapa": ["Clientes Totais", "Clientes que Compraram", "Total de Vendas (R$)"],
-    "Valor": [total_clientes, total_clientes_compraram, total_vendas]
-})
-
-# Gráfico de funil
-import plotly.express as px
-
-graf_funil = px.funnel(
-    funil_data,
-    x="Valor",
-    y="Etapa",
-    text="Valor",
-    title="Funil: Do Número de Clientes até Vendas Realizadas"
-)
-
-graf_funil.update_layout(
-    plot_bgcolor='black',
-    paper_bgcolor='black',
-    font=dict(color='white', size=12),
-    title=dict(font=dict(color='white', size=18))
-)
-
-st.plotly_chart(graf_funil, use_container_width=True)
-
-
-# --- Correlação: Número de Clientes vs Vendas ---
-st.subheader("📊 Correlação: Número de Clientes vs Vendas")
-
-# Agrupa por dia
-correl_data = df_filtrado.groupby("DATA DE INÍCIO").agg({
-    "NOME COMPLETO": "nunique",  # número de clientes únicos
-    "VALOR (R$)": "sum"          # vendas totais
-}).reset_index().rename(columns={"NOME COMPLETO": "Clientes", "VALOR (R$)": "Vendas"})
-
-# Gráfico de dispersão com linha de tendência
-graf_corr = px.scatter(
-    correl_data,
-    x="Clientes",
-    y="Vendas",
-    trendline="ols",  # linha de tendência linear
-    title="Número de Clientes vs Vendas Diárias",
-    labels={"Clientes": "Clientes Únicos", "Vendas": "Vendas (R$)"}
-)
-
-# Fundo preto e layout
-graf_corr.update_layout(
-    plot_bgcolor='black',
-    paper_bgcolor='black',
-    font=dict(color='white'),
-    title=dict(font=dict(color='white', size=18)),
-    xaxis=dict(showgrid=True, gridcolor='gray'),
-    yaxis=dict(showgrid=True, gridcolor='gray')
-)
-
-st.plotly_chart(graf_corr, use_container_width=True)
-
