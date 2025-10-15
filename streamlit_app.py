@@ -265,12 +265,13 @@ heatmap_pivot = heatmap_pivot.fillna(0)
 dias_ordem = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
 heatmap_pivot = heatmap_pivot.reindex(dias_ordem)
 
+# Converte index e columns para lista
+z = heatmap_pivot.values.tolist()
+x = heatmap_pivot.columns.tolist()
+y = heatmap_pivot.index.tolist()
+
 # Gráfico de heatmap
 import plotly.figure_factory as ff
-
-z = heatmap_pivot.values
-x = heatmap_pivot.columns
-y = heatmap_pivot.index
 
 heatmap = ff.create_annotated_heatmap(
     z=z,
