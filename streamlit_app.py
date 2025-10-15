@@ -339,54 +339,86 @@ graf_comparacao.update_layout(
 st.plotly_chart(graf_comparacao, use_container_width=True)
 
 
+# --- Crescimento de Vendas Relacionado ao Valor ---
+st.subheader("📊 Crescimento Real de Vendas com Percentual")
 
-# --- Crescimento Semanal e Mensal ---
-st.subheader("📊 Crescimento Semanal e Mensal de Vendas")
+import plotly.graph_objects as go
 
-import plotly.express as px
-
-# Crescimento semanal
+# --- Crescimento Semanal ---
 vendas_semanais = df_filtrado.resample("W-MON", on="DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
 vendas_semanais["Crescimento (%)"] = vendas_semanais["VALOR (R$)"].pct_change() * 100
 
 # Gráfico semanal
-graf_semanal = px.bar(
-    vendas_semanais,
-    x="DATA DE INÍCIO",
-    y="Crescimento (%)",
-    title="Crescimento Semanal (%)",
-    labels={"DATA DE INÍCIO":"Semana", "Crescimento (%)":"Crescimento (%)"},
-    text="Crescimento (%)"
-)
-graf_semanal.update_traces(marker_color='cyan')
-graf_semanal.update_layout(
+fig_semanal = go.Figure()
+
+# Barra: valor das vendas
+fig_semanal.add_trace(go.Bar(
+    x=vendas_semanais["DATA DE INÍCIO"],
+    y=vendas_semanais["VALOR (R$)"],
+    name="Vendas (R$)",
+    marker_color='cyan',
+    text=vendas_semanais["VALOR (R$)"].map(lambda x: f"R$ {x:,.0f}"),
+    textposition='auto'
+))
+
+# Linha: crescimento percentual
+fig_semanal.add_trace(go.Scatter(
+    x=vendas_semanais["DATA DE INÍCIO"],
+    y=vendas_semanais["Crescimento (%)"],
+    name="Crescimento (%)",
+    yaxis="y2",
+    mode="lines+markers",
+    line=dict(color="orange", width=2)
+))
+
+# Layout com dois eixos Y
+fig_semanal.update_layout(
+    title="Crescimento Semanal de Vendas",
     plot_bgcolor='black',
     paper_bgcolor='black',
     font=dict(color='white'),
     xaxis=dict(showgrid=True, gridcolor='gray'),
-    yaxis=dict(showgrid=True, gridcolor='gray')
+    yaxis=dict(title="Vendas (R$)", showgrid=True, gridcolor='gray'),
+    yaxis2=dict(title="Crescimento (%)", overlaying="y", side="right", showgrid=False),
+    legend=dict(font=dict(color='white'))
 )
-st.plotly_chart(graf_semanal, use_container_width=True)
 
-# Crescimento mensal
+st.plotly_chart(fig_semanal, use_container_width=True)
+
+# --- Crescimento Mensal ---
 vendas_mensais = df_filtrado.resample("M", on="DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
 vendas_mensais["Crescimento (%)"] = vendas_mensais["VALOR (R$)"].pct_change() * 100
 
-# Gráfico mensal
-graf_mensal = px.bar(
-    vendas_mensais,
-    x="DATA DE INÍCIO",
-    y="Crescimento (%)",
-    title="Crescimento Mensal (%)",
-    labels={"DATA DE INÍCIO":"Mês", "Crescimento (%)":"Crescimento (%)"},
-    text="Crescimento (%)"
-)
-graf_mensal.update_traces(marker_color='orange')
-graf_mensal.update_layout(
+fig_mensal = go.Figure()
+
+# Barra: valor das vendas
+fig_mensal.add_trace(go.Bar(
+    x=vendas_mensais["DATA DE INÍCIO"],
+    y=vendas_mensais["VALOR (R$)"],
+    name="Vendas (R$)",
+    marker_color='cyan',
+    text=vendas_mensais["VALOR (R$)"].map(lambda x: f"R$ {x:,.0f}"),
+    textposition='auto'
+))
+
+# Linha: crescimento percentual
+fig_mensal.add_trace(go.Scatter(
+    x=vendas_mensais["DATA DE INÍCIO"],
+    y=vendas_mensais["Crescimento (%)"],
+    name="Crescimento (%)",
+    yaxis="y2",
+    mode="lines+markers",
+    line=dict(color="orange", width=2)
+))
+
+# Layout com dois eixos Y
+fig_mensal.update_layout(
+    title="Crescimento Mensal de Vendas",
     plot_bgcolor='black',
     paper_bgcolor='black',
     font=dict(color='white'),
     xaxis=dict(showgrid=True, gridcolor='gray'),
-    yaxis=dict(showgrid=True, gridcolor='gray')
-)
-st.plotly_chart(graf_mensal, use_container_width=True)
+    yaxis=dict(title="Vendas (R$)", showgrid=True, gridcolor='gray'),
+    yaxis2=dict(title="Crescimento (%)", overlaying="y", side="right", showgrid=F
+
+
