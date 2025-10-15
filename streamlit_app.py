@@ -239,11 +239,7 @@ graf_rfm_vendas.update_layout(
 
 st.plotly_chart(graf_rfm_vendas, use_container_width=True)
 
-# KPIs por grupo RFM
-st.subheader("Métricas por Grupo RFM")
-for index, row in rfm_analise.iterrows():
-    st.markdown(f"**{row['GRUPO RFM']}**: Total Vendas = R$ {row['VALOR (R$)']:.2f} | "
-                f"Clientes = {row['NOME COMPLETO']} | Ticket Médio = R$ {row['Ticket Médio']:.2f}")
+
 
 # --- Heatmap: Dia da Semana x Mês (corrigido) ---
 st.subheader("📊 Heatmap de Vendas: Dia da Semana x Mês")
