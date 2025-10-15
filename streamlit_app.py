@@ -243,30 +243,30 @@ st.plotly_chart(graf_rfm_vendas, use_container_width=True)
 
 
 
-# --- Média de Vendas por Dia da Semana ---
-st.subheader("📊 Média de Vendas por Dia da Semana")
+# --- Total de Vendas por Dia da Semana ---
+st.subheader("📊 Total de Vendas por Dia da Semana")
 
 # Adiciona coluna com dia da semana
 df_filtrado["DIA_DA_SEMANA"] = df_filtrado["DATA DE INÍCIO"].dt.day_name()
 
-# Calcula a média de vendas por dia da semana
-media_vendas_dia = df_filtrado.groupby("DIA_DA_SEMANA")["VALOR (R$)"].mean().reindex(
+# Agrupa e soma vendas por dia da semana
+vendas_dia = df_filtrado.groupby("DIA_DA_SEMANA")["VALOR (R$)"].sum().reindex(
     ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
 ).reset_index()
 
 # Gráfico de barras
-graf_media_dia = px.bar(
-    media_vendas_dia,
+graf_vendas_dia = px.bar(
+    vendas_dia,
     x="DIA_DA_SEMANA",
     y="VALOR (R$)",
-    title="Média de Vendas por Dia da Semana",
-    labels={"DIA_DA_SEMANA":"Dia da Semana", "VALOR (R$)":"Média de Vendas (R$)"},
+    title="Total de Vendas por Dia da Semana",
+    labels={"DIA_DA_SEMANA":"Dia da Semana", "VALOR (R$)":"Vendas (R$)"},
     text="VALOR (R$)"
 )
 
 # Personaliza cores e layout
-graf_media_dia.update_traces(marker_color='cyan')
-graf_media_dia.update_layout(
+graf_vendas_dia.update_traces(marker_color='cyan')
+graf_vendas_dia.update_layout(
     plot_bgcolor='black',
     paper_bgcolor='black',
     font=dict(color='white'),
@@ -275,4 +275,4 @@ graf_media_dia.update_layout(
     title=dict(font=dict(color='white', size=18))
 )
 
-st.plotly_chart(graf_media_dia, use_container_width=True)
+st.plotly_chart(graf_vendas_dia, use_container_width=True)
