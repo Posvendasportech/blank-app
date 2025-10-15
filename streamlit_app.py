@@ -7,37 +7,41 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1d07rdyAfCzyV2go0V4CJkXd53wU
 
 st.set_page_config(page_title="Dashboard de Vendas", layout="wide")
 
-# --- Sidebar ---
-st.sidebar.title("⚙️ Controles")
+# --- Inicializa sessão ---
+if "last_refresh" not in st.session_state:
+    st.session_state.last_refresh = 0
 
-# Botão de atualização manual
-if st.sidebar.button("🔄 Atualizar dados agora"):
-    st.cache_data.clear()
-    st.experimental_rerun()
+if "df" not in st.session_state:
+    st.session_state.df = pd.DataFrame()
 
 # --- Função para carregar dados com cache de 60 segundos ---
 @st.cache_data(ttl=60)
 def carregar_dados():
-    return pd.read_csv(SHEET_URL)
+    df = pd.read_csv(SHEET_URL)
+    # Limpeza dos dados
+    df["DATA DE INÍCIO"] = pd.to_datetime(df["DATA DE INÍCIO"], errors="coerce")
+    df["VALOR (R$)"] = (
+        df["VALOR (R$)"]
+        .astype(str)
+        .str.replace("R\$", "", regex=True)
+        .str.replace(",", ".")
+        .astype(float)
+    )
+    return df
 
-df = carregar_dados()
-st.success(f"Dados atualizados às {time.strftime('%H:%M:%S')}")
-
-# --- Limpeza dos dados ---
-df["DATA DE INÍCIO"] = pd.to_datetime(df["DATA DE INÍCIO"], errors="coerce")
-df["VALOR (R$)"] = (
-    df["VALOR (R$)"]
-    .astype(str)
-    .str.replace("R\$", "", regex=True)
-    .str.replace(",", ".")
-    .astype(float)
-)
-
-# --- Atualização automática a cada 60 segundos ---
-if "last_refresh" not in st.session_state:
+# --- Atualização automática ---
+if time.time() - st.session_state.last_refresh > 60:
+    st.session_state.df = carregar_dados()
     st.session_state.last_refresh = time.time()
 
-if time.time() - st.session_state.last_refresh > 60:
+df = st.session_state.df.copy()
+st.success(f"Dados atualizados às {time.strftime('%H:%M:%S')}")
+
+# --- Sidebar ---
+st.sidebar.title("⚙️ Controles")
+if st.sidebar.button("🔄 Atualizar dados agora"):
+    st.cache_data.clear()
+    st.session_state.df = carregar_dados()
     st.session_state.last_refresh = time.time()
     st.experimental_rerun()
 
