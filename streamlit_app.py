@@ -1,18 +1,13 @@
-import json
-import gspread
-from google.oauth2.service_account import Credentials
 import streamlit as st
+import pandas as pd
 
-credenciais_json = os.getenv("PLANILHA_CRM_POSVENDAS")
-credenciais_dict = json.loads(credenciais_json)
+st.title("Conectando Google Sheets ao Streamlit")
 
-scope = ["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"]
-creds = Credentials.from_service_account_info(credenciais_dict, scopes=scope)
-client = gspread.authorize(creds)
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1d07rdyAfCzyV2go0V4CJkXd53wUmoA058WeqaHfGPBk/export?format=csv"
 
 try:
-    sheet = client.open("Controle de Vendas").worksheet("Base")
-    dados = sheet.get_all_records()
-    st.success(f"✅ Planilha carregada com sucesso! Total de linhas: {len(dados)}")
+    df = pd.read_csv(SHEET_URL)
+    st.success("Planilha carregada com sucesso! 🎉")
+    st.dataframe(df)
 except Exception as e:
-    st.error(f"⚠️ Erro ao conectar à planilha: {e}")
+    st.error(f"Erro ao carregar a planilha: {e}")
