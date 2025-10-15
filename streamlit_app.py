@@ -241,50 +241,42 @@ st.plotly_chart(graf_rfm_vendas, use_container_width=True)
 
 
 
-# --- Heatmap: Dia da Semana x Mês (corrigido) ---
-st.subheader("📊 Heatmap de Vendas: Dia da Semana x Mês")
+
+# --- Vendas por Dia da Semana por Mês (Linhas) ---
+st.subheader("📊 Vendas por Dia da Semana por Mês")
 
 # Adiciona colunas de mês e dia da semana
 df_filtrado["MÊS"] = df_filtrado["DATA DE INÍCIO"].dt.strftime("%Y-%m")
 df_filtrado["DIA_DA_SEMANA"] = df_filtrado["DATA DE INÍCIO"].dt.day_name()
 
 # Agrupa por mês e dia da semana
-heatmap_data = df_filtrado.groupby(["MÊS","DIA_DA_SEMANA"])["VALOR (R$)"].sum().reset_index()
+vendas_semana_mes = df_filtrado.groupby(["DIA_DA_SEMANA","MÊS"])["VALOR (R$)"].sum().reset_index()
 
-# Pivot para formato de heatmap
-heatmap_pivot = heatmap_data.pivot(index="DIA_DA_SEMANA", columns="MÊS", values="VALOR (R$)")
-
-# Substitui NaN por 0
-heatmap_pivot = heatmap_pivot.fillna(0)
-
-# Ordena os dias da semana corretamente
+# Ordena os dias da semana
 dias_ordem = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
-heatmap_pivot = heatmap_pivot.reindex(dias_ordem)
+vendas_semana_mes["DIA_DA_SEMANA"] = pd.Categorical(vendas_semana_mes["DIA_DA_SEMANA"], categories=dias_ordem, ordered=True)
+vendas_semana_mes = vendas_semana_mes.sort_values("DIA_DA_SEMANA")
 
-# Converte index e columns para lista
-z = heatmap_pivot.values.tolist()
-x = heatmap_pivot.columns.tolist()
-y = heatmap_pivot.index.tolist()
-
-# Gráfico de heatmap
-import plotly.figure_factory as ff
-
-heatmap = ff.create_annotated_heatmap(
-    z=z,
-    x=x,
-    y=y,
-    colorscale='Viridis',
-    showscale=True,
-    font_colors=['white'],
-    reversescale=False
+# Gráfico de linhas com uma linha por mês
+graf_semana_mes = px.line(
+    vendas_semana_mes,
+    x="DIA_DA_SEMANA",
+    y="VALOR (R$)",
+    color="MÊS",
+    markers=True,
+    title="Vendas por Dia da Semana por Mês",
+    labels={"DIA_DA_SEMANA":"Dia da Semana", "VALOR (R$)":"Vendas (R$)", "MÊS":"Mês"}
 )
 
-# Layout fundo preto
-heatmap.update_layout(
+# Personaliza cores e estilo
+graf_semana_mes.update_traces(line=dict(width=2))
+graf_semana_mes.update_layout(
     plot_bgcolor='black',
     paper_bgcolor='black',
-    font=dict(color='white', size=12),
-    title=dict(text="Heatmap de Vendas por Dia da Semana e Mês", font=dict(color='white', size=18))
+    font=dict(color='white'),
+    xaxis=dict(showgrid=True, gridcolor='gray'),
+    yaxis=dict(showgrid=True, gridcolor='gray'),
+    title=dict(font=dict(color='white', size=18))
 )
 
-st.plotly_chart(heatmap, use_container_width=True)
+st.plotly_chart(graf_semana_mes, use_container_width=True)
