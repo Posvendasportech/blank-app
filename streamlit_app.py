@@ -242,35 +242,31 @@ st.plotly_chart(graf_rfm_vendas, use_container_width=True)
 
 
 
-# --- Vendas por Dia da Semana por Mês (Linhas) ---
-st.subheader("📊 Vendas por Dia da Semana por Mês")
 
-# Adiciona colunas de mês e dia da semana
-df_filtrado["MÊS"] = df_filtrado["DATA DE INÍCIO"].dt.strftime("%Y-%m")
+# --- Média de Vendas por Dia da Semana ---
+st.subheader("📊 Média de Vendas por Dia da Semana")
+
+# Adiciona coluna com dia da semana
 df_filtrado["DIA_DA_SEMANA"] = df_filtrado["DATA DE INÍCIO"].dt.day_name()
 
-# Agrupa por mês e dia da semana
-vendas_semana_mes = df_filtrado.groupby(["DIA_DA_SEMANA","MÊS"])["VALOR (R$)"].sum().reset_index()
+# Calcula a média de vendas por dia da semana
+media_vendas_dia = df_filtrado.groupby("DIA_DA_SEMANA")["VALOR (R$)"].mean().reindex(
+    ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
+).reset_index()
 
-# Ordena os dias da semana
-dias_ordem = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
-vendas_semana_mes["DIA_DA_SEMANA"] = pd.Categorical(vendas_semana_mes["DIA_DA_SEMANA"], categories=dias_ordem, ordered=True)
-vendas_semana_mes = vendas_semana_mes.sort_values("DIA_DA_SEMANA")
-
-# Gráfico de linhas com uma linha por mês
-graf_semana_mes = px.line(
-    vendas_semana_mes,
+# Gráfico de barras
+graf_media_dia = px.bar(
+    media_vendas_dia,
     x="DIA_DA_SEMANA",
     y="VALOR (R$)",
-    color="MÊS",
-    markers=True,
-    title="Vendas por Dia da Semana por Mês",
-    labels={"DIA_DA_SEMANA":"Dia da Semana", "VALOR (R$)":"Vendas (R$)", "MÊS":"Mês"}
+    title="Média de Vendas por Dia da Semana",
+    labels={"DIA_DA_SEMANA":"Dia da Semana", "VALOR (R$)":"Média de Vendas (R$)"},
+    text="VALOR (R$)"
 )
 
-# Personaliza cores e estilo
-graf_semana_mes.update_traces(line=dict(width=2))
-graf_semana_mes.update_layout(
+# Personaliza cores e layout
+graf_media_dia.update_traces(marker_color='cyan')
+graf_media_dia.update_layout(
     plot_bgcolor='black',
     paper_bgcolor='black',
     font=dict(color='white'),
@@ -279,4 +275,4 @@ graf_semana_mes.update_layout(
     title=dict(font=dict(color='white', size=18))
 )
 
-st.plotly_chart(graf_semana_mes, use_container_width=True)
+st.plotly_chart(graf_media_dia, use_container_width=True)
