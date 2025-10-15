@@ -70,8 +70,11 @@ with col2:
         title="Total de Vendas por Produto"
     )
     st.plotly_chart(graf3, use_container_width=True)
-# --- Gráfico de vendas semana a semana ---
-st.subheader("📊 Vendas Semanais")
+
+
+
+# --- Gráfico de vendas semana a semana (linha fina) ---
+st.subheader("📈 Vendas Semanais (Linha Fina)")
 
 # Cria coluna de semana (início da semana)
 df_filtrado["SEMANA"] = df_filtrado["DATA DE INÍCIO"].dt.to_period("W").apply(lambda r: r.start_time)
@@ -79,14 +82,26 @@ df_filtrado["SEMANA"] = df_filtrado["DATA DE INÍCIO"].dt.to_period("W").apply(l
 # Agrupa por semana e soma as vendas
 vendas_semanal = df_filtrado.groupby("SEMANA")["VALOR (R$)"].sum().reset_index()
 
-# Cria gráfico de barras para mostrar desenvolvimento semanal
-graf_semanal = px.bar(
+# Cria gráfico de linha fina
+graf_semanal = px.line(
     vendas_semanal,
     x="SEMANA",
     y="VALOR (R$)",
     title="Vendas Semanais",
     labels={"SEMANA": "Semana", "VALOR (R$)": "Vendas (R$)"},
-    text="VALOR (R$)"
+    markers=True
+)
+
+# Personaliza a linha para ficar mais fina
+graf_semanal.update_traces(line=dict(width=2, color='blue'))
+
+# Ajusta layout para ficar mais elegante
+graf_semanal.update_layout(
+    xaxis_title="Semana",
+    yaxis_title="Vendas (R$)",
+    xaxis=dict(showgrid=True, gridcolor='lightgray'),
+    yaxis=dict(showgrid=True, gridcolor='lightgray'),
+    plot_bgcolor='white'
 )
 
 st.plotly_chart(graf_semanal, use_container_width=True)
