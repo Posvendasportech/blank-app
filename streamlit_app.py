@@ -52,15 +52,52 @@ col2.metric("👥 Clientes Únicos", clientes)
 col3.metric("🎯 Ticket Médio", f"R$ {ticket_medio:,.2f}")
 
 # --- Gráficos ---
-st.subheader("📊 Vendas por Data")
-graf1 = px.bar(df_filtrado, x="DATA DE INÍCIO", y="VALOR (R$)", title="Vendas por Dia")
+st.subheader("📊 Vendas por Dia (Linha)")
+
+# Agrupa por data e soma as vendas
+vendas_por_dia = df_filtrado.groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
+
+# Ordena por data
+vendas_por_dia = vendas_por_dia.sort_values("DATA DE INÍCIO")
+
+# Gráfico de linha diário
+graf1 = px.line(
+    vendas_por_dia,
+    x="DATA DE INÍCIO",
+    y="VALOR (R$)",
+    title="Vendas por Dia",
+    labels={"DATA DE INÍCIO": "Data", "VALOR (R$)": "Vendas (R$)"},
+    markers=True
+)
+
+# Linha fina e elegante
+graf1.update_traces(line=dict(width=2, color='cyan'), marker=dict(color='cyan', size=6))
+
+# Fundo preto e layout limpo
+graf1.update_layout(
+    plot_bgcolor='black',
+    paper_bgcolor='black',
+    font=dict(color='white'),
+    xaxis=dict(showgrid=True, gridcolor='gray', zerolinecolor='gray'),
+    yaxis=dict(showgrid=True, gridcolor='gray', zerolinecolor='gray'),
+    title=dict(font=dict(color='white', size=20))
+)
+
 st.plotly_chart(graf1, use_container_width=True)
 
+# --- Gráficos auxiliares ---
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("Distribuição por Grupo RFM")
     graf2 = px.pie(df_filtrado, names="GRUPO RFM", title="Grupos RFM")
+    graf2.update_layout(
+        plot_bgcolor='black',
+        paper_bgcolor='black',
+        font=dict(color='white'),
+        title=dict(font=dict(color='white', size=18))
+    )
     st.plotly_chart(graf2, use_container_width=True)
+
 with col2:
     st.subheader("Vendas por Produto")
     graf3 = px.bar(
@@ -69,7 +106,17 @@ with col2:
         y="VALOR (R$)",
         title="Total de Vendas por Produto"
     )
+    graf3.update_traces(marker_color='cyan')
+    graf3.update_layout(
+        plot_bgcolor='black',
+        paper_bgcolor='black',
+        font=dict(color='white'),
+        xaxis=dict(showgrid=True, gridcolor='gray', zerolinecolor='gray'),
+        yaxis=dict(showgrid=True, gridcolor='gray', zerolinecolor='gray'),
+        title=dict(font=dict(color='white', size=18))
+    )
     st.plotly_chart(graf3, use_container_width=True)
+
 
 
 
