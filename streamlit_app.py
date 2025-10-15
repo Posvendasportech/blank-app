@@ -1,8 +1,13 @@
 import streamlit as st
 import pandas as pd
 import time
+import plotly.express as px
+from streamlit_autorefresh import st_autorefresh
 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1d07rdyAfCzyV2go0V4CJkXd53wUmoA058WeqaHfGPBk/export?format=csv"
+
+# --- Atualiza o app automaticamente a cada 60 segundos ---
+st_autorefresh(interval=60 * 1000, key="autorefresh")
 
 st.sidebar.title("⚙️ Controles")
 
