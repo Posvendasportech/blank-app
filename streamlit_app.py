@@ -340,51 +340,53 @@ st.plotly_chart(graf_comparacao, use_container_width=True)
 
 
 
-# --- Crescimento Diário, Semanal e Mensal ---
-# --- Crescimento Acumulado Corretamente ---
-st.subheader("📈 Crescimento Acumulado: Este Mês vs Mês Anterior")
+# --- Crescimento Semanal e Mensal ---
+st.subheader("📊 Crescimento Semanal e Mensal de Vendas")
 
-from datetime import datetime, timedelta
-
-# Define períodos
-hoje = datetime.today()
-primeiro_dia_mes_atual = hoje.replace(day=1)
-primeiro_dia_mes_anterior = (primeiro_dia_mes_atual - timedelta(days=1)).replace(day=1)
-dias_ate_hoje = hoje.day
-
-# Cria range de datas para alinhamento
-datas_atual = pd.date_range(start=primeiro_dia_mes_atual, periods=dias_ate_hoje)
-datas_anterior = pd.date_range(start=primeiro_dia_mes_anterior, periods=dias_ate_hoje)
-
-# Vendas acumuladas do mês atual
-vendas_atual = df_filtrado[
-    (df_filtrado["DATA DE INÍCIO"] >= primeiro_dia_mes_atual) &
-    (df_filtrado["DATA DE INÍCIO"] <= hoje)
-].groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().reindex(datas_atual, fill_value=0).cumsum().reset_index()
-vendas_atual.columns = ["DATA", "Acumulado"]
-
-# Vendas acumuladas do mês anterior
-vendas_anterior = df_filtrado[
-    (df_filtrado["DATA DE INÍCIO"] >= primeiro_dia_mes_anterior) &
-    (df_filtrado["DATA DE INÍCIO"] <= primeiro_dia_mes_anterior + timedelta(days=dias_ate_hoje-1))
-].groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().reindex(datas_anterior, fill_value=0).cumsum().reset_index()
-vendas_anterior.columns = ["DATA", "Acumulado"]
-
-# Gráfico comparativo
 import plotly.express as px
 
-graf_crescimento = px.line(title="Crescimento Acumulado: Este Mês vs Mês Anterior")
-graf_crescimento.add_scatter(x=vendas_atual["DATA"], y=vendas_atual["Acumulado"],
-                             mode="lines+markers", name="Este Mês", line=dict(color="cyan", width=2))
-graf_crescimento.add_scatter(x=vendas_anterior["DATA"], y=vendas_anterior["Acumulado"],
-                             mode="lines+markers", name="Mês Anterior", line=dict(color="orange", width=2))
+# Crescimento semanal
+vendas_semanais = df_filtrado.resample("W-MON", on="DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
+vendas_semanais["Crescimento (%)"] = vendas_semanais["VALOR (R$)"].pct_change() * 100
 
-graf_crescimento.update_layout(
+# Gráfico semanal
+graf_semanal = px.bar(
+    vendas_semanais,
+    x="DATA DE INÍCIO",
+    y="Crescimento (%)",
+    title="Crescimento Semanal (%)",
+    labels={"DATA DE INÍCIO":"Semana", "Crescimento (%)":"Crescimento (%)"},
+    text="Crescimento (%)"
+)
+graf_semanal.update_traces(marker_color='cyan')
+graf_semanal.update_layout(
     plot_bgcolor='black',
     paper_bgcolor='black',
     font=dict(color='white'),
-    xaxis_title="Dia do Mês",
-    yaxis_title="Vendas Acumuladas (R$)"
+    xaxis=dict(showgrid=True, gridcolor='gray'),
+    yaxis=dict(showgrid=True, gridcolor='gray')
 )
+st.plotly_chart(graf_semanal, use_container_width=True)
 
-st.plotly_chart(graf_crescimento, use_container_width=True)
+# Crescimento mensal
+vendas_mensais = df_filtrado.resample("M", on="DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
+vendas_mensais["Crescimento (%)"] = vendas_mensais["VALOR (R$)"].pct_change() * 100
+
+# Gráfico mensal
+graf_mensal = px.bar(
+    vendas_mensais,
+    x="DATA DE INÍCIO",
+    y="Crescimento (%)",
+    title="Crescimento Mensal (%)",
+    labels={"DATA DE INÍCIO":"Mês", "Crescimento (%)":"Crescimento (%)"},
+    text="Crescimento (%)"
+)
+graf_mensal.update_traces(marker_color='orange')
+graf_mensal.update_layout(
+    plot_bgcolor='black',
+    paper_bgcolor='black',
+    font=dict(color='white'),
+    xaxis=dict(showgrid=True, gridcolor='gray'),
+    yaxis=dict(showgrid=True, gridcolor='gray')
+)
+st.plotly_chart(graf_mensal, use_container_width=True)
