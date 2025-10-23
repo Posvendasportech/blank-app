@@ -5,6 +5,7 @@ import time
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+from urllib.parse import quote
 
 # ------------------------------
 # ⚙️ Configuração da página
@@ -18,9 +19,11 @@ st.set_page_config(page_title="Dashboard de Vendas", page_icon="📊", layout="w
 SHEET_URL_1 = "https://docs.google.com/spreadsheets/d/1d07rdyAfCzyV2go0V4CJkXd53wUmoA058WeqaHfGPBk/export?format=csv"
 
 # Planilha 2 (histórico geral de TODOS os clientes)
-# ⚠️ Substitua o GID pela aba correta do seu Google Sheets (ex.: ...edit#gid=123456789 → use 123456789)
-SHEET_URL_2 = "https://docs.google.com/spreadsheets/d/1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc/export?format=csv&gid=COLOQUE_SEU_GID_AQUI"
+# ID extraído do link que você enviou
+SHEET2_ID = "1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc"
 
+# Nome padrão da aba (ajuste se sua aba tiver outro nome)
+DEFAULT_SHEET2_SHEETNAME = "Total"  # altere aqui se sua aba tiver outro nome
 # ------------------------------
 # 🧩 Funções utilitárias
 # ------------------------------
@@ -149,6 +152,16 @@ df_historico = preparar_df_historico(df_extra.copy())
 # 🧭 Barra lateral (controles globais)
 # ------------------------------
 st.sidebar.title("⚙️ Controles")
+
+# === Nome da aba da Planilha 2
+sheet2_sheetname = st.sidebar.text_input(
+    "📄 Nome da aba (Planilha 2)",
+    value=DEFAULT_SHEET2_SHEETNAME,
+    help="Ex.: Total (tem que ser exatamente como aparece na guia do Google Sheets)"
+)
+# Monta a URL por NOME da aba (evita depender de gid)
+SHEET_URL_2 = f"https://docs.google.com/spreadsheets/d/{SHEET2_ID}/gviz/tq?tqx=out:csv&sheet={quote(sheet2_sheetname)}"
+
 
 # === NOVO: identificação do colaborador (rótulo)
 colab_detectado = None
