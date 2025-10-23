@@ -6,6 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from urllib.parse import quote
+import re
 
 # ------------------------------
 # ⚙️ Configuração da página
@@ -27,8 +28,9 @@ DEFAULT_SHEET2_SHEETNAME = "Total"  # altere se sua aba tiver outro nome
 # ------------------------------
 @st.cache_data(ttl=120)
 def carregar_csv(url: str) -> pd.DataFrame:
-    """Carrega CSV remoto com tolerância a linhas ruins/encoding."""
-    return pd.read_csv(
+    """Carrega CSV remoto e tenta corrigir cabeçalho 'torto' (muitos 'Unnamed')."""
+    # Leitura padrão
+    df = pd.read_csv(
         url,
         sep=",",
         engine="python",
@@ -36,6 +38,36 @@ def carregar_csv(url: str) -> pd.DataFrame:
         encoding="utf-8",
         na_values=["", "NA", "NaN", None],
     )
+
+    # Se metade ou mais das colunas são 'Unnamed', promover linha adequada a header
+    def _fix_header(_df: pd.DataFrame) -> pd.DataFrame:
+        unnamed = sum(str(c).startswith("Unnamed") for c in _df.columns)
+        if unnamed <= len(_df.columns) // 2:
+            return _df  # cabeçalho parece OK
+
+        # Releitura sem header para escolher a melhor linha como cabeçalho
+        _raw = pd.read_csv(
+            url, sep=",", engine="python", on_bad_lines="skip", encoding="utf-8", header=None
+        )
+
+        # Scora as 10 primeiras linhas pela quantidade de células com letras (tendem a ser nomes de colunas)
+        best_idx, best_score = 0, -1
+        limit = min(10, len(_raw))
+        for i in range(limit):
+            row = _raw.iloc[i].astype(str).fillna("")
+            score = sum(any(ch.isalpha() for ch in str(x)) for x in row)
+            if score > best_score:
+                best_score, best_idx = score, i
+
+        new_header = _raw.iloc[best_idx].astype(str).str.strip().tolist()
+        _raw = _raw.iloc[best_idx + 1:].reset_index(drop=True)
+        _raw.columns = [c if c else f"col_{i}" for i, c in enumerate(new_header)]
+        return _raw
+
+    df = _fix_header(df)
+    df.columns = [str(c).strip() for c in df.columns]
+    return df
+
 
 def preparar_df_vendas(df: pd.DataFrame) -> pd.DataFrame:
     """Prepara a planilha do colaborador: datas e valores."""
@@ -59,51 +91,71 @@ def preparar_df_vendas(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+
 def preparar_df_historico(df: pd.DataFrame) -> pd.DataFrame:
-    """Prepara a planilha do histórico: datas/valores/chaves de cliente."""
+    """Prepara a planilha do histórico: datas/valores/chaves de cliente (detecção por nome ou conteúdo)."""
     if df.empty:
         return df
     df.columns = [c.strip() for c in df.columns]
 
-    # DATA_REF (tenta várias colunas)
-    for col in ["DATA", "DATA DA COMPRA", "DATA DE INÍCIO", "DATA VENDA"]:
-        if col in df.columns:
-            df["DATA_REF"] = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
-            break
-    if "DATA_REF" not in df.columns:
-        df["DATA_REF"] = pd.NaT
+    # ---- DATA_REF (por nome; se não achar, detecta por conteúdo)
+    date_cols_hint = ["DATA", "DATA DA COMPRA", "DATA DE INÍCIO", "DATA VENDA", "DATA/HORA", "DATA HORA"]
+    date_col = next((c for c in date_cols_hint if c in df.columns), None)
+    if date_col is None:
+        best, best_rate = None, 0
+        sample = df.head(200)
+        for c in df.columns:
+            parsed = pd.to_datetime(sample[c], errors="coerce", dayfirst=True)
+            rate = parsed.notna().mean()
+            if rate > best_rate:
+                best, best_rate = c, rate
+        date_col = best if best_rate >= 0.40 else None  # precisa ≥ 40% parseável
+    df["DATA_REF"] = pd.to_datetime(df[date_col], errors="coerce", dayfirst=True) if date_col else pd.NaT
 
-    # VALOR_PAD (tenta várias colunas)
-    for col in ["VALOR (R$)", "VALOR", "TOTAL (R$)", "TOTAL"]:
-        if col in df.columns:
-            v = (
-                df[col].astype(str)
-                .str.replace(r"R\$\s*", "", regex=True)
-                .str.replace(".", "", regex=False)
-                .str.replace(",", ".", regex=False)
-            )
-            df["VALOR_PAD"] = pd.to_numeric(v, errors="coerce").fillna(0.0)
-            break
-    if "VALOR_PAD" not in df.columns:
-        df["VALOR_PAD"] = 0.0
+    # ---- VALOR_PAD (por nome; se não achar, detecta por conteúdo)
+    valor_cols_hint = ["VALOR (R$)", "VALOR", "TOTAL (R$)", "TOTAL", "PREÇO", "PRECO", "AMOUNT", "PRICE"]
+    valor_col = next((c for c in valor_cols_hint if c in df.columns), None)
+    if valor_col is None:
+        money_re = re.compile(r"^\s*(R\$\s*)?[\d\.\,]+(\s*)$")
+        best, best_hits = None, -1
+        sample = df.head(200)
+        for c in df.columns:
+            hits = sample[c].astype(str).str.match(money_re).sum()
+            if hits > best_hits:
+                best, best_hits = c, hits
+        valor_col = best
 
-    # Identificação de cliente (email > nome; se tiver CPF/ID_CLIENTE, adapte aqui)
-    # Nome
-    for col in ["NOME COMPLETO", "CLIENTE", "NOME"]:
-        if col in df.columns:
-            df["CLIENTE_NOME"] = df[col].astype(str).str.strip()
-            break
-    if "CLIENTE_NOME" not in df.columns:
-        df["CLIENTE_NOME"] = ""
-    # Email
-    email_col = None
-    for c in ["E-MAIL", "EMAIL"]:
-        if c in df.columns:
-            email_col = c
-            break
+    def to_float(series: pd.Series) -> pd.Series:
+        s = series.astype(str)
+        s = s.str.replace("\u00A0", " ", regex=False)   # NBSP → espaço
+        s = s.str.replace(r"[Rr]\$\s*", "", regex=True) # remove R$
+        s = s.str.replace(" ", "", regex=False)
+
+        # Heurística: vírgula é decimal?
+        comma_as_decimal = ((s.str.count(",") >= 1) & (s.str.count("\.") >= 0)).mean() >= 0.5
+        if comma_as_decimal:
+            s = s.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+        else:
+            s = s.str.replace(",", "", regex=False)
+
+        return pd.to_numeric(s, errors="coerce")
+
+    df["VALOR_PAD"] = to_float(df[valor_col]) if valor_col in df.columns else 0.0
+    df["VALOR_PAD"] = df["VALOR_PAD"].fillna(0.0)
+
+    # ---- Identificação de cliente (email > nome; se tiver CPF/ID_CLIENTE, adapte aqui)
+    nome_col = next((c for c in ["NOME COMPLETO", "CLIENTE", "NOME", "Nome"] if c in df.columns), None)
+    df["CLIENTE_NOME"] = df[nome_col].astype(str).str.strip() if nome_col else ""
+
+    email_col = next((c for c in ["E-MAIL", "EMAIL", "Email", "e-mail"] if c in df.columns), None)
     df["CLIENTE_EMAIL"] = df[email_col].astype(str).str.strip().str.lower() if email_col else ""
-    # ID canônico
-    df["CLIENTE_ID"] = df["CLIENTE_EMAIL"].where(df["CLIENTE_EMAIL"] != "", df["CLIENTE_NOME"])
+
+    # ID canônico (se tiver CPF/ID, priorize)
+    id_col = next((c for c in ["CPF", "ID_CLIENTE", "ID"] if c in df.columns), None)
+    if id_col:
+        df["CLIENTE_ID"] = df[id_col].astype(str).str.strip()
+    else:
+        df["CLIENTE_ID"] = df["CLIENTE_EMAIL"].where(df["CLIENTE_EMAIL"] != "", df["CLIENTE_NOME"])
 
     return df
 
@@ -184,14 +236,6 @@ df_historico = preparar_df_historico(df_extra_raw.copy())
 ok1 = "✅" if not df_vendas.empty else "⚠️"
 ok2 = "✅" if not df_historico.empty else "⚠️"
 st.markdown(f"**Planilha 1 (Colaborador):** {ok1}  |  **Planilha 2 (Histórico):** {ok2}")
-
-# ------------------------------
-# 🗂️ Abas principais (layout)
-# ------------------------------
-aba1, aba2 = st.tabs([
-    "📊 Análises do Colaborador (Planilha 1)",
-    "📑 Histórico Geral de Clientes (Planilha 2)",
-])
 
 
 # ======================================================
