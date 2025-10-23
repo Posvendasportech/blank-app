@@ -58,13 +58,7 @@ st.sidebar.success(f"✅ Dados atualizados às {time.strftime('%H:%M:%S')}")
 # ------------------------------
 aba1, aba2 = st.tabs(["📊 Análises de Vendas (Planilha Principal)", "📑 Segunda Planilha - Análises Complementares"])
 
-# ======================================================
-# 🟢 ABA 1 — PLANILHA PRINCIPAL
-# ======================================================
-with aba1:
 
-    st.subheader("📦 Planilha Principal - Vendas")
-    st.dataframe(df_vendas.head())
 
     # ------------------------------
     # 🧩 Filtros
