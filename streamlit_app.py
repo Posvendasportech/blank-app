@@ -319,46 +319,46 @@ with aba2:
 
     st.info("🧠 Espaço reservado para análises específicas da segunda planilha (pós-venda, NPS, satisfação, etc.).")
 
-    # --- Análise da segunda planilha pela coluna G ---
-    st.subheader("📊 Análise de Clientes pela Coluna G")
+       # --- Análise geral dos clientes pela coluna "Classificação" ---
+    st.subheader("📊 Distribuição de Clientes por Classificação")
 
-    # Garante que a planilha foi carregada
     if df_extra.empty:
         st.warning("A planilha ainda não contém dados para análise.")
+    elif "Classificação" not in df_extra.columns:
+        st.error("A coluna 'Classificação' não foi encontrada na planilha.")
     else:
-        # Troque o nome da coluna abaixo pelo nome real da sua coluna G
-        coluna_alvo = "NOME_DA_COLUNA_G_AQUI"
+        # Agrupa por classificação e conta quantos clientes há em cada
+        analise_classificacao = (
+            df_extra["Classificação"]
+            .fillna("Não informado")
+            .value_counts()
+            .reset_index()
+            .rename(columns={"index": "Classificação", "Classificação": "Quantidade"})
+            .sort_values("Quantidade", ascending=False)
+        )
 
-        if coluna_alvo not in df_extra.columns:
-            st.error(f"A coluna '{coluna_alvo}' não foi encontrada na planilha.")
-        else:
-            # Contagem de clientes por categoria da coluna G
-            analise = (
-                df_extra[coluna_alvo]
-                .value_counts()
-                .reset_index()
-                .rename(columns={"index": coluna_alvo, coluna_alvo: "Quantidade"})
-            )
+        total_clientes = analise_classificacao["Quantidade"].sum()
+        st.metric("👥 Total de Clientes", f"{total_clientes:,}".replace(",", "."))
 
-            # Gráfico de barras
-            graf_coluna_g = px.bar(
-                analise,
-                x=coluna_alvo,
-                y="Quantidade",
-                color=coluna_alvo,
-                text="Quantidade",
-                title=f"Distribuição de Clientes por '{coluna_alvo}'",
-                color_discrete_sequence=px.colors.qualitative.Vivid
-            )
+        # Gráfico de barras
+        graf_classificacao = px.bar(
+            analise_classificacao,
+            x="Classificação",
+            y="Quantidade",
+            color="Classificação",
+            text="Quantidade",
+            title="Distribuição de Clientes por Classificação",
+            color_discrete_sequence=px.colors.qualitative.Vivid
+        )
 
-            graf_coluna_g.update_traces(textposition="outside")
-            graf_coluna_g.update_layout(
-                plot_bgcolor="black",
-                paper_bgcolor="black",
-                font=dict(color="white", size=14),
-                xaxis_title=coluna_alvo,
-                yaxis_title="Quantidade de Clientes",
-                showlegend=False
-            )
+        graf_classificacao.update_traces(textposition="outside")
+        graf_classificacao.update_layout(
+            plot_bgcolor="black",
+            paper_bgcolor="black",
+            font=dict(color="white", size=14),
+            xaxis_title="Classificação",
+            yaxis_title="Quantidade de Clientes",
+            showlegend=False
+        )
 
-            st.plotly_chart(graf_coluna_g, use_container_width=True)
+        st.plotly_chart(graf_classificacao, use_container_width=True)
