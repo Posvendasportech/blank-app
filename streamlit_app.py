@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import time
 import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # ------------------------------
@@ -317,3 +318,57 @@ with aba2:
         st.dataframe(df_extra.head(50), use_container_width=True)
 
     st.info("🧠 Espaço reservado para análises específicas da segunda planilha (pós-venda, NPS, satisfação, etc.).")
+
+
+    # --- Análise de todos os clientes (por Grupo RFM) ---
+    st.subheader("👥 Clientes por Grupo (Quantidade e Receita)")
+
+    # Vamos usar a planilha principal (df_vendas) porque é ela que tem GRUPO RFM e VALOR (R$)
+    base_clientes = df_vendas.copy()
+
+    colunas_necessarias = ["GRUPO RFM", "NOME COMPLETO", "VALOR (R$)"]
+    faltantes = [c for c in colunas_necessarias if c not in base_clientes.columns]
+
+    if faltantes:
+        st.warning(
+            f"Não foi possível gerar o gráfico. Colunas ausentes na planilha principal: {', '.join(faltantes)}"
+        )
+    else:
+        # Agrupamento: clientes únicos e receita por grupo
+        grp = (
+            base_clientes.dropna(subset=["GRUPO RFM"])
+            .groupby("GRUPO RFM", as_index=False)
+            .agg(Quantidade=("NOME COMPLETO", "nunique"),
+                 Receita=("VALOR (R$)", "sum"))
+            .sort_values("Receita", ascending=False)
+        )
+
+        # Gráfico único com dois eixos Y (clientes e receita)
+        fig = go.Figure()
+        fig.add_bar(
+            x=grp["GRUPO RFM"],
+            y=grp["Quantidade"],
+            name="Quantidade de clientes",
+        )
+        fig.add_bar(
+            x=grp["GRUPO RFM"],
+            y=grp["Receita"],
+            name="Receita (R$)",
+            yaxis="y2",
+        )
+
+        fig.update_layout(
+            title="Quantidade de Clientes e Receita por Grupo",
+            xaxis_title="Grupo RFM",
+            yaxis=dict(title="Qtd. de clientes", showgrid=True, gridcolor="gray"),
+            yaxis2=dict(title="Receita (R$)", overlaying="y", side="right", showgrid=False),
+            barmode="group",
+            plot_bgcolor="black",
+            paper_bgcolor="black",
+            font=dict(color="white"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption("Obs.: Receita calculada a partir de 'VALOR (R$)' e clientes únicos por 'NOME COMPLETO'.")
+
