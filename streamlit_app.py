@@ -3,32 +3,47 @@ import pandas as pd
 import time
 import plotly.express as px
 
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1d07rdyAfCzyV2go0V4CJkXd53wUmoA058WeqaHfGPBk/export?format=csv"
+# --- URLs das planilhas ---
+SHEET_URL_1 = "https://docs.google.com/spreadsheets/d/1d07rdyAfCzyV2go0V4CJkXd53wUmoA058WeqaHfGPBk/export?format=csv"
+SHEET_URL_2 = "https://docs.google.com/spreadsheets/d/1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc/export?format=csv"
 
-st.set_page_config(page_title="Dashboard de Vendas", layout="wide")
-
-# --- Função para carregar dados com cache de 60 segundos ---
+# --- Função de carregamento com cache ---
 @st.cache_data(ttl=60)
-def carregar_dados():
-    df = pd.read_csv(SHEET_URL)
-    df["DATA DE INÍCIO"] = pd.to_datetime(df["DATA DE INÍCIO"], errors="coerce")
-    df["VALOR (R$)"] = (
-        df["VALOR (R$)"]
-        .astype(str)
-        .str.replace("R\$", "", regex=True)
-        .str.replace(",", ".")
-        .astype(float)
-    )
-    return df
+def carregar_dados(url):
+    try:
+        df = pd.read_csv(url)
+        return df
+    except Exception as e:
+        st.error(f"Erro ao carregar planilha: {e}")
+        return pd.DataFrame()
 
-df = carregar_dados()
-st.success(f"Dados atualizados às {time.strftime('%H:%M:%S')}")
+# --- Carrega as planilhas ---
+df_vendas = carregar_dados(SHEET_URL_1)
+df_extra = carregar_dados(SHEET_URL_2)
 
-# --- Sidebar ---
+# --- Barra lateral ---
 st.sidebar.title("⚙️ Controles")
+
 if st.sidebar.button("🔄 Atualizar dados agora"):
     st.cache_data.clear()
-    df = carregar_dados()  # Recarrega os dados manualmente
+    st.experimental_rerun()
+
+st.success(f"✅ Dados atualizados às {time.strftime('%H:%M:%S')}")
+
+# --- Exibição inicial ---
+st.subheader("📦 Planilha Principal - Vendas")
+st.dataframe(df_vendas.head())
+
+st.subheader("📑 Segunda Planilha - Dados Complementares")
+st.dataframe(df_extra.head())
+
+# --- Exemplo de integração (opcional) ---
+# Se ambas tiverem uma coluna em comum, como "NOME COMPLETO" ou "CPF",
+# você pode unir as duas bases:
+# df_combinado = pd.merge(df_vendas, df_extra, on="NOME COMPLETO", how="left")
+# st.subheader("📊 Dados Integrados")
+# st.dataframe(df_combinado.head())
+
 
 # --- Filtros ---
 st.sidebar.header("Filtros")
