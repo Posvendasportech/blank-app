@@ -15,7 +15,8 @@ st.set_page_config(page_title="Dashboard de Vendas", page_icon="📊", layout="w
 # 🔗 URLs das planilhas
 # ------------------------------
 SHEET_URL_1 = "https://docs.google.com/spreadsheets/d/1d07rdyAfCzyV2go0V4CJkXd53wUmoA058WeqaHfGPBk/export?format=csv"
-SHEET_URL_2 = "https://docs.google.com/spreadsheets/d/1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc/export?format=csv"
+SHEET_URL_2 = "https://docs.google.com/spreadsheets/d/1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc/export?format=csv&gid=123456789"
+
 
 # ------------------------------
 # 🧩 Funções utilitárias
