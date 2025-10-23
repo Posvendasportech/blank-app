@@ -236,7 +236,15 @@ df_historico = preparar_df_historico(df_extra_raw.copy())
 ok1 = "✅" if not df_vendas.empty else "⚠️"
 ok2 = "✅" if not df_historico.empty else "⚠️"
 st.markdown(f"**Planilha 1 (Colaborador):** {ok1}  |  **Planilha 2 (Histórico):** {ok2}")
-
+# --- GARANTIR CRIAÇÃO DAS ABAS (hotfix) ---
+try:
+    aba1  # verifica se existe
+    aba2
+except NameError:
+    aba1, aba2 = st.tabs([
+        "📊 Análises do Colaborador (Planilha 1)",
+        "📑 Histórico Geral de Clientes (Planilha 2)",
+    ])
 
 # ======================================================
 # 🟢 ABA 1 — PLANILHA 1 (Colaborador)
