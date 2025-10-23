@@ -1,4 +1,3 @@
-# streamlit_app.py
 import streamlit as st
 import pandas as pd
 import time
@@ -29,7 +28,6 @@ DEFAULT_SHEET2_SHEETNAME = "Total"  # altere se sua aba tiver outro nome
 @st.cache_data(ttl=120)
 def carregar_csv(url: str) -> pd.DataFrame:
     """Carrega CSV remoto e tenta corrigir cabeçalho 'torto' (muitos 'Unnamed')."""
-    # Leitura padrão
     df = pd.read_csv(
         url,
         sep=",",
@@ -50,7 +48,7 @@ def carregar_csv(url: str) -> pd.DataFrame:
             url, sep=",", engine="python", on_bad_lines="skip", encoding="utf-8", header=None
         )
 
-        # Scora as 10 primeiras linhas pela quantidade de células com letras (tendem a ser nomes de colunas)
+        # Score nas 10 primeiras linhas: mais células com letras = mais chance de ser cabeçalho
         best_idx, best_score = 0, -1
         limit = min(10, len(_raw))
         for i in range(limit):
@@ -92,8 +90,7 @@ def preparar_df_vendas(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def preparar_df_historico(df: pd.DataFrame) -> pd.DataFrame:
-  def preparar_df_historico(
+def preparar_df_historico(
     df: pd.DataFrame,
     valor_col_name: str | None = None,
     date_col_name: str | None = None,
@@ -137,7 +134,6 @@ def preparar_df_historico(df: pd.DataFrame) -> pd.DataFrame:
     if valor_col_name and valor_col_name in df.columns:
         chosen_val_col = valor_col_name
     else:
-        import re
         # ignora colunas óbvias que NÃO são valor
         blacklist = ["CPF", "ID", "ID_CLIENTE", "TELEFONE", "CELULAR", "CEP", "QUANTIDADE", "QTD"]
         blacklist = set(blacklist)
@@ -243,21 +239,22 @@ with st.spinner("Carregando Planilha 2 (histórico)…"):
             )
             df_extra_raw = pd.DataFrame()
 
-df_historico = preparar_df_historico(df_extra_raw.copy())
+# ====== Mapeamento manual seguro das colunas de Data e Valor ======
+with st.sidebar.expander("🧩 Mapear colunas da Planilha 2", expanded=False):
+    cols = df_extra_raw.columns.tolist() if not df_extra_raw.empty else []
+    sugestao_val = next((c for c in ["VALOR (R$)", "VALOR", "TOTAL (R$)", "TOTAL", "PREÇO", "PRECO"] if c in cols), None)
+    sugestao_data = next((c for c in ["DATA", "DATA DA COMPRA", "DATA DE INÍCIO", "DATA VENDA", "DATA/HORA", "DATA HORA"] if c in cols), None)
 
-# Status rápido no topo
-ok1 = "✅" if not df_vendas.empty else "⚠️"
-ok2 = "✅" if not df_historico.empty else "⚠️"
+    valor_col_name = st.selectbox("Coluna de VALOR", options=cols or [""], index=(cols.index(sugestao_val) if (cols and sugestao_val in cols) else 0))
+    date_col_name  = st.selectbox("Coluna de DATA",  options=cols or [""], index=(cols.index(sugestao_data) if (cols and sugestao_data in cols) else 0))
+
+# Prepara histórico usando as colunas escolhidas
+df_historico = preparar_df_historico(df_extra_raw.copy(), valor_col_name=valor_col_name, date_col_name=date_col_name)
+
+# Status rápido no topo (robusto)
+ok1 = "✅" if ('df_vendas' in locals() and isinstance(df_vendas, pd.DataFrame) and not df_vendas.empty) else "⚠️"
+ok2 = "✅" if ('df_historico' in locals() and isinstance(df_historico, pd.DataFrame) and not df_historico.empty) else "⚠️"
 st.markdown(f"**Planilha 1 (Colaborador):** {ok1}  |  **Planilha 2 (Histórico):** {ok2}")
-# --- GARANTIR CRIAÇÃO DAS ABAS (hotfix) ---
-try:
-    aba1  # verifica se existe
-    aba2
-except NameError:
-    aba1, aba2 = st.tabs([
-        "📊 Análises do Colaborador (Planilha 1)",
-        "📑 Histórico Geral de Clientes (Planilha 2)",
-    ])
 
 # ======================================================
 # 🟢 ABA 1 — PLANILHA 1 (Colaborador)
