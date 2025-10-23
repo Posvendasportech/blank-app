@@ -93,64 +93,76 @@ def preparar_df_vendas(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def preparar_df_historico(df: pd.DataFrame) -> pd.DataFrame:
-    """Prepara a planilha do histórico: datas/valores/chaves de cliente (detecção por nome ou conteúdo)."""
+  def preparar_df_historico(
+    df: pd.DataFrame,
+    valor_col_name: str | None = None,
+    date_col_name: str | None = None,
+) -> pd.DataFrame:
+    """Prepara o histórico: converte valor em número, data em datetime e cria chaves de cliente."""
     if df.empty:
         return df
     df.columns = [c.strip() for c in df.columns]
 
-    # ---- DATA_REF (por nome; se não achar, detecta por conteúdo)
-    date_cols_hint = ["DATA", "DATA DA COMPRA", "DATA DE INÍCIO", "DATA VENDA", "DATA/HORA", "DATA HORA"]
-    date_col = next((c for c in date_cols_hint if c in df.columns), None)
-    if date_col is None:
-        best, best_rate = None, 0
-        sample = df.head(200)
-        for c in df.columns:
-            parsed = pd.to_datetime(sample[c], errors="coerce", dayfirst=True)
-            rate = parsed.notna().mean()
-            if rate > best_rate:
-                best, best_rate = c, rate
-        date_col = best if best_rate >= 0.40 else None  # precisa ≥ 40% parseável
+    # --- DATA_REF
+    if date_col_name and date_col_name in df.columns:
+        date_col = date_col_name
+    else:
+        date_cols_hint = ["DATA", "DATA DA COMPRA", "DATA DE INÍCIO", "DATA VENDA", "DATA/HORA", "DATA HORA"]
+        date_col = next((c for c in date_cols_hint if c in df.columns), None)
+        if date_col is None:
+            # fallback por conteúdo
+            best, best_rate = None, 0
+            sample = df.head(200)
+            for c in df.columns:
+                rate = pd.to_datetime(sample[c], errors="coerce", dayfirst=True).notna().mean()
+                if rate > best_rate:
+                    best, best_rate = c, rate
+            date_col = best if best_rate >= 0.4 else None
     df["DATA_REF"] = pd.to_datetime(df[date_col], errors="coerce", dayfirst=True) if date_col else pd.NaT
 
-    # ---- VALOR_PAD (por nome; se não achar, detecta por conteúdo)
-    valor_cols_hint = ["VALOR (R$)", "VALOR", "TOTAL (R$)", "TOTAL", "PREÇO", "PRECO", "AMOUNT", "PRICE"]
-    valor_col = next((c for c in valor_cols_hint if c in df.columns), None)
-    if valor_col is None:
-        money_re = re.compile(r"^\s*(R\$\s*)?[\d\.\,]+(\s*)$")
-        best, best_hits = None, -1
-        sample = df.head(200)
-        for c in df.columns:
-            hits = sample[c].astype(str).str.match(money_re).sum()
-            if hits > best_hits:
-                best, best_hits = c, hits
-        valor_col = best
-
+    # --- VALOR_PAD
     def to_float(series: pd.Series) -> pd.Series:
         s = series.astype(str)
-        s = s.str.replace("\u00A0", " ", regex=False)   # NBSP → espaço
-        s = s.str.replace(r"[Rr]\$\s*", "", regex=True) # remove R$
-        s = s.str.replace(" ", "", regex=False)
-
-        # Heurística: vírgula é decimal?
+        s = s.str.replace("\u00A0", " ", regex=False)          # NBSP
+        s = s.str.replace(r"[Rr]\$\s*", "", regex=True)        # remove R$
+        s = s.str.replace(" ", "", regex=False)                # remove espaços
+        # Heurística: vírgula como decimal?
         comma_as_decimal = ((s.str.count(",") >= 1) & (s.str.count("\.") >= 0)).mean() >= 0.5
         if comma_as_decimal:
             s = s.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
         else:
             s = s.str.replace(",", "", regex=False)
-
         return pd.to_numeric(s, errors="coerce")
 
-    df["VALOR_PAD"] = to_float(df[valor_col]) if valor_col in df.columns else 0.0
+    if valor_col_name and valor_col_name in df.columns:
+        chosen_val_col = valor_col_name
+    else:
+        import re
+        # ignora colunas óbvias que NÃO são valor
+        blacklist = ["CPF", "ID", "ID_CLIENTE", "TELEFONE", "CELULAR", "CEP", "QUANTIDADE", "QTD"]
+        blacklist = set(blacklist)
+        money_re = re.compile(r"^\s*(R\$\s*)?[\d\.\,]+(\s*)$")
+        best, best_hits = None, -1
+        sample = df.head(200)
+        for c in df.columns:
+            cname = str(c).upper()
+            if any(b in cname for b in blacklist):
+                continue
+            hits = sample[c].astype(str).str.match(money_re).sum()
+            if hits > best_hits:
+                best, best_hits = c, hits
+        chosen_val_col = best
+
+    df["VALOR_PAD"] = to_float(df[chosen_val_col]) if chosen_val_col in df.columns else 0.0
     df["VALOR_PAD"] = df["VALOR_PAD"].fillna(0.0)
 
-    # ---- Identificação de cliente (email > nome; se tiver CPF/ID_CLIENTE, adapte aqui)
+    # --- CHAVES DE CLIENTE
     nome_col = next((c for c in ["NOME COMPLETO", "CLIENTE", "NOME", "Nome"] if c in df.columns), None)
     df["CLIENTE_NOME"] = df[nome_col].astype(str).str.strip() if nome_col else ""
 
     email_col = next((c for c in ["E-MAIL", "EMAIL", "Email", "e-mail"] if c in df.columns), None)
     df["CLIENTE_EMAIL"] = df[email_col].astype(str).str.strip().str.lower() if email_col else ""
 
-    # ID canônico (se tiver CPF/ID, priorize)
     id_col = next((c for c in ["CPF", "ID_CLIENTE", "ID"] if c in df.columns), None)
     if id_col:
         df["CLIENTE_ID"] = df[id_col].astype(str).str.strip()
@@ -158,6 +170,7 @@ def preparar_df_historico(df: pd.DataFrame) -> pd.DataFrame:
         df["CLIENTE_ID"] = df["CLIENTE_EMAIL"].where(df["CLIENTE_EMAIL"] != "", df["CLIENTE_NOME"])
 
     return df
+
 
 # Dias da semana (sem domingo)
 PT_WEEK_ORDER = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
