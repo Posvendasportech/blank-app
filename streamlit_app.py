@@ -26,7 +26,8 @@ st.sidebar.title("⚙️ Controles")
 
 if st.sidebar.button("🔄 Atualizar dados agora"):
     st.cache_data.clear()
-    st.experimental_rerun()
+    time.sleep(0.5)  # pequena pausa para evitar erro de reload
+    st.rerun()  # novo método mais seguro
 
 st.success(f"✅ Dados atualizados às {time.strftime('%H:%M:%S')}")
 
@@ -43,6 +44,7 @@ st.dataframe(df_extra.head())
 # df_combinado = pd.merge(df_vendas, df_extra, on="NOME COMPLETO", how="left")
 # st.subheader("📊 Dados Integrados")
 # st.dataframe(df_combinado.head())
+
 
 
 # --- Filtros ---
