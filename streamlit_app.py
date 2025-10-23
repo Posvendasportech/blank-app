@@ -14,23 +14,29 @@ st.set_page_config(page_title="Dashboard de Vendas", page_icon="📊", layout="w
 # ------------------------------
 # 🔗 URLs das planilhas
 # ------------------------------
+# Planilha principal (vendas)
 SHEET_URL_1 = "https://docs.google.com/spreadsheets/d/1d07rdyAfCzyV2go0V4CJkXd53wUmoA058WeqaHfGPBk/export?format=csv"
-SHEET_URL_2 = "https://docs.google.com/spreadsheets/d/1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc/export?format=csv&gid=123456789"
 
+# Segunda planilha (clientes / aba 'Total')
+# ⚠️ Substitua o número do GID abaixo pelo que aparece no final do seu link, ex: ...edit#gid=987654321
+SHEET_URL_2 = "https://docs.google.com/spreadsheets/d/1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc/export?format=csv&gid=COLOQUE_SEU_GID_AQUI"
 
 # ------------------------------
 # 🧩 Funções utilitárias
 # ------------------------------
 @st.cache_data(ttl=60)
 def carregar_dados(url: str) -> pd.DataFrame:
+    """Carrega dados de uma planilha CSV hospedada no Google Sheets."""
     try:
-        df = pd.read_csv(url)
+        # Usa engine='python' e on_bad_lines='skip' para evitar erros de linhas quebradas
+        df = pd.read_csv(url, sep=",", engine="python", on_bad_lines="skip")
         return df
     except Exception as e:
         st.error(f"Erro ao carregar planilha: {e}")
         return pd.DataFrame()
 
 def preparar_df_vendas(df: pd.DataFrame) -> pd.DataFrame:
+    """Prepara a planilha principal de vendas (tratamento de datas e valores)."""
     if df.empty:
         return df
 
@@ -56,7 +62,8 @@ def preparar_df_vendas(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-PT_WEEK_ORDER = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]  # sem domingo
+# Mapeamento dos dias da semana (sem domingo)
+PT_WEEK_ORDER = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
 PT_WEEK_MAP = {0: "Segunda", 1: "Terça", 2: "Quarta", 3: "Quinta", 4: "Sexta", 5: "Sábado", 6: "Domingo"}
 
 # ------------------------------
@@ -79,14 +86,12 @@ if st.sidebar.button("🔄 Atualizar dados agora"):
 st.sidebar.success(f"✅ Dados atualizados às {time.strftime('%H:%M:%S')}")
 
 # ------------------------------
-# 🗂️ Abas
+# 🗂️ Abas principais
 # ------------------------------
-aba1, aba2 = st.tabs(
-    [
-        "📊 Análises de Vendas (Planilha Principal)",
-        "📑 Segunda Planilha - Análises Complementares",
-    ]
-)
+aba1, aba2 = st.tabs([
+    "📊 Análises de Vendas (Planilha Principal)",
+    "📑 Segunda Planilha - Análises Complementares",
+])
 
 # ======================================================
 # 🟢 ABA 1 — PLANILHA PRINCIPAL
