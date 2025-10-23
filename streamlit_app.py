@@ -13,71 +13,59 @@ from urllib.parse import quote
 st.set_page_config(page_title="Dashboard de Vendas", page_icon="📊", layout="wide")
 
 # ------------------------------
-# 🔗 URLs das planilhas
+# 🔗 IDs / padrões das planilhas
 # ------------------------------
-# Planilha 1 (vendas de UM colaborador)
+# Planilha 1 (vendas de UM colaborador) — já no formato export CSV
 SHEET_URL_1 = "https://docs.google.com/spreadsheets/d/1d07rdyAfCzyV2go0V4CJkXd53wUmoA058WeqaHfGPBk/export?format=csv"
 
 # Planilha 2 (histórico geral de TODOS os clientes)
-# ID extraído do link que você enviou
 SHEET2_ID = "1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc"
+DEFAULT_SHEET2_SHEETNAME = "Total"  # altere se sua aba tiver outro nome
 
-# Nome padrão da aba (ajuste se sua aba tiver outro nome)
-DEFAULT_SHEET2_SHEETNAME = "Total"  # altere aqui se sua aba tiver outro nome
 # ------------------------------
 # 🧩 Funções utilitárias
 # ------------------------------
-@st.cache_data(ttl=60)
-def carregar_dados(url: str) -> pd.DataFrame:
-    """Carrega dados de uma planilha CSV hospedada no Google Sheets."""
-    try:
-        df = pd.read_csv(
-            url,
-            sep=",",
-            engine="python",
-            on_bad_lines="skip",
-            encoding="utf-8",
-            na_values=["", "NA", "NaN", None]
-        )
-        return df
-    except Exception as e:
-        st.error(f"Erro ao carregar planilha: {e}")
-        return pd.DataFrame()
+@st.cache_data(ttl=120)
+def carregar_csv(url: str) -> pd.DataFrame:
+    """Carrega CSV remoto com tolerância a linhas ruins/encoding."""
+    return pd.read_csv(
+        url,
+        sep=",",
+        engine="python",
+        on_bad_lines="skip",
+        encoding="utf-8",
+        na_values=["", "NA", "NaN", None],
+    )
 
 def preparar_df_vendas(df: pd.DataFrame) -> pd.DataFrame:
-    """Prepara a planilha principal de vendas (do colaborador): datas e valores."""
+    """Prepara a planilha do colaborador: datas e valores."""
     if df.empty:
         return df
-
     df.columns = [c.strip() for c in df.columns]
 
-    # DATA DE INÍCIO -> datetime (suporta dd/mm/yyyy)
+    # DATA
     if "DATA DE INÍCIO" in df.columns:
-        df["DATA DE INÍCIO"] = pd.to_datetime(
-            df["DATA DE INÍCIO"], errors="coerce", dayfirst=True
-        )
+        df["DATA DE INÍCIO"] = pd.to_datetime(df["DATA DE INÍCIO"], errors="coerce", dayfirst=True)
 
-    # VALOR (R$) -> float
+    # VALOR
     if "VALOR (R$)" in df.columns:
         df["VALOR (R$)"] = (
-            df["VALOR (R$)"]
-            .astype(str)
+            df["VALOR (R$)"].astype(str)
             .str.replace(r"R\$\s*", "", regex=True)
-            .str.replace(".", "", regex=False)   # remove milhar
-            .str.replace(",", ".", regex=False)  # vírgula -> ponto
+            .str.replace(".", "", regex=False)   # milhar
+            .str.replace(",", ".", regex=False)  # decimal
         )
         df["VALOR (R$)"] = pd.to_numeric(df["VALOR (R$)"], errors="coerce").fillna(0.0)
 
     return df
 
-# === NOVO: preparo da planilha 2 (histórico geral)
 def preparar_df_historico(df: pd.DataFrame) -> pd.DataFrame:
+    """Prepara a planilha do histórico: datas/valores/chaves de cliente."""
     if df.empty:
         return df
-
     df.columns = [c.strip() for c in df.columns]
 
-    # Datas possíveis (AJUSTE SE PRECISAR acrescentar nomes)
+    # DATA_REF (tenta várias colunas)
     for col in ["DATA", "DATA DA COMPRA", "DATA DE INÍCIO", "DATA VENDA"]:
         if col in df.columns:
             df["DATA_REF"] = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
@@ -85,9 +73,8 @@ def preparar_df_historico(df: pd.DataFrame) -> pd.DataFrame:
     if "DATA_REF" not in df.columns:
         df["DATA_REF"] = pd.NaT
 
-    # Valor possíveis (AJUSTE SE PRECISAR acrescentar nomes)
-    valor_cols = ["VALOR (R$)", "VALOR", "TOTAL (R$)", "TOTAL"]
-    for col in valor_cols:
+    # VALOR_PAD (tenta várias colunas)
+    for col in ["VALOR (R$)", "VALOR", "TOTAL (R$)", "TOTAL"]:
         if col in df.columns:
             v = (
                 df[col].astype(str)
@@ -100,70 +87,60 @@ def preparar_df_historico(df: pd.DataFrame) -> pd.DataFrame:
     if "VALOR_PAD" not in df.columns:
         df["VALOR_PAD"] = 0.0
 
-    # Chaves de cliente (AJUSTE SE PRECISAR)
-    possiveis_nome = ["NOME COMPLETO", "CLIENTE", "NOME"]
-    for col in possiveis_nome:
+    # Identificação de cliente (email > nome; se tiver CPF/ID_CLIENTE, adapte aqui)
+    # Nome
+    for col in ["NOME COMPLETO", "CLIENTE", "NOME"]:
         if col in df.columns:
             df["CLIENTE_NOME"] = df[col].astype(str).str.strip()
             break
     if "CLIENTE_NOME" not in df.columns:
         df["CLIENTE_NOME"] = ""
-
-    # E-mail
+    # Email
     email_col = None
     for c in ["E-MAIL", "EMAIL"]:
         if c in df.columns:
             email_col = c
             break
-    if email_col:
-        df["CLIENTE_EMAIL"] = df[email_col].astype(str).str.strip().str.lower()
-    else:
-        df["CLIENTE_EMAIL"] = ""
-
-    # Se tiver CPF/ID_CLIENTE, é mais robusto (AJUSTE SE EXISTIR)
-    id_col = None
-    for c in ["CPF", "ID_CLIENTE", "ID"]:
-        if c in df.columns:
-            id_col = c
-            break
-
-    if id_col:
-        df["CLIENTE_ID"] = df[id_col].astype(str).str.strip()
-    else:
-        # ID canônico do cliente (email > nome)
-        df["CLIENTE_ID"] = df["CLIENTE_EMAIL"].where(df["CLIENTE_EMAIL"] != "", df["CLIENTE_NOME"])
+    df["CLIENTE_EMAIL"] = df[email_col].astype(str).str.strip().str.lower() if email_col else ""
+    # ID canônico
+    df["CLIENTE_ID"] = df["CLIENTE_EMAIL"].where(df["CLIENTE_EMAIL"] != "", df["CLIENTE_NOME"])
 
     return df
 
-# Mapeamento dos dias da semana (sem domingo)
+# Dias da semana (sem domingo)
 PT_WEEK_ORDER = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
 PT_WEEK_MAP = {0: "Segunda", 1: "Terça", 2: "Quarta", 3: "Quinta", 4: "Sexta", 5: "Sábado", 6: "Domingo"}
 
 # ------------------------------
-# 📥 Carregamento dos dados
+# 📥 Carregamento da PLANILHA 1 (sempre funciona por export CSV)
 # ------------------------------
-df_vendas_raw = carregar_dados(SHEET_URL_1)
-df_extra = carregar_dados(SHEET_URL_2)
-
+with st.spinner("Carregando Planilha 1 (colaborador)…"):
+    df_vendas_raw = carregar_csv(SHEET_URL_1)
 df_vendas = preparar_df_vendas(df_vendas_raw.copy())
-df_historico = preparar_df_historico(df_extra.copy())
 
 # ------------------------------
-# 🧭 Barra lateral (controles globais)
+# 🧭 Barra lateral (monta a URL da PLANILHA 2 e só então lê)
 # ------------------------------
 st.sidebar.title("⚙️ Controles")
 
-# === Nome da aba da Planilha 2
+# Nome da aba da Planilha 2 (evita depender de gid)
 sheet2_sheetname = st.sidebar.text_input(
     "📄 Nome da aba (Planilha 2)",
     value=DEFAULT_SHEET2_SHEETNAME,
     help="Ex.: Total (tem que ser exatamente como aparece na guia do Google Sheets)"
 )
-# Monta a URL por NOME da aba (evita depender de gid)
+# Monta a URL por NOME da aba (gviz)
 SHEET_URL_2 = f"https://docs.google.com/spreadsheets/d/{SHEET2_ID}/gviz/tq?tqx=out:csv&sheet={quote(sheet2_sheetname)}"
 
+# Botão de refresh
+if st.sidebar.button("🔄 Atualizar dados agora"):
+    st.cache_data.clear()
+    time.sleep(0.3)
+    st.rerun()
 
-# === NOVO: identificação do colaborador (rótulo)
+st.sidebar.success(f"✅ Dados atualizados às {time.strftime('%H:%M:%S')}")
+
+# Identificação do colaborador (rótulo)
 colab_detectado = None
 if not df_vendas.empty:
     for c in ["COLABORADOR", "VENDEDOR", "RESPONSÁVEL"]:
@@ -178,20 +155,44 @@ colaborador = st.sidebar.text_input(
     value=colab_detectado or ""
 )
 
-if st.sidebar.button("🔄 Atualizar dados agora"):
-    st.cache_data.clear()
-    time.sleep(0.4)
-    st.rerun()
+# ------------------------------
+# 📥 Carregamento da PLANILHA 2 (só agora a URL existe)
+# ------------------------------
+with st.spinner("Carregando Planilha 2 (histórico)…"):
+    try:
+        df_extra_raw = carregar_csv(SHEET_URL_2)
+    except Exception as e:
+        # Fallback: se não estiver compartilhada, tente modo "Publicar na Web"
+        fallback_pub = f"https://docs.google.com/spreadsheets/d/{SHEET2_ID}/pub?output=csv"
+        st.warning("Não consegui pela URL da aba. Tentando fallback 'Publicar na Web'…")
+        try:
+            df_extra_raw = carregar_csv(fallback_pub)
+        except Exception as e2:
+            st.error(
+                "❌ Não consegui abrir a Planilha 2.\n\n"
+                "Verifique:\n"
+                "• Nome da aba digitado (igual ao do Google Sheets)\n"
+                "• Permissões: 'Qualquer pessoa com o link — Leitor'\n"
+                "• (Opcional) Arquivo → Compartilhar → Publicar na Web\n\n"
+                f"Erros: {e} | fallback: {e2}"
+            )
+            df_extra_raw = pd.DataFrame()
 
-st.sidebar.success(f"✅ Dados atualizados às {time.strftime('%H:%M:%S')}")
+df_historico = preparar_df_historico(df_extra_raw.copy())
+
+# Status rápido no topo
+ok1 = "✅" if not df_vendas.empty else "⚠️"
+ok2 = "✅" if not df_historico.empty else "⚠️"
+st.markdown(f"**Planilha 1 (Colaborador):** {ok1}  |  **Planilha 2 (Histórico):** {ok2}")
 
 # ------------------------------
-# 🗂️ Abas principais
+# 🗂️ Abas principais (layout)
 # ------------------------------
 aba1, aba2 = st.tabs([
     "📊 Análises do Colaborador (Planilha 1)",
     "📑 Histórico Geral de Clientes (Planilha 2)",
 ])
+
 
 # ======================================================
 # 🟢 ABA 1 — PLANILHA 1 (Colaborador)
