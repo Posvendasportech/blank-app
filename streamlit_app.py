@@ -2,12 +2,17 @@ import streamlit as st
 import pandas as pd
 import time
 import plotly.express as px
+from datetime import datetime, timedelta
 
-# --- URLs das planilhas ---
+# ------------------------------
+# 🔗 URLs das planilhas
+# ------------------------------
 SHEET_URL_1 = "https://docs.google.com/spreadsheets/d/1d07rdyAfCzyV2go0V4CJkXd53wUmoA058WeqaHfGPBk/export?format=csv"
 SHEET_URL_2 = "https://docs.google.com/spreadsheets/d/1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc/export?format=csv"
 
-# --- Função de carregamento com cache ---
+# ------------------------------
+# ⚙️ Função de carregamento com cache
+# ------------------------------
 @st.cache_data(ttl=60)
 def carregar_dados(url):
     try:
@@ -17,342 +22,204 @@ def carregar_dados(url):
         st.error(f"Erro ao carregar planilha: {e}")
         return pd.DataFrame()
 
-# --- Carrega as planilhas ---
+# ------------------------------
+# 📥 Carregamento dos dados
+# ------------------------------
 df_vendas = carregar_dados(SHEET_URL_1)
 df_extra = carregar_dados(SHEET_URL_2)
 
-# --- Barra lateral ---
+# ------------------------------
+# 🧹 Limpeza e preparação dos dados
+# ------------------------------
+if not df_vendas.empty:
+    # Converte datas e valores
+    df_vendas["DATA DE INÍCIO"] = pd.to_datetime(df_vendas["DATA DE INÍCIO"], errors="coerce")
+    df_vendas["VALOR (R$)"] = (
+        df_vendas["VALOR (R$)"]
+        .astype(str)
+        .str.replace("R\$", "", regex=True)
+        .str.replace(",", ".")
+        .astype(float)
+    )
+
+# ------------------------------
+# 🧭 Barra lateral
+# ------------------------------
 st.sidebar.title("⚙️ Controles")
 
 if st.sidebar.button("🔄 Atualizar dados agora"):
     st.cache_data.clear()
-    time.sleep(0.5)  # pequena pausa para evitar erro de reload
-    st.rerun()  # novo método mais seguro
+    time.sleep(0.5)
+    st.rerun()
 
 st.success(f"✅ Dados atualizados às {time.strftime('%H:%M:%S')}")
 
-# --- Exibição inicial ---
+# ------------------------------
+# 📊 Exibição inicial
+# ------------------------------
 st.subheader("📦 Planilha Principal - Vendas")
 st.dataframe(df_vendas.head())
 
 st.subheader("📑 Segunda Planilha - Dados Complementares")
 st.dataframe(df_extra.head())
 
-# --- Exemplo de integração (opcional) ---
-# Se ambas tiverem uma coluna em comum, como "NOME COMPLETO" ou "CPF",
-# você pode unir as duas bases:
-# df_combinado = pd.merge(df_vendas, df_extra, on="NOME COMPLETO", how="left")
-# st.subheader("📊 Dados Integrados")
-# st.dataframe(df_combinado.head())
-
-
-
-# --- Filtros ---
+# ------------------------------
+# 🧩 Filtros
+# ------------------------------
 st.sidebar.header("Filtros")
-grupos = st.sidebar.multiselect("Grupo RFM", df["GRUPO RFM"].dropna().unique())
-produtos = st.sidebar.multiselect("Produto", df["PRODUTO"].dropna().unique())
 
-df_filtrado = df.copy()
-if grupos:
-    df_filtrado = df_filtrado[df_filtrado["GRUPO RFM"].isin(grupos)]
-if produtos:
-    df_filtrado = df_filtrado[df_filtrado["PRODUTO"].isin(produtos)]
+if not df_vendas.empty:
+    grupos = st.sidebar.multiselect("Grupo RFM", df_vendas["GRUPO RFM"].dropna().unique())
+    produtos = st.sidebar.multiselect("Produto", df_vendas["PRODUTO"].dropna().unique())
 
-# --- KPIs ---
-total_vendas = df_filtrado["VALOR (R$)"].sum()
-clientes = df_filtrado["NOME COMPLETO"].nunique()
-ticket_medio = total_vendas / clientes if clientes > 0 else 0
+    df_filtrado = df_vendas.copy()
+    if grupos:
+        df_filtrado = df_filtrado[df_filtrado["GRUPO RFM"].isin(grupos)]
+    if produtos:
+        df_filtrado = df_filtrado[df_filtrado["PRODUTO"].isin(produtos)]
+else:
+    df_filtrado = pd.DataFrame()
 
-col1, col2, col3 = st.columns(3)
-col1.metric("💰 Total de Vendas", f"R$ {total_vendas:,.2f}")
-col2.metric("👥 Clientes Únicos", clientes)
-col3.metric("🎯 Ticket Médio", f"R$ {ticket_medio:,.2f}")
+# ------------------------------
+# 🎯 KPIs
+# ------------------------------
+if not df_filtrado.empty:
+    total_vendas = df_filtrado["VALOR (R$)"].sum()
+    clientes = df_filtrado["NOME COMPLETO"].nunique()
+    ticket_medio = total_vendas / clientes if clientes > 0 else 0
 
-# --- Gráficos ---
-st.subheader("📊 Vendas por Dia")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("💰 Total de Vendas", f"R$ {total_vendas:,.2f}")
+    col2.metric("👥 Clientes Únicos", clientes)
+    col3.metric("🎯 Ticket Médio", f"R$ {ticket_medio:,.2f}")
 
-# Agrupa por data e soma as vendas
-vendas_por_dia = df_filtrado.groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
+# ------------------------------
+# 📈 Gráficos Principais
+# ------------------------------
+if not df_filtrado.empty:
 
-# Remove domingos (weekday=6)
-vendas_por_dia = vendas_por_dia[vendas_por_dia["DATA DE INÍCIO"].dt.weekday != 6]
+    # --- Vendas por Dia com Tendência ---
+    st.subheader("📊 Vendas por Dia com Linha de Tendência")
 
-# Ordena por data
-vendas_por_dia = vendas_por_dia.sort_values("DATA DE INÍCIO")
-
-# Gráfico de linha diário
-# --- Gráficos ---
-
-
-# Agrupa por data e soma as vendas
-vendas_por_dia = df_filtrado.groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
-
-# Remove domingos (weekday=6)
-vendas_por_dia = vendas_por_dia[vendas_por_dia["DATA DE INÍCIO"].dt.weekday != 6]
-
-# Ordena por data
-vendas_por_dia = vendas_por_dia.sort_values("DATA DE INÍCIO")
-
-# Calcula média móvel de 7 dias para tendência
-vendas_por_dia["Tendência"] = vendas_por_dia["VALOR (R$)"].rolling(window=7, min_periods=1).mean()
-
-# Gráfico de linha com duas séries: vendas diárias + tendência
-graf1 = px.line(
-    vendas_por_dia,
-    x="DATA DE INÍCIO",
-    y=["VALOR (R$)", "Tendência"],
-    title="Vendas por Dia com Linha de Tendência",
-    labels={"DATA DE INÍCIO": "Data", "value": "Vendas (R$)", "variable": "Legenda"},
-    markers=True
-)
-
-# Personaliza cores e linhas
-graf1.update_traces(selector=dict(name="VALOR (R$)"), line=dict(width=2, color='cyan'), marker=dict(color='cyan', size=6))
-graf1.update_traces(selector=dict(name="Tendência"), line=dict(width=3, color='orange', dash='dash'))
-
-# Fundo preto e layout limpo
-graf1.update_layout(
-    plot_bgcolor='black',
-    paper_bgcolor='black',
-    font=dict(color='white'),
-    xaxis=dict(showgrid=True, gridcolor='gray', zerolinecolor='gray'),
-    yaxis=dict(showgrid=True, gridcolor='gray', zerolinecolor='gray'),
-    title=dict(font=dict(color='white', size=20))
-)
-
-st.plotly_chart(graf1, use_container_width=True)
-
-
-# --- Gráficos auxiliares ---
-col1, col2 = st.columns(2)
-with col1:
-    st.subheader("Distribuição por Grupo RFM")
-    graf2 = px.pie(df_filtrado, names="GRUPO RFM", title="Grupos RFM")
-    graf2.update_layout(
-        plot_bgcolor='black',
-        paper_bgcolor='black',
-        font=dict(color='white'),
-        title=dict(font=dict(color='white', size=18))
+    vendas_por_dia = (
+        df_filtrado.groupby("DATA DE INÍCIO")["VALOR (R$)"]
+        .sum()
+        .reset_index()
+        .sort_values("DATA DE INÍCIO")
     )
-    st.plotly_chart(graf2, use_container_width=True)
+    vendas_por_dia = vendas_por_dia[vendas_por_dia["DATA DE INÍCIO"].dt.weekday != 6]  # remove domingos
+    vendas_por_dia["Tendência"] = vendas_por_dia["VALOR (R$)"].rolling(window=7, min_periods=1).mean()
 
-with col2:
-    st.subheader("Vendas por Produto")
-    graf3 = px.bar(
-        df_filtrado.groupby("PRODUTO")["VALOR (R$)"].sum().reset_index(),
-        x="PRODUTO",
-        y="VALOR (R$)",
-        title="Total de Vendas por Produto"
+    graf1 = px.line(
+        vendas_por_dia,
+        x="DATA DE INÍCIO",
+        y=["VALOR (R$)", "Tendência"],
+        title="Vendas por Dia com Linha de Tendência",
+        labels={"DATA DE INÍCIO": "Data", "value": "Vendas (R$)", "variable": "Legenda"},
+        markers=True
     )
-    graf3.update_traces(marker_color='cyan')
-    graf3.update_layout(
-        plot_bgcolor='black',
-        paper_bgcolor='black',
-        font=dict(color='white'),
-        xaxis=dict(showgrid=True, gridcolor='gray', zerolinecolor='gray'),
-        yaxis=dict(showgrid=True, gridcolor='gray', zerolinecolor='gray'),
-        title=dict(font=dict(color='white', size=18))
+    graf1.update_traces(selector=dict(name="VALOR (R$)"), line=dict(width=2, color='cyan'))
+    graf1.update_traces(selector=dict(name="Tendência"), line=dict(width=3, color='orange', dash='dash'))
+    graf1.update_layout(
+        plot_bgcolor='black', paper_bgcolor='black', font=dict(color='white'),
+        xaxis=dict(showgrid=True, gridcolor='gray'), yaxis=dict(showgrid=True, gridcolor='gray')
     )
-    st.plotly_chart(graf3, use_container_width=True)
+    st.plotly_chart(graf1, use_container_width=True)
 
+    # --- Distribuição por Grupo RFM ---
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Distribuição por Grupo RFM")
+        graf2 = px.pie(df_filtrado, names="GRUPO RFM", title="Grupos RFM")
+        graf2.update_layout(plot_bgcolor='black', paper_bgcolor='black', font=dict(color='white'))
+        st.plotly_chart(graf2, use_container_width=True)
 
+    with col2:
+        st.subheader("Vendas por Produto")
+        graf3 = px.bar(
+            df_filtrado.groupby("PRODUTO")["VALOR (R$)"].sum().reset_index(),
+            x="PRODUTO", y="VALOR (R$)", title="Total de Vendas por Produto"
+        )
+        graf3.update_traces(marker_color='cyan')
+        graf3.update_layout(plot_bgcolor='black', paper_bgcolor='black', font=dict(color='white'))
+        st.plotly_chart(graf3, use_container_width=True)
 
+    # --- Vendas Semanais ---
+    st.subheader("📈 Vendas Semanais")
+    df_filtrado["SEMANA"] = df_filtrado["DATA DE INÍCIO"].dt.to_period("W").apply(lambda r: r.start_time)
+    vendas_semanal = df_filtrado.groupby("SEMANA")["VALOR (R$)"].sum().reset_index()
 
-# --- Gráfico de vendas semana a semana (linha fina) ---
-st.subheader("📈 Vendas Semanais (Linha Fina)")
+    graf_semanal = px.line(
+        vendas_semanal, x="SEMANA", y="VALOR (R$)",
+        title="Vendas Semanais", markers=True
+    )
+    graf_semanal.update_traces(line=dict(width=2, color='blue'))
+    graf_semanal.update_layout(plot_bgcolor='black', paper_bgcolor='black', font=dict(color='white'))
+    st.plotly_chart(graf_semanal, use_container_width=True)
 
-# Cria coluna de semana (início da semana)
-df_filtrado["SEMANA"] = df_filtrado["DATA DE INÍCIO"].dt.to_period("W").apply(lambda r: r.start_time)
+    # --- Vendas por Dia da Semana ---
+    st.subheader("📊 Vendas por Dia da Semana")
+    df_filtrado["DIA_DA_SEMANA"] = df_filtrado["DATA DE INÍCIO"].dt.day_name()
+    vendas_dia_semana = (
+        df_filtrado.groupby("DIA_DA_SEMANA")["VALOR (R$)"].sum()
+        .reindex(["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"])
+        .reset_index()
+    )
+    graf_dia_semana = px.bar(
+        vendas_dia_semana, x="DIA_DA_SEMANA", y="VALOR (R$)",
+        title="Vendas por Dia da Semana (excluindo domingos)", text="VALOR (R$)"
+    )
+    graf_dia_semana.update_traces(marker_color='cyan')
+    graf_dia_semana.update_layout(plot_bgcolor='black', paper_bgcolor='black', font=dict(color='white'))
+    st.plotly_chart(graf_dia_semana, use_container_width=True)
 
-# Agrupa por semana e soma as vendas
-vendas_semanal = df_filtrado.groupby("SEMANA")["VALOR (R$)"].sum().reset_index()
+    # --- Curva Acumulada ---
+    st.subheader("📈 Curva de Crescimento Acumulada de Vendas")
+    vendas_diarias = vendas_por_dia.copy()
+    vendas_diarias["Acumulado"] = vendas_diarias["VALOR (R$)"].cumsum()
+    graf_acumulado = px.line(
+        vendas_diarias, x="DATA DE INÍCIO", y="Acumulado",
+        title="Curva de Crescimento Acumulada de Vendas", markers=True
+    )
+    graf_acumulado.update_traces(line=dict(width=2, color='cyan'))
+    graf_acumulado.update_layout(plot_bgcolor='black', paper_bgcolor='black', font=dict(color='white'))
+    st.plotly_chart(graf_acumulado, use_container_width=True)
 
-# Cria gráfico de linha fina
-graf_semanal = px.line(
-    vendas_semanal,
-    x="SEMANA",
-    y="VALOR (R$)",
-    title="Vendas Semanais",
-    labels={"SEMANA": "Semana", "VALOR (R$)": "Vendas (R$)"},
-    markers=True
-)
+    # --- Comparação de Períodos Iguais ---
+    st.subheader("📊 Comparação de Vendas: Período Atual vs Período Igual do Mês Anterior")
 
-# Personaliza a linha para ficar mais fina
-graf_semanal.update_traces(line=dict(width=2, color='blue'))
+    hoje = datetime.today()
+    primeiro_dia_mes_atual = hoje.replace(day=1)
+    dia_atual = hoje.day
+    primeiro_dia_mes_anterior = (primeiro_dia_mes_atual - timedelta(days=1)).replace(day=1)
+    ultimo_dia_mes_anterior = primeiro_dia_mes_anterior.replace(day=dia_atual)
 
-# Ajusta layout para ficar mais elegante
-graf_semanal.update_layout(
-    xaxis_title="Semana",
-    yaxis_title="Vendas (R$)",
-    xaxis=dict(showgrid=True, gridcolor='gray'),
-    yaxis=dict(showgrid=True, gridcolor='gray'),
-    plot_bgcolor='black'
-)
+    vendas_mes_atual = df_filtrado[
+        (df_filtrado["DATA DE INÍCIO"] >= primeiro_dia_mes_atual) &
+        (df_filtrado["DATA DE INÍCIO"] <= hoje)
+    ]["VALOR (R$)"].sum()
 
-st.plotly_chart(graf_semanal, use_container_width=True)
+    vendas_mes_anterior = df_filtrado[
+        (df_filtrado["DATA DE INÍCIO"] >= primeiro_dia_mes_anterior) &
+        (df_filtrado["DATA DE INÍCIO"] <= ultimo_dia_mes_anterior)
+    ]["VALOR (R$)"].sum()
 
-# --- Vendas por Dia da Semana ---
-st.subheader("📊 Vendas por Dia da Semana")
+    delta = ((vendas_mes_atual - vendas_mes_anterior) / vendas_mes_anterior) * 100 if vendas_mes_anterior != 0 else 0
 
-# Adiciona coluna com nome do dia da semana
-df_filtrado["DIA_DA_SEMANA"] = df_filtrado["DATA DE INÍCIO"].dt.day_name()
+    st.metric(
+        label=f"Vendas até {hoje.strftime('%d/%m')} (este mês vs anterior)",
+        value=f"R$ {vendas_mes_atual:,.2f}",
+        delta=f"{delta:.2f}%"
+    )
 
-# Agrupa vendas por dia da semana
-vendas_dia_semana = df_filtrado.groupby("DIA_DA_SEMANA")["VALOR (R$)"].sum().reindex(
-    ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
-).reset_index()
-
-# Gráfico de barras
-graf_dia_semana = px.bar(
-    vendas_dia_semana,
-    x="DIA_DA_SEMANA",
-    y="VALOR (R$)",
-    title="Vendas por Dia da Semana (excluindo domingos)",
-    labels={"DIA_DA_SEMANA":"Dia da Semana", "VALOR (R$)":"Vendas (R$)"},
-    text="VALOR (R$)"
-)
-
-graf_dia_semana.update_traces(marker_color='cyan')
-graf_dia_semana.update_layout(
-    plot_bgcolor='black',
-    paper_bgcolor='black',
-    font=dict(color='white'),
-    xaxis=dict(showgrid=True, gridcolor='gray'),
-    yaxis=dict(showgrid=True, gridcolor='gray')
-)
-
-st.plotly_chart(graf_dia_semana, use_container_width=True)
-
-
-# --- Comparação entre Grupos RFM ---
-st.subheader("📊 Análise por Grupo RFM")
-
-# Agrupa por Grupo RFM
-rfm_analise = df_filtrado.groupby("GRUPO RFM").agg({
-    "VALOR (R$)": "sum",
-    "NOME COMPLETO": "nunique"
-}).reset_index()
-
-# Calcula ticket médio por grupo
-rfm_analise["Ticket Médio"] = rfm_analise["VALOR (R$)"] / rfm_analise["NOME COMPLETO"]
-
-# Gráfico de barras: total de vendas por grupo
-graf_rfm_vendas = px.bar(
-    rfm_analise,
-    x="GRUPO RFM",
-    y="VALOR (R$)",
-    title="Total de Vendas por Grupo RFM",
-    labels={"GRUPO RFM": "Grupo RFM", "VALOR (R$)":"Vendas (R$)"},
-    text="VALOR (R$)"
-)
-graf_rfm_vendas.update_traces(marker_color='cyan')
-graf_rfm_vendas.update_layout(
-    plot_bgcolor='black',
-    paper_bgcolor='black',
-    font=dict(color='white'),
-    xaxis=dict(showgrid=True, gridcolor='gray'),
-    yaxis=dict(showgrid=True, gridcolor='gray')
-)
-
-st.plotly_chart(graf_rfm_vendas, use_container_width=True)
-
-
-
-
-
-# --- Curva de Crescimento Acumulada ---
-st.subheader("📈 Curva de Crescimento Acumulada de Vendas")
-
-# Agrupa vendas por dia e soma
-vendas_diarias = df_filtrado.groupby("DATA DE INÍCIO")["VALOR (R$)"].sum().reset_index()
-
-# Ordena por data
-vendas_diarias = vendas_diarias.sort_values("DATA DE INÍCIO")
-
-# Calcula vendas acumuladas
-vendas_diarias["Acumulado"] = vendas_diarias["VALOR (R$)"].cumsum()
-
-# Gráfico de linha
-graf_acumulado = px.line(
-    vendas_diarias,
-    x="DATA DE INÍCIO",
-    y="Acumulado",
-    title="Curva de Crescimento Acumulada de Vendas",
-    labels={"DATA DE INÍCIO":"Data", "Acumulado":"Vendas Acumuladas (R$)"},
-    markers=True
-)
-
-# Estilo
-graf_acumulado.update_traces(line=dict(width=2, color='cyan'))
-graf_acumulado.update_layout(
-    plot_bgcolor='black',
-    paper_bgcolor='black',
-    font=dict(color='white'),
-    xaxis=dict(showgrid=True, gridcolor='gray'),
-    yaxis=dict(showgrid=True, gridcolor='gray')
-)
-
-st.plotly_chart(graf_acumulado, use_container_width=True)
-
-
-# --- Comparação de Períodos Iguais ---
-st.subheader("📊 Comparação de Vendas: Período Atual vs Período Igual do Mês Anterior")
-
-from datetime import datetime, timedelta
-
-# Define período atual (até hoje)
-hoje = datetime.today()
-primeiro_dia_mes_atual = hoje.replace(day=1)
-dia_atual = hoje.day
-
-# Define período equivalente do mês anterior
-primeiro_dia_mes_anterior = (primeiro_dia_mes_atual - timedelta(days=1)).replace(day=1)
-ultimo_dia_mes_anterior = primeiro_dia_mes_anterior.replace(day=dia_atual)
-
-# Filtra vendas do período atual e mês anterior
-vendas_mes_atual = df_filtrado[
-    (df_filtrado["DATA DE INÍCIO"] >= primeiro_dia_mes_atual) &
-    (df_filtrado["DATA DE INÍCIO"] <= hoje)
-]["VALOR (R$)"].sum()
-
-vendas_mes_anterior = df_filtrado[
-    (df_filtrado["DATA DE INÍCIO"] >= primeiro_dia_mes_anterior) &
-    (df_filtrado["DATA DE INÍCIO"] <= ultimo_dia_mes_anterior)
-]["VALOR (R$)"].sum()
-
-# Calcula variação percentual
-delta = ((vendas_mes_atual - vendas_mes_anterior) / vendas_mes_anterior) * 100 if vendas_mes_anterior != 0 else 0
-
-# Exibe métricas
-st.metric(
-    label=f"Vendas: {primeiro_dia_mes_atual.strftime('%d/%m')} até {hoje.strftime('%d/%m')} (este mês vs mês anterior)",
-    value=f"R$ {vendas_mes_atual:,.2f}",
-    delta=f"{delta:.2f}%"
-)
-
-# Gráfico comparativo
-comparacao = pd.DataFrame({
-    "Período": [f"Mês Anterior (até {dia_atual})", f"Este Mês (até {dia_atual})"],
-    "Vendas (R$)": [vendas_mes_anterior, vendas_mes_atual]
-})
-
-import plotly.express as px
-
-graf_comparacao = px.bar(
-    comparacao,
-    x="Período",
-    y="Vendas (R$)",
-    text="Vendas (R$)",
-    title=f"Comparação de Vendas até o Dia {dia_atual}",
-    labels={"Vendas (R$)":"Vendas (R$)", "Período":"Período"}
-)
-graf_comparacao.update_traces(marker_color='cyan')
-graf_comparacao.update_layout(
-    plot_bgcolor='black',
-    paper_bgcolor='black',
-    font=dict(color='white')
-)
-
-st.plotly_chart(graf_comparacao, use_container_width=True)
-
-
+    comparacao = pd.DataFrame({
+        "Período": [f"Mês Anterior (até {dia_atual})", f"Este Mês (até {dia_atual})"],
+        "Vendas (R$)": [vendas_mes_anterior, vendas_mes_atual]
+    })
+    graf_comparacao = px.bar(
+        comparacao, x="Período", y="Vendas (R$)", text="Vendas (R$)",
+        title=f"Comparação de Vendas até o Dia {dia_atual}"
+    )
+    graf_comparacao.update_traces(marker_color='cyan')
+    graf_comparacao.update_layout(plot_bgcolor='black', paper_bgcolor='black', font=dict(color='white'))
+    st.plotly_chart(graf_comparacao, use_container_width=True)
