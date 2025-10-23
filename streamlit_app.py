@@ -320,42 +320,120 @@ with aba2:
     st.info("🧠 Espaço reservado para análises específicas da segunda planilha (pós-venda, NPS, satisfação, etc.).")
 
 
-     # --- Análise de todos os clientes (por Grupo RFM) ---
+   # --- Quantidade de clientes por Grupo RFM (robusto) ---
+    import numpy as np
+    import re
+    import plotly.express as px
+
     st.subheader("👥 Quantidade de Clientes por Grupo RFM")
 
-    # Usa a planilha principal (df_vendas)
-    base_clientes = df_vendas.copy()
+    base = df_vendas.copy()
 
-    if "GRUPO RFM" not in base_clientes.columns or "NOME COMPLETO" not in base_clientes.columns:
-        st.warning("Não foi possível gerar o gráfico. Colunas necessárias ausentes na planilha principal.")
+    # Checagem de colunas mínimas
+    col_min = ["GRUPO RFM", "NOME COMPLETO"]
+    if not all(c in base.columns for c in col_min):
+        st.warning("Não foi possível gerar o gráfico. Colunas necessárias ausentes na planilha principal: 'GRUPO RFM' e 'NOME COMPLETO'.")
     else:
-        # Agrupa por grupo RFM e conta clientes únicos
+        # ---------- Normalização de possíveis identificadores ----------
+        base = base.copy()
+
+        # Padroniza nomes de colunas alternativas de e-mail
+        if "E-MAIL" in base.columns and "EMAIL" not in base.columns:
+            base["EMAIL"] = base["E-MAIL"]
+
+        # Limpa campos
+        if "CPF" in base.columns:
+            base["CPF"] = (
+                base["CPF"]
+                .astype(str)
+                .str.replace(r"\D", "", regex=True)  # só dígitos
+                .str.strip()
+            )
+            base.loc[base["CPF"].isin(["", "nan", "None"]), "CPF"] = np.nan
+
+        if "EMAIL" in base.columns:
+            base["EMAIL"] = base["EMAIL"].astype(str).str.strip().str.lower()
+            base.loc[base["EMAIL"].isin(["", "nan", "none"]), "EMAIL"] = np.nan
+
+        base["NOME COMPLETO"] = (
+            base["NOME COMPLETO"]
+            .astype(str)
+            .str.strip()
+            .str.replace(r"\s+", " ", regex=True)
+        )
+        base.loc[base["NOME COMPLETO"].isin(["", "nan", "None"]), "NOME COMPLETO"] = np.nan
+
+        # Cria um ID de cliente: CPF > EMAIL > NOME COMPLETO
+        def choose_id(row):
+            if "CPF" in row and pd.notna(row["CPF"]):
+                return row["CPF"]
+            if "EMAIL" in row and pd.notna(row["EMAIL"]):
+                return row["EMAIL"]
+            return row["NOME COMPLETO"]
+
+        base["ID_CLIENTE"] = base.apply(choose_id, axis=1)
+        base = base.dropna(subset=["ID_CLIENTE"])
+
+        # Data para ordenar e pegar último RFM por cliente
+        if "DATA DE INÍCIO" in base.columns:
+            base["DATA DE INÍCIO"] = pd.to_datetime(base["DATA DE INÍCIO"], errors="coerce", dayfirst=True)
+        else:
+            # Se não houver data, ainda dá para agrupar, mas sem "último"
+            base["DATA DE INÍCIO"] = pd.NaT
+
+        # Mantém 1 linha por cliente: a mais recente
+        base = base.sort_values(["ID_CLIENTE", "DATA DE INÍCIO"])
+        ultimo_por_cliente = base.groupby("ID_CLIENTE", as_index=False).tail(1)
+
+        # Ajusta nome do grupo nulo
+        ultimo_por_cliente["GRUPO RFM"] = ultimo_por_cliente["GRUPO RFM"].fillna("Sem Grupo")
+
+        # Contagem por grupo
         grp = (
-            base_clientes.dropna(subset=["GRUPO RFM"])
-            .groupby("GRUPO RFM", as_index=False)
-            .agg(Quantidade=("NOME COMPLETO", "nunique"))
+            ultimo_por_cliente.groupby("GRUPO RFM", as_index=False)
+            .agg(Quantidade=("ID_CLIENTE", "nunique"))
             .sort_values("Quantidade", ascending=False)
         )
 
-        # Gráfico de barras colorido por grupo
-        graf_clientes = px.bar(
-            grp,
-            x="GRUPO RFM",
-            y="Quantidade",
-            color="GRUPO RFM",
-            text="Quantidade",
-            title="Distribuição de Clientes por Grupo RFM",
-            color_discrete_sequence=px.colors.qualitative.Vivid
-        )
+        # KPI total de clientes únicos encontrados na planilha principal
+        total_clientes = int(ultimo_por_cliente["ID_CLIENTE"].nunique())
+        colA, colB = st.columns(2)
+        colA.metric("👥 Total de clientes distintos (na planilha principal)", f"{total_clientes:,}".replace(",", "."))
+        colB.caption("Dica: Se você tem 23.000 clientes no cadastro, mas poucos aqui, é porque estamos olhando apenas os clientes que aparecem na planilha principal de **vendas** e com identificador válido (CPF/e-mail/nome).")
 
-        graf_clientes.update_traces(textposition="outside")
-        graf_clientes.update_layout(
-            plot_bgcolor="black",
-            paper_bgcolor="black",
-            font=dict(color="white", size=14),
-            xaxis_title="Grupo RFM",
-            yaxis_title="Quantidade de Clientes",
-            showlegend=False
-        )
+        # Gráfico (somente quantidade, cores por grupo)
+        if grp.empty:
+            st.info("Não há grupos para exibir após a normalização.")
+        else:
+            # Ordena do maior para o menor e usa cores por categoria
+            graf_clientes = px.bar(
+                grp,
+                x="GRUPO RFM",
+                y="Quantidade",
+                color="GRUPO RFM",
+                text="Quantidade",
+                title="Clientes por Grupo RFM (1 por cliente, grupo mais recente)",
+                color_discrete_sequence=px.colors.qualitative.Vivid
+            )
+            graf_clientes.update_traces(textposition="outside")
+            graf_clientes.update_layout(
+                plot_bgcolor="black",
+                paper_bgcolor="black",
+                font=dict(color="white", size=14),
+                xaxis_title="Grupo RFM",
+                yaxis_title="Quantidade de Clientes",
+                showlegend=False
+            )
+            st.plotly_chart(graf_clientes, use_container_width=True)
 
-        st.plotly_chart(graf_clientes, use_container_width=True)
+        # (Opcional) Mostrar discrepâncias
+        with st.expander("🔎 Diagnóstico rápido (opcional)"):
+            faltando_id = len(df_vendas) - len(base)
+            st.write(f"- Linhas sem identificador utilizável (CPF/e-mail/nome): **{faltando_id}**")
+            if "CPF" in df_vendas.columns:
+                sem_cpf = df_vendas["CPF"].isna().sum()
+                st.write(f"- Linhas sem CPF: **{sem_cpf}**")
+            if "EMAIL" in df_vendas.columns or "E-MAIL" in df_vendas.columns:
+                col_email = "EMAIL" if "EMAIL" in df_vendas.columns else "E-MAIL"
+                sem_email = df_vendas[col_email].isna().sum()
+                st.write(f"- Linhas sem e-mail: **{sem_email}**")
