@@ -142,9 +142,31 @@ def _as_series_safe(df: pd.DataFrame, col_label) -> pd.Series:
 def _dedupe_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Garante nomes de colunas **únicos** (necessário para PyArrow/Streamlit).
     Mantém a primeira ocorrência e acrescenta sufixos _2, _3... nas duplicadas.
+    Retorna sempre um DataFrame (se None -> DataFrame vazio).
     """
-    if df is None or df.empty:
+    if df is None:
+        return pd.DataFrame()
+    if df.empty:
         return df
+    new_cols = []
+    seen = {}
+    for c in df.columns:
+        base = str(c)
+        if base not in seen:
+            seen[base] = 1
+            new_cols.append(base)
+        else:
+            k = seen[base] + 1
+            cand = f"{base}_{k}"
+            while cand in seen:
+                k += 1
+                cand = f"{base}_{k}"
+            seen[base] = k
+            seen[cand] = 1
+            new_cols.append(cand)
+    df = df.copy()
+    df.columns = new_cols
+    return df
     new_cols = []
     seen = {}
     for c in df.columns:
@@ -233,8 +255,21 @@ def detectar_colunas_resumo(df: pd.DataFrame):
 # =========================
 
 def preparar_df_vendas(df: pd.DataFrame) -> pd.DataFrame:
+    # Garante DataFrame
+    if df is None:
+        return pd.DataFrame()
+    if not isinstance(df, pd.DataFrame):
+        try:
+            df = pd.DataFrame(df)
+        except Exception:
+            return pd.DataFrame()
     if df.empty:
         return df
+    if "DATA DE INÍCIO" in df.columns:
+        df["DATA DE INÍCIO"] = pd.to_datetime(df["DATA DE INÍCIO"], errors="coerce", dayfirst=True)
+    if "VALOR (R$)" in df.columns:
+        df["VALOR (R$)"] = _to_float_brl_relaxed(df["VALOR (R$)"])
+    return df
     if "DATA DE INÍCIO" in df.columns:
         df["DATA DE INÍCIO"] = pd.to_datetime(df["DATA DE INÍCIO"], errors="coerce", dayfirst=True)
     if "VALOR (R$)" in df.columns:
@@ -325,7 +360,11 @@ PT_WEEK_MAP   = {0:"Segunda",1:"Terça",2:"Quarta",3:"Quinta",4:"Sexta",5:"Sába
 # Carrega Planilhas
 # =========================
 with st.spinner("Carregando Planilha 1 (colaborador)…"):
-    df_vendas_raw = carregar_csv(SHEET_URL_1)
+    try:
+        df_vendas_raw = carregar_csv(SHEET_URL_1)
+    except Exception as e:
+        st.error(f"❌ Erro ao abrir Planilha 1: {e}")
+        df_vendas_raw = pd.DataFrame()
 
 # Garante colunas únicas já na origem
 df_vendas_raw = _dedupe_columns(df_vendas_raw)
