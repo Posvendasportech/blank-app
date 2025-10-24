@@ -6,7 +6,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from urllib.parse import quote
-import re
 
 # ------------------------------
 # ⚙️ Configuração da página
@@ -38,6 +37,7 @@ def carregar_csv(url: str) -> pd.DataFrame:
         na_values=["", "NA", "NaN", None],
     )
 
+    # Se o cabeçalho vier com muitos 'Unnamed', tenta promover uma linha adequada para header
     def _fix_header(_df: pd.DataFrame) -> pd.DataFrame:
         unnamed = sum(str(c).startswith("Unnamed") for c in _df.columns)
         if unnamed <= len(_df.columns) // 2:
@@ -63,6 +63,17 @@ def carregar_csv(url: str) -> pd.DataFrame:
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
+def _col_by_letter(df: pd.DataFrame, letter: str) -> str | None:
+    """Retorna o nome da coluna no DataFrame a partir da letra (A=0, B=1...)."""
+    if df is None or df.empty:
+        return None
+    letter = (letter or "").strip().upper()
+    if not letter:
+        return None
+    idx = ord(letter) - ord("A")
+    if 0 <= idx < len(df.columns):
+        return df.columns[idx]
+    return None
 
 def _to_float_brl(series: pd.Series) -> pd.Series:
     """Converte 'R$ 1.234,56' / '1.234,56' / '1234.56' em float."""
@@ -70,14 +81,13 @@ def _to_float_brl(series: pd.Series) -> pd.Series:
     s = s.str.replace("\u00A0", " ", regex=False)          # NBSP
     s = s.str.replace(r"[Rr]\$\s*", "", regex=True)        # remove R$
     s = s.str.replace(" ", "", regex=False)                # remove espaços
-    # Heurística: vírgula como decimal?
+    # vírgula como decimal?
     comma_as_decimal = ((s.str.count(",") >= 1) & (s.str.count("\.") >= 0)).mean() >= 0.5
     if comma_as_decimal:
         s = s.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
     else:
         s = s.str.replace(",", "", regex=False)
     return pd.to_numeric(s, errors="coerce")
-
 
 def preparar_df_vendas(df: pd.DataFrame) -> pd.DataFrame:
     """Prepara a planilha do colaborador: datas e valores."""
@@ -101,13 +111,15 @@ def preparar_df_vendas(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-
-def preparar_df_historico_clientes(df: pd.DataFrame) -> pd.DataFrame:
+def preparar_df_historico_resumo_por_cliente(
+    df: pd.DataFrame,
+    valor_letter: str = "D",
+    compras_letter: str = "F",
+) -> pd.DataFrame:
     """
-    Prepara a Planilha 2 como RESUMO POR CLIENTE (uma linha = um cliente).
-    Expectativas:
-      - Coluna 'Valor'  = gasto total do cliente (BRL)
-      - Coluna 'Compras' = número de compras do cliente (inteiro)
+    Interpreta Planilha 2 como RESUMO por cliente:
+      - Coluna D = Valor gasto total pelo cliente (BRL)
+      - Coluna F = Nº de compras do cliente (inteiro)
     """
     if df.empty:
         return df.copy()
@@ -115,41 +127,34 @@ def preparar_df_historico_clientes(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [str(c).strip() for c in df.columns]
 
-    # localizar colunas por nome (case-insensitive mas prioriza exatamente 'Valor'/'Compras')
-    def find_col(df, preferred):
-        cols = {c.lower(): c for c in df.columns}
-        for p in preferred:
-            if p.lower() in cols:
-                return cols[p.lower()]
-        return None
-
-    col_val = find_col(df, ["Valor"])
-    col_cmp = find_col(df, ["Compras"])
-
-    if col_val is None:
-        st.error("❌ A planilha 2 não tem a coluna **'Valor'**. Verifique o cabeçalho.")
-        df["VALOR_PAD"] = 0.0
-    else:
-        df["VALOR_PAD"] = _to_float_brl(df[col_val]).fillna(0.0)
-
-    if col_cmp is None:
-        st.warning("⚠️ A planilha 2 não tem a coluna **'Compras'**. Usando 0.")
-        df["N_COMPRAS"] = 0
-    else:
-        df["N_COMPRAS"] = pd.to_numeric(df[col_cmp], errors="coerce").fillna(0).astype(int)
-
-    # Identificação de cliente
-    nome_col = find_col(df, ["NOME COMPLETO", "CLIENTE", "NOME", "Nome"])
-    email_col = find_col(df, ["E-MAIL", "EMAIL", "Email", "e-mail"])
+    # Nome/ID do cliente (tenta colunas comuns; senão usa a primeira)
+    nome_col = next((c for c in ["NOME COMPLETO", "CLIENTE", "NOME", "Nome"] if c in df.columns), df.columns[0])
+    email_col = next((c for c in ["E-MAIL", "EMAIL", "Email", "e-mail"] if c in df.columns), None)
 
     df["CLIENTE_NOME"] = df[nome_col].astype(str).str.strip() if nome_col else ""
     df["CLIENTE_EMAIL"] = df[email_col].astype(str).str.strip().str.lower() if email_col else ""
     df["CLIENTE_ID"] = df["CLIENTE_EMAIL"].where(df["CLIENTE_EMAIL"] != "", df["CLIENTE_NOME"])
 
-    # nesse formato, não há DATA_REF transacional
-    df["DATA_REF"] = pd.NaT
-    return df
+    # Mapear por letra
+    col_val = _col_by_letter(df, valor_letter)   # D
+    col_cmp = _col_by_letter(df, compras_letter) # F
 
+    if col_val is None:
+        st.error(f"❌ Não encontrei a coluna de VALOR pela letra '{valor_letter}'. Verifique a aba/arquivo.")
+        df["VALOR_PAD"] = 0.0
+    else:
+        df["VALOR_PAD"] = _to_float_brl(df[col_val]).fillna(0.0)
+
+    if col_cmp is None:
+        st.warning(f"⚠️ Não encontrei a coluna de COMPRAS pela letra '{compras_letter}'. Usando 0.")
+        df["N_COMPRAS"] = 0
+    else:
+        df["N_COMPRAS"] = pd.to_numeric(df[col_cmp], errors="coerce").fillna(0).astype(int)
+
+    # Em resumo por cliente, a data transacional não se aplica
+    df["DATA_REF"] = pd.NaT
+
+    return df
 
 # ==============================
 # Constantes auxiliares
@@ -175,8 +180,13 @@ sheet2_sheetname = st.sidebar.text_input(
     value=DEFAULT_SHEET2_SHEETNAME,
     help="Ex.: Total (tem que ser exatamente como aparece na guia do Google Sheets)"
 )
-# Monta a URL por NOME da aba (gviz)
+# Monta a URL por NOME da aba (gviz → CSV)
 SHEET_URL_2 = f"https://docs.google.com/spreadsheets/d/{SHEET2_ID}/gviz/tq?tqx=out:csv&sheet={quote(sheet2_sheetname)}"
+
+# Letras das colunas (Planilha 2)
+st.sidebar.subheader("Mapeamento por coluna (Planilha 2)")
+valor_letter = st.sidebar.text_input("Letra da coluna de **Valor**", value="D")
+compras_letter = st.sidebar.text_input("Letra da coluna de **Compras**", value="F")
 
 # Botão de refresh
 if st.sidebar.button("🔄 Atualizar dados agora"):
@@ -218,8 +228,12 @@ with st.spinner("Carregando Planilha 2 (histórico)…"):
             )
             df_extra_raw = pd.DataFrame()
 
-# Preparo ESPECÍFICO: Valor/Compras (resumo por cliente)
-df_historico = preparar_df_historico_clientes(df_extra_raw.copy())
+# Preparo ESPECÍFICO: Resumo por cliente (Valor=D, Compras=F por padrão)
+df_historico = preparar_df_historico_resumo_por_cliente(
+    df_extra_raw.copy(),
+    valor_letter=valor_letter,
+    compras_letter=compras_letter,
+)
 
 # Status rápido no topo
 ok1 = "✅" if isinstance(df_vendas, pd.DataFrame) and not df_vendas.empty else "⚠️"
@@ -344,9 +358,9 @@ with aba2:
         st.info("Ainda não há dados na planilha de histórico para exibir.")
     else:
         # KPIs (usando Valor/Compras por cliente)
-        receita_total = float(df_historico["VALOR_PAD"].sum()) if "VALOR_PAD" in df_historico.columns else 0.0
-        total_compras = int(df_historico["N_COMPRAS"].sum()) if "N_COMPRAS" in df_historico.columns else int(df_historico.shape[0])
-        clientes_unicos = int(df_historico["CLIENTE_ID"].nunique()) if "CLIENTE_ID" in df_historico.columns else int(df_historico.shape[0])
+        receita_total = float(df_historico["VALOR_PAD"].sum())
+        total_compras = int(df_historico["N_COMPRAS"].sum())
+        clientes_unicos = int(df_historico["CLIENTE_ID"].nunique())
         aov = receita_total / total_compras if total_compras > 0 else 0.0
 
         k1, k2, k3, k4 = st.columns(4)
