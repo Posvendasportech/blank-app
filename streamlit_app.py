@@ -139,6 +139,34 @@ def _as_series_safe(df: pd.DataFrame, col_label) -> pd.Series:
     return obj
 
 
+def _dedupe_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Garante nomes de colunas **únicos** (necessário para PyArrow/Streamlit).
+    Mantém a primeira ocorrência e acrescenta sufixos _2, _3... nas duplicadas.
+    """
+    if df is None or df.empty:
+        return df
+    new_cols = []
+    seen = {}
+    for c in df.columns:
+        base = str(c)
+        if base not in seen:
+            seen[base] = 1
+            new_cols.append(base)
+        else:
+            k = seen[base] + 1
+            cand = f"{base}_{k}"
+            while cand in seen:
+                k += 1
+                cand = f"{base}_{k}"
+            seen[base] = k
+            seen[cand] = 1
+            new_cols.append(cand)
+    df = df.copy()
+    df.columns = new_cols
+    return df.iloc[:, 0]
+    return obj
+
+
 # ---------- AUTO-DETECÇÃO DE COLUNAS (Planilha 2 - Resumo) ----------
 VALOR_PATTERNS   = re.compile(r"(valor|receita|total|gasto|faturamento|ltv)", re.I)
 COMPRAS_PATTERNS = re.compile(r"(compra|pedido|ordens?|qtd|quant)", re.I)
@@ -299,6 +327,9 @@ PT_WEEK_MAP   = {0:"Segunda",1:"Terça",2:"Quarta",3:"Quinta",4:"Sexta",5:"Sába
 with st.spinner("Carregando Planilha 1 (colaborador)…"):
     df_vendas_raw = carregar_csv(SHEET_URL_1)
 
+# Garante colunas únicas já na origem
+df_vendas_raw = _dedupe_columns(df_vendas_raw)
+
 df_vendas = preparar_df_vendas(df_vendas_raw.copy())
 
 sheet2_sheetname = DEFAULT_SHEET2_SHEETNAME
@@ -309,6 +340,9 @@ with st.spinner("Carregando Planilha 2…"):
     except Exception as e:
         st.error(f"❌ Erro ao abrir Planilha 2: {e}")
         df_extra_raw = pd.DataFrame()
+
+# Garante colunas únicas para a planilha 2
+df_extra_raw = _dedupe_columns(df_extra_raw)
 
 # Detecta modo transacional
 date_candidates = [c for c in ["DATA","DATA DA COMPRA","DATA DE INÍCIO","DATA VENDA","DATA/HORA","DATA HORA"] if c in df_extra_raw.columns]
@@ -446,4 +480,12 @@ with aba2:
 
         st.markdown("---")
         st.caption("Prévia (50 primeiras linhas)")
-        st.dataframe(df_hist.head(50), use_container_width=True)
+# Evita erro do PyArrow com nomes duplicados e tipos esquisitos
+_preview = _dedupe_columns(df_hist.copy())
+# Converte objetos não escalares para string apenas para exibição
+for col in _preview.select_dtypes(include=['object']).columns:
+    try:
+        _preview[col] = _preview[col].apply(lambda v: v if isinstance(v, (str, int, float, type(None), pd.Timestamp)) else str(v))
+    except Exception:
+        _preview[col] = _preview[col].astype(str)
+st.dataframe(_preview.head(50), use_container_width=True)
