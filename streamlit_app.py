@@ -64,6 +64,21 @@ def carregar_csv(url: str) -> pd.DataFrame:
     return df
 
 
+def _to_float_brl(series: pd.Series) -> pd.Series:
+    """Converte 'R$ 1.234,56' / '1.234,56' / '1234.56' em float."""
+    s = series.astype(str)
+    s = s.str.replace("\u00A0", " ", regex=False)          # NBSP
+    s = s.str.replace(r"[Rr]\$\s*", "", regex=True)        # remove R$
+    s = s.str.replace(" ", "", regex=False)                # remove espaços
+    # Heurística: vírgula como decimal?
+    comma_as_decimal = ((s.str.count(",") >= 1) & (s.str.count("\.") >= 0)).mean() >= 0.5
+    if comma_as_decimal:
+        s = s.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+    else:
+        s = s.str.replace(",", "", regex=False)
+    return pd.to_numeric(s, errors="coerce")
+
+
 def preparar_df_vendas(df: pd.DataFrame) -> pd.DataFrame:
     """Prepara a planilha do colaborador: datas e valores."""
     if df.empty:
@@ -87,78 +102,54 @@ def preparar_df_vendas(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def preparar_df_historico(
-    df: pd.DataFrame,
-    valor_col_name: str | None = None,
-    date_col_name: str | None = None,
-) -> pd.DataFrame:
-    """Prepara o histórico: converte valor em número, data em datetime e cria chaves de cliente."""
+def preparar_df_historico_clientes(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Prepara a Planilha 2 como RESUMO POR CLIENTE (uma linha = um cliente).
+    Expectativas:
+      - Coluna 'Valor'  = gasto total do cliente (BRL)
+      - Coluna 'Compras' = número de compras do cliente (inteiro)
+    """
     if df.empty:
-        return df
-    df.columns = [c.strip() for c in df.columns]
+        return df.copy()
 
-    # --- DATA_REF (por nome ou por conteúdo)
-    if date_col_name and date_col_name in df.columns:
-        date_col = date_col_name
+    df = df.copy()
+    df.columns = [str(c).strip() for c in df.columns]
+
+    # localizar colunas por nome (case-insensitive mas prioriza exatamente 'Valor'/'Compras')
+    def find_col(df, preferred):
+        cols = {c.lower(): c for c in df.columns}
+        for p in preferred:
+            if p.lower() in cols:
+                return cols[p.lower()]
+        return None
+
+    col_val = find_col(df, ["Valor"])
+    col_cmp = find_col(df, ["Compras"])
+
+    if col_val is None:
+        st.error("❌ A planilha 2 não tem a coluna **'Valor'**. Verifique o cabeçalho.")
+        df["VALOR_PAD"] = 0.0
     else:
-        date_cols_hint = ["DATA", "DATA DA COMPRA", "DATA DE INÍCIO", "DATA VENDA", "DATA/HORA", "DATA HORA"]
-        date_col = next((c for c in date_cols_hint if c in df.columns), None)
-        if date_col is None:
-            best, best_rate = None, 0
-            sample = df.head(200)
-            for c in df.columns:
-                rate = pd.to_datetime(sample[c], errors="coerce", dayfirst=True).notna().mean()
-                if rate > best_rate:
-                    best, best_rate = c, rate
-            date_col = best if best_rate >= 0.4 else None
-    df["DATA_REF"] = pd.to_datetime(df[date_col], errors="coerce", dayfirst=True) if date_col else pd.NaT
+        df["VALOR_PAD"] = _to_float_brl(df[col_val]).fillna(0.0)
 
-    # --- VALOR_PAD
-    def to_float(series: pd.Series) -> pd.Series:
-        s = series.astype(str)
-        s = s.str.replace("\u00A0", " ", regex=False)          # NBSP
-        s = s.str.replace(r"[Rr]\$\s*", "", regex=True)        # remove R$
-        s = s.str.replace(" ", "", regex=False)                # remove espaços
-        # Heurística: vírgula como decimal?
-        comma_as_decimal = ((s.str.count(",") >= 1) & (s.str.count("\.") >= 0)).mean() >= 0.5
-        if comma_as_decimal:
-            s = s.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
-        else:
-            s = s.str.replace(",", "", regex=False)
-        return pd.to_numeric(s, errors="coerce")
-
-    if valor_col_name and valor_col_name in df.columns:
-        chosen_val_col = valor_col_name
+    if col_cmp is None:
+        st.warning("⚠️ A planilha 2 não tem a coluna **'Compras'**. Usando 0.")
+        df["N_COMPRAS"] = 0
     else:
-        blacklist = {"CPF","ID","ID_CLIENTE","TELEFONE","CELULAR","CEP","QUANTIDADE","QTD"}
-        money_re = re.compile(r"^\s*(R\$\s*)?[\d\.\,]+(\s*)$")
-        best, best_hits = None, -1
-        sample = df.head(200)
-        for c in df.columns:
-            if any(b in str(c).upper() for b in blacklist):
-                continue
-            hits = sample[c].astype(str).str.match(money_re).sum()
-            if hits > best_hits:
-                best, best_hits = c, hits
-        chosen_val_col = best
+        df["N_COMPRAS"] = pd.to_numeric(df[col_cmp], errors="coerce").fillna(0).astype(int)
 
-    df["VALOR_PAD"] = to_float(df[chosen_val_col]) if chosen_val_col in df.columns else 0.0
-    df["VALOR_PAD"] = df["VALOR_PAD"].fillna(0.0)
+    # Identificação de cliente
+    nome_col = find_col(df, ["NOME COMPLETO", "CLIENTE", "NOME", "Nome"])
+    email_col = find_col(df, ["E-MAIL", "EMAIL", "Email", "e-mail"])
 
-    # --- CHAVES DE CLIENTE
-    nome_col = next((c for c in ["NOME COMPLETO", "CLIENTE", "NOME", "Nome"] if c in df.columns), None)
     df["CLIENTE_NOME"] = df[nome_col].astype(str).str.strip() if nome_col else ""
-
-    email_col = next((c for c in ["E-MAIL", "EMAIL", "Email", "e-mail"] if c in df.columns), None)
     df["CLIENTE_EMAIL"] = df[email_col].astype(str).str.strip().str.lower() if email_col else ""
+    df["CLIENTE_ID"] = df["CLIENTE_EMAIL"].where(df["CLIENTE_EMAIL"] != "", df["CLIENTE_NOME"])
 
-    id_col = next((c for c in ["CPF", "ID_CLIENTE", "ID"] if c in df.columns), None)
-    if id_col:
-        df["CLIENTE_ID"] = df[id_col].astype(str).str.strip()
-    else:
-        df["CLIENTE_ID"] = df["CLIENTE_EMAIL"].where(df["CLIENTE_EMAIL"] != "", df["CLIENTE_NOME"])
-
+    # nesse formato, não há DATA_REF transacional
+    df["DATA_REF"] = pd.NaT
     return df
+
 
 # ==============================
 # Constantes auxiliares
@@ -227,21 +218,8 @@ with st.spinner("Carregando Planilha 2 (histórico)…"):
             )
             df_extra_raw = pd.DataFrame()
 
-# ====== Mapeamento manual (seguro) das colunas de Data e Valor ======
-with st.sidebar.expander("🧩 Mapear colunas da Planilha 2", expanded=False):
-    cols = df_extra_raw.columns.tolist() if not df_extra_raw.empty else []
-    options = cols if cols else [""]
-
-    sugestao_val = next((c for c in ["VALOR (R$)", "VALOR", "TOTAL (R$)", "TOTAL", "PREÇO", "PRECO"] if c in cols), None)
-    sugestao_data = next((c for c in ["DATA", "DATA DA COMPRA", "DATA DE INÍCIO", "DATA VENDA", "DATA/HORA", "DATA HORA"] if c in cols), None)
-
-    valor_col_name = st.selectbox("Coluna de VALOR", options=options, index=(options.index(sugestao_val) if (sugestao_val in options) else 0))
-    date_col_name  = st.selectbox("Coluna de DATA",  options=options, index=(options.index(sugestao_data) if (sugestao_data in options) else 0))
-
-    if valor_col_name == "": valor_col_name = None
-    if date_col_name == "":  date_col_name  = None
-
-df_historico = preparar_df_historico(df_extra_raw.copy(), valor_col_name=valor_col_name, date_col_name=date_col_name)
+# Preparo ESPECÍFICO: Valor/Compras (resumo por cliente)
+df_historico = preparar_df_historico_clientes(df_extra_raw.copy())
 
 # Status rápido no topo
 ok1 = "✅" if isinstance(df_vendas, pd.DataFrame) and not df_vendas.empty else "⚠️"
@@ -292,14 +270,6 @@ with aba1:
             col1.metric("💰 Vendas do Colaborador", f"R$ {total_colab:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
             col2.metric("👥 Clientes Únicos", clientes_colab)
             col3.metric("🎯 Ticket Médio", f"R$ {ticket_medio_colab:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-
-            # KPI geral para comparação (se houver histórico)
-            if not df_historico.empty and "VALOR_PAD" in df_historico.columns:
-                total_geral = float(df_historico["VALOR_PAD"].sum())
-                clientes_geral = int(df_historico["CLIENTE_ID"].nunique())
-                colA, colB = st.columns(2)
-                colA.metric("🌎 Vendas Totais (Geral)", f"R$ {total_geral:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-                colB.metric("🧑‍🤝‍🧑 Clientes Totais (Geral)", clientes_geral)
 
             # Base temporal sem domingo
             base = df_filtrado[df_filtrado["DATA DE INÍCIO"].notna()].copy()
@@ -364,167 +334,44 @@ with aba1:
                 else:
                     st.info("Coluna 'PRODUTO' não encontrada na planilha.")
 
-            # Vendas Semanais
-            st.subheader("📈 Vendas Semanais")
-            if not base.empty:
-                base_sem = base.assign(SEMANA=base["DATA DE INÍCIO"].dt.to_period("W").apply(lambda r: r.start_time))
-                vendas_semanal = base_sem.groupby("SEMANA", as_index=False)["VALOR (R$)"].sum().sort_values("SEMANA")
-                graf_semanal = px.line(vendas_semanal, x="SEMANA", y="VALOR (R$)", title="Vendas Semanais", markers=True)
-                graf_semanal.update_traces(line=dict(width=2, color="blue"))
-                graf_semanal.update_layout(plot_bgcolor="black", paper_bgcolor="black", font=dict(color="white"))
-                st.plotly_chart(graf_semanal, use_container_width=True)
-            else:
-                st.info("Sem dados semanais para exibir.")
-
-            # Vendas por Dia da Semana (sem domingo)
-            st.subheader("📊 Vendas por Dia da Semana (exclui domingo)")
-            if not base.empty:
-                base_dia = base.assign(DIA=base["DATA DE INÍCIO"].dt.dayofweek.map(PT_WEEK_MAP))
-                vendas_dia_semana = base_dia.groupby("DIA", as_index=False)["VALOR (R$)"].sum()
-                vendas_dia_semana = vendas_dia_semana[vendas_dia_semana["DIA"].isin(PT_WEEK_ORDER)]
-                vendas_dia_semana["DIA"] = pd.Categorical(vendas_dia_semana["DIA"], categories=PT_WEEK_ORDER, ordered=True)
-                vendas_dia_semana = vendas_dia_semana.sort_values("DIA")
-                graf_dia_semana = px.bar(vendas_dia_semana, x="DIA", y="VALOR (R$)", title="Vendas por Dia da Semana")
-                graf_dia_semana.update_traces(marker_color="cyan")
-                graf_dia_semana.update_layout(plot_bgcolor="black", paper_bgcolor="black", font=dict(color="white"))
-                st.plotly_chart(graf_dia_semana, use_container_width=True)
-            else:
-                st.info("Sem dados por dia da semana para exibir.")
-
-            # Curva Acumulada
-            st.subheader("📈 Curva de Crescimento Acumulada de Vendas")
-            if not vendas_por_dia.empty:
-                vendas_acum = vendas_por_dia.copy()
-                vendas_acum["Acumulado"] = vendas_acum["VALOR (R$)"].cumsum()
-                graf_acumulado = px.line(vendas_acum, x="DATA DE INÍCIO", y="Acumulado", title="Curva Acumulada", markers=True)
-                graf_acumulado.update_traces(line=dict(width=2, color="cyan"))
-                graf_acumulado.update_layout(plot_bgcolor="black", paper_bgcolor="black", font=dict(color="white"))
-                st.plotly_chart(graf_acumulado, use_container_width=True)
-            else:
-                st.info("Sem dados suficientes para curva acumulada.")
-
-            # Comparação mês atual vs anterior (mesmo dia)
-            st.subheader("📊 Este mês vs. mês anterior (até hoje)")
-            hoje = datetime.today()
-            primeiro_dia_mes_atual = hoje.replace(day=1)
-            dia_atual = hoje.day
-            primeiro_dia_mes_anterior = (primeiro_dia_mes_atual - timedelta(days=1)).replace(day=1)
-            try:
-                ultimo_dia_mes_anterior = primeiro_dia_mes_anterior.replace(day=dia_atual)
-            except ValueError:
-                ultimo_dia_mes_anterior = (primeiro_dia_mes_atual - timedelta(days=1))
-
-            vendas_mes_atual = base[
-                (base["DATA DE INÍCIO"] >= primeiro_dia_mes_atual) & (base["DATA DE INÍCIO"] <= hoje)
-            ]["VALOR (R$)"].sum() if not base.empty else 0.0
-
-            vendas_mes_anterior = base[
-                (base["DATA DE INÍCIO"] >= primeiro_dia_mes_anterior) & (base["DATA DE INÍCIO"] <= ultimo_dia_mes_anterior)
-            ]["VALOR (R$)"].sum() if not base.empty else 0.0
-
-            delta = ((vendas_mes_atual - vendas_mes_anterior) / vendas_mes_anterior) * 100 if vendas_mes_anterior else 0.0
-            st.metric(
-                label=f"Vendas até {hoje.strftime('%d/%m')} (este mês vs anterior)",
-                value=f"R$ {vendas_mes_atual:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
-                delta=f"{delta:.2f}%"
-            )
-
 # ======================================================
-# 🔵 ABA 2 — HISTÓRICO GERAL (Clientes)
+# 🔵 ABA 2 — HISTÓRICO GERAL (Clientes) — RESUMO POR CLIENTE
 # ======================================================
 with aba2:
-    st.subheader("📑 Histórico Geral de Clientes")
+    st.subheader("📑 Histórico Geral de Clientes (Resumo por Cliente)")
 
     if df_historico.empty:
         st.info("Ainda não há dados na planilha de histórico para exibir.")
     else:
-        # Filtros
-        st.sidebar.header("🔎 Filtros (Histórico Geral)")
-
-        min_data = pd.to_datetime(df_historico["DATA_REF"]).min()
-        max_data = pd.to_datetime(df_historico["DATA_REF"]).max()
-        if pd.isna(min_data) or pd.isna(max_data):
-            min_data = datetime.today() - timedelta(days=180)
-            max_data = datetime.today()
-
-        periodo = st.sidebar.date_input("Período (Histórico)", value=(min_data.date(), max_data.date()))
-
-        prod_col = next((c for c in ["PRODUTO", "ITEM", "SKU", "DESCRIÇÃO"] if c in df_historico.columns), None)
-        prod_opts = sorted(df_historico[prod_col].dropna().unique().tolist()) if prod_col else []
-        produtos_hist = st.sidebar.multiselect("Produto (Histórico)", prod_opts) if prod_col else []
-
-        df_hist_filt = df_historico.copy()
-        if isinstance(periodo, tuple) and len(periodo) == 2:
-            di, df_ = periodo
-            di = datetime.combine(di, datetime.min.time())
-            df_ = datetime.combine(df_, datetime.max.time())
-            df_hist_filt = df_hist_filt[(df_hist_filt["DATA_REF"] >= di) & (df_hist_filt["DATA_REF"] <= df_)]
-        if prod_col and produtos_hist:
-            df_hist_filt = df_hist_filt[df_hist_filt[prod_col].isin(produtos_hist)]
-
-        # KPIs gerais
-        total_geral = float(df_hist_filt["VALOR_PAD"].sum())
-        clientes_geral = int(df_hist_filt["CLIENTE_ID"].nunique())
-        pedidos_geral = int(df_hist_filt.shape[0])
-        aov = total_geral / pedidos_geral if pedidos_geral > 0 else 0.0
+        # KPIs (usando Valor/Compras por cliente)
+        receita_total = float(df_historico["VALOR_PAD"].sum()) if "VALOR_PAD" in df_historico.columns else 0.0
+        total_compras = int(df_historico["N_COMPRAS"].sum()) if "N_COMPRAS" in df_historico.columns else int(df_historico.shape[0])
+        clientes_unicos = int(df_historico["CLIENTE_ID"].nunique()) if "CLIENTE_ID" in df_historico.columns else int(df_historico.shape[0])
+        aov = receita_total / total_compras if total_compras > 0 else 0.0
 
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("💰 Receita (período)", f"R$ {total_geral:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-        k2.metric("🧑‍🤝‍🧑 Clientes únicos", clientes_geral)
-        k3.metric("🧾 Pedidos", pedidos_geral)
-        k4.metric("🧮 Ticket médio (AOV)", f"R$ {aov:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        k1.metric("💰 Receita total (clientes)", f"R$ {receita_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        k2.metric("🧑‍🤝‍🧑 Clientes", clientes_unicos)
+        k3.metric("🧾 Nº de compras", total_compras)
+        k4.metric("🧮 Ticket médio", f"R$ {aov:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
 
-        # Recência & Frequência
-        st.subheader("📈 Recência e Frequência")
-        rf = (
-            df_hist_filt.sort_values("DATA_REF")
-            .groupby("CLIENTE_ID")
-            .agg(ultima_compra=("DATA_REF", "max"),
-                 n_pedidos=("CLIENTE_ID", "count"),
-                 ltv=("VALOR_PAD", "sum"))
-            .reset_index()
+        # Top clientes por Valor gasto
+        st.subheader("🏆 Top Clientes por Valor Gasto")
+        top_clientes = (
+            df_historico[["CLIENTE_ID", "CLIENTE_NOME", "VALOR_PAD", "N_COMPRAS"]]
+            .sort_values("VALOR_PAD", ascending=False)
+            .head(20)
         )
-        if not rf.empty:
-            rf["dias_desde_ultima"] = (datetime.today() - rf["ultima_compra"]).dt.days
-            colA, colB = st.columns(2)
-            with colA:
-                top_ltv = rf.sort_values("ltv", ascending=False).head(15)
-                st.markdown("**Top 15 LTV (período filtrado)**")
-                st.dataframe(top_ltv[["CLIENTE_ID", "ltv", "n_pedidos", "ultima_compra"]], use_container_width=True)
-            with colB:
-                hist_freq = rf["n_pedidos"].value_counts().reset_index()
-                hist_freq.columns = ["Número de pedidos", "Clientes"]
-                graf_freq = px.bar(hist_freq, x="Número de pedidos", y="Clientes", title="Distribuição de Frequência de Compra")
-                graf_freq.update_layout(plot_bgcolor="black", paper_bgcolor="black", font=dict(color="white"))
-                st.plotly_chart(graf_freq, use_container_width=True)
-
-        # Primeira vs recorrente
-        st.subheader("🔁 Primeira compra vs. recorrente")
-        if not df_hist_filt.empty:
-            primeira = df_hist_filt.sort_values(["CLIENTE_ID", "DATA_REF"]).drop_duplicates("CLIENTE_ID", keep="first")
-            ids_primeira_periodo = set(primeira["CLIENTE_ID"])
-            ids_todos = set(df_hist_filt["CLIENTE_ID"])
-            recorrentes = len(ids_todos - ids_primeira_periodo)
-            primeiro = len(ids_primeira_periodo)
-
-            p1, p2 = st.columns(2)
-            p1.metric("🆕 Clientes de primeira compra (no período)", primeiro)
-            p2.metric("🔁 Clientes recorrentes (no período)", recorrentes)
-
-        # Top produtos
-        st.subheader("🏆 Top Produtos (Histórico)")
-        if prod_col and not df_hist_filt.empty:
-            top_prod = (
-                df_hist_filt.groupby(prod_col, as_index=False)["VALOR_PAD"]
-                .sum()
-                .sort_values("VALOR_PAD", ascending=False)
-                .head(15)
-            )
-            graf_top = px.bar(top_prod, x=prod_col, y="VALOR_PAD", title="Top Produtos por Receita")
-            graf_top.update_traces(marker_color="cyan", texttemplate="R$ %{y:,.2f}", textposition="outside")
-            graf_top.update_layout(plot_bgcolor="black", paper_bgcolor="black", font=dict(color="white"))
-            st.plotly_chart(graf_top, use_container_width=True)
+        graf_top = px.bar(
+            top_clientes,
+            x="CLIENTE_NOME",
+            y="VALOR_PAD",
+            title="Top 20 Clientes por Valor Gasto",
+        )
+        graf_top.update_traces(marker_color="cyan", texttemplate="R$ %{y:,.2f}", textposition="outside")
+        graf_top.update_layout(plot_bgcolor="black", paper_bgcolor="black", font=dict(color="white"))
+        st.plotly_chart(graf_top, use_container_width=True)
 
         st.markdown("---")
         st.caption("Prévia do histórico bruto (50 primeiras linhas)")
-        st.dataframe(df_hist_filt.head(50), use_container_width=True)
+        st.dataframe(df_historico.head(50), use_container_width=True)
