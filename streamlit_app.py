@@ -193,7 +193,11 @@ def _score_money_col(s: pd.Series) -> float:
 
 
 def detectar_colunas_resumo(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str]]:
-    """Tenta achar automaticamente 'valor' e 'compras' pela semântica do cabeçalho e pelos dados."""
+    """Tenta achar automaticamente 'valor' e 'compras' pela semântica do cabeçalho e pelos dados.
+
+    Observação: lida com *colunas duplicadas*. Se houver duplicatas, `df[c]` pode
+    retornar um DataFrame; nesse caso usamos a primeira ocorrência para scoring.
+    """
     valor_cands = []
     compras_cands = []
     for c in df.columns:
@@ -207,12 +211,21 @@ def detectar_colunas_resumo(df: pd.DataFrame) -> Tuple[Optional[str], Optional[s
     if not valor_cands:
         valor_cands = list(df.columns)
 
+    # Função segura para obter uma Series mesmo com colunas duplicadas
+    def _as_series_safe(frame: pd.DataFrame, col_label) -> pd.Series:
+        obj = frame[col_label]
+        if isinstance(obj, pd.DataFrame):
+            # pega a primeira coluna física
+            return obj.iloc[:, 0]
+        return obj
+
     # Escolhe melhor 'valor' pelo score
-    best_val = None
-    best_score = -1.0
+    best_val: Optional[str] = None
+    best_score: float = -1.0
     for c in valor_cands:
         try:
-            sc = _score_money_col(df[c])
+            s = _as_series_safe(df, c)
+            sc = _score_money_col(s)
             if sc > best_score:
                 best_score = sc
                 best_val = c
@@ -222,11 +235,17 @@ def detectar_colunas_resumo(df: pd.DataFrame) -> Tuple[Optional[str], Optional[s
     # compras: se nenhum por nome, tenta col com inteiros pequenos
     if not compras_cands:
         for c in df.columns:
-            s = pd.to_numeric(df[c], errors="coerce")
-            if s.notna().sum() == 0:
+            try:
+                s_raw = _as_series_safe(df, c)
+                s = pd.to_numeric(s_raw, errors="coerce")
+                if s.notna().sum() == 0:
+                    continue
+                # média de parte inteira ~1 e mediana baixa -> contagem discreta
+                if (s.dropna() % 1 == 0).mean() > 0.95 and s.dropna().median() <= 5:
+                    compras_cands.append(c)
+            except Exception:
                 continue
-            if (s.dropna() % 1 == 0).mean() > 0.95 and s.dropna().median() <= 5:
-                compras_cands.append(c)
+
     best_cmp = compras_cands[0] if compras_cands else None
 
     return best_val, best_cmp
