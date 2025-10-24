@@ -1,593 +1,377 @@
-# -*- coding: utf-8 -*-
-"""
-Dashboard de Vendas — Versão Refatorada
----------------------------------------
-Principais melhorias:
-- Robustez na leitura das planilhas (CSV Google) com auto-deteção de cabeçalho.
-- Conversores BRL mais previsíveis (estrito e flexível) consolidados e documentados.
-- Detecção de colunas (valor/compras) mais segura, com fallback e anti-outlier defensivo.
-- Modo transacional vs. resumo: lógica clara e tolerante a dados ausentes.
-- Métricas e gráficos com checagens de vazio/NaT para evitar erros de execução.
-- Feedback visual e mensagens de auditoria úteis no app.
-
-Para usar: `streamlit run streamlit_app_refatorado.py`
-"""
-
-from __future__ import annotations
-
-import time
-import re
-from datetime import datetime, timedelta
-from typing import Optional, Tuple
-
-import pandas as pd
-import plotly.express as px
+# streamlit_app.py
 import streamlit as st
+import pandas as pd
+import time
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
 from urllib.parse import quote
+import re
 
-# =========================
-# Config da página
-# =========================
+# ------------------------------
+# ⚙️ Configuração da página
+# ------------------------------
 st.set_page_config(page_title="Dashboard de Vendas", page_icon="📊", layout="wide")
 
-# =========================
-# IDs / URLs (edite conforme sua necessidade)
-# =========================
-SHEET_URL_1 = (
-    "https://docs.google.com/spreadsheets/d/1d07rdyAfCzyV2go0V4CJkXd53wUmoA058WeqaHfGPBk/export?format=csv"
-)
+# ------------------------------
+# 🔗 IDs / padrões das planilhas
+# ------------------------------
+# Planilha 1 (vendas de UM colaborador) — já no formato export CSV
+SHEET_URL_1 = "https://docs.google.com/spreadsheets/d/1d07rdyAfCzyV2go0V4CJkXd53wUmoA058WeqaHfGPBk/export?format=csv"
+
+# Planilha 2 (histórico geral de TODOS os clientes)
 SHEET2_ID = "1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc"
-DEFAULT_SHEET2_SHEETNAME = "Total"
+DEFAULT_SHEET2_SHEETNAME = "Total"  # altere se sua aba tiver outro nome
 
-# =========================
-# Utils
-# =========================
-@st.cache_data(ttl=180)
+# ==============================
+# 🧩 Funções utilitárias
+# ==============================
+@st.cache_data(ttl=120)
 def carregar_csv(url: str) -> pd.DataFrame:
-    """Carrega CSV remoto com tolerância a cabeçalho irregular.
-    - Tenta ler normal; se a maioria das colunas vier como "Unnamed", refaz com header=None
-    - Normaliza nomes de colunas removendo espaços.
-    """
-    try:
-        df = pd.read_csv(
-            url,
-            sep=",",
-            engine="python",
-            on_bad_lines="skip",
-            encoding="utf-8",
-            na_values=["", "NA", "NaN", None],
+    """Carrega CSV remoto e tenta corrigir cabeçalho 'torto' (muitos 'Unnamed')."""
+    df = pd.read_csv(
+        url,
+        sep=",",
+        engine="python",
+        on_bad_lines="skip",
+        encoding="utf-8",
+        na_values=["", "NA", "NaN", None],
+    )
+
+    def _fix_header(_df: pd.DataFrame) -> pd.DataFrame:
+        unnamed = sum(str(c).startswith("Unnamed") for c in _df.columns)
+        if unnamed <= len(_df.columns) // 2:
+            return _df  # cabeçalho parece OK
+
+        _raw = pd.read_csv(
+            url, sep=",", engine="python", on_bad_lines="skip", encoding="utf-8", header=None
         )
-    except Exception as e:
-        st.error(f"❌ Falha ao ler CSV em {url}: {e}")
-        return pd.DataFrame()
+        best_idx, best_score = 0, -1
+        limit = min(10, len(_raw))
+        for i in range(limit):
+            row = _raw.iloc[i].astype(str).fillna("")
+            score = sum(any(ch.isalpha() for ch in str(x)) for x in row)
+            if score > best_score:
+                best_score, best_idx = score, i
 
-    if df.empty:
-        return df
+        new_header = _raw.iloc[best_idx].astype(str).str.strip().tolist()
+        _raw = _raw.iloc[best_idx + 1:].reset_index(drop=True)
+        _raw.columns = [c if c else f"col_{i}" for i, c in enumerate(new_header)]
+        return _raw
 
-    unnamed = sum(str(c).startswith("Unnamed") for c in df.columns)
-    if unnamed > max(1, len(df.columns) // 2):
-        try:
-            _raw = pd.read_csv(url, sep=",", header=None, engine="python")
-            if _raw.empty:
-                return pd.DataFrame()
-            new_header = _raw.iloc[0]
-            df = _raw[1:].reset_index(drop=True)
-            df.columns = new_header
-        except Exception:
-            pass
-
+    df = _fix_header(df)
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
 
-def _cleanup_currency_text(s_raw: str) -> str:
-    s = str(s_raw or "").strip().replace("\u00A0", " ")
-    s = re.sub(r"[Rr]\$\s*", "", s)  # remove R$ / r$
-    s = re.sub(r"[^\d,\.\-]", "", s)  # mantém apenas dígitos, vírgula, ponto, sinal
-    return s
+def _to_float_brl(series: pd.Series) -> pd.Series:
+    """Converte 'R$ 1.234,56' / '1.234,56' / '1234.56' em float."""
+    s = series.astype(str)
+    s = s.str.replace("\u00A0", " ", regex=False)          # NBSP
+    s = s.str.replace(r"[Rr]\$\s*", "", regex=True)        # remove R$
+    s = s.str.replace(" ", "", regex=False)                # remove espaços
+    # Heurística: vírgula como decimal?
+    comma_as_decimal = ((s.str.count(",") >= 1) & (s.str.count("\.") >= 0)).mean() >= 0.5
+    if comma_as_decimal:
+        s = s.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+    else:
+        s = s.str.replace(",", "", regex=False)
+    return pd.to_numeric(s, errors="coerce")
 
-
-def _to_float_brl_strict(series: pd.Series) -> pd.Series:
-    """Conversão estrita pt-BR (prioriza vírgula como separador decimal)."""
-
-    def parse_one(x):
-        if pd.isna(x):
-            return float("nan")
-        raw = str(x)
-        s = _cleanup_currency_text(raw)
-
-        # Caso típico BR: 1.234,56
-        if "," in s:
-            s2 = s.replace(".", "").replace(",", ".")
-            try:
-                return float(s2)
-            except Exception:
-                pass
-
-        # Sem vírgula: supõe que pontos são milhares (quando houver) e os 2 últimos dígitos são centavos
-        s_digits = re.sub(r"[^\d\-]", "", s)
-        if s_digits in ("", "-"):
-            return float("nan")
-        neg = s_digits.startswith("-")
-        d = s_digits[1:] if neg else s_digits
-        if len(d) <= 2:
-            val = float(d) / 100.0
-        else:
-            val = float(d[:-2] + "." + d[-2:])
-        return -val if neg else val
-
-    out = series.astype("string").apply(parse_one)
-
-    # Anti-outlier defensivo para valores absurdos isolados
-    try:
-        s_pos = out[out > 0]
-        if len(s_pos) >= 20:
-            med = s_pos.median()
-            p99 = s_pos.quantile(0.99)
-            if med > 0 and p99 > 10000 * med:
-                out = out.mask(out > 10000 * med, other=float("nan"))
-    except Exception:
-        pass
-
-    return out.fillna(0.0)
-
-
-def _to_float_brl_relaxed(series: pd.Series) -> pd.Series:
-    """Conversor flexível: tenta interpretar vírgulas/pontos em formatos mistos.
-    Útil para planilhas colaborativas onde entram valores irregulares.
-    """
-
-    def parse_one(x):
-        if pd.isna(x):
-            return float("nan")
-        s = _cleanup_currency_text(x)
-        if "," in s and "." in s:
-            s = s.replace(".", "").replace(",", ".")
-        elif "," in s:
-            left, right = s.rsplit(",", 1)
-            if right.isdigit() and 1 <= len(right) <= 2:
-                s = left.replace(",", "") + "." + right
-            else:
-                s = (left + right).replace(",", "")
-        elif "." in s:
-            left, right = s.rsplit(".", 1)
-            if right.isdigit() and 1 <= len(right) <= 2:
-                s = left.replace(".", "") + "." + right
-            else:
-                s = (left + right).replace(".", "")
-        else:
-            d = re.sub(r"\D", "", str(x))
-            if len(d) <= 2:
-                s = f"0.{d.zfill(2)}"
-            else:
-                s = d[:-2] + "." + d[-2:]
-        try:
-            return float(s)
-        except Exception:
-            return float("nan")
-
-    return series.astype("string").apply(parse_one).fillna(0.0)
-
-
-def _format_brl(x: float) -> str:
-    try:
-        return f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except Exception:
-        return "R$ 0,00"
-
-
-# ---------- AUTO-DETECÇÃO DE COLUNAS (Planilha 2 - Resumo) ----------
-VALOR_PATTERNS = re.compile(r"(valor|receita|total|gasto|faturamento|ltv)", re.I)
-COMPRAS_PATTERNS = re.compile(r"(compra|pedido|ordens?|qtd|quant)", re.I)
-
-
-def _score_money_col(s: pd.Series) -> float:
-    try:
-        parsed = _to_float_brl_strict(s)
-        pos = parsed[parsed > 0]
-        if len(pos) == 0:
-            return 0.0
-        return float(pos.median() * len(pos))
-    except Exception:
-        return 0.0
-
-
-def detectar_colunas_resumo(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str]]:
-    """Tenta achar automaticamente 'valor' e 'compras' pela semântica do cabeçalho e pelos dados.
-
-    Observação: lida com *colunas duplicadas*. Se houver duplicatas, `df[c]` pode
-    retornar um DataFrame; nesse caso usamos a primeira ocorrência para scoring.
-    """
-    valor_cands = []
-    compras_cands = []
-    for c in df.columns:
-        c_str = str(c)
-        if VALOR_PATTERNS.search(c_str):
-            valor_cands.append(c)
-        if COMPRAS_PATTERNS.search(c_str):
-            compras_cands.append(c)
-
-    # Se nada por nome, considera todas e pontua pelos dados
-    if not valor_cands:
-        valor_cands = list(df.columns)
-
-    # Função segura para obter uma Series mesmo com colunas duplicadas
-    def _as_series_safe(frame: pd.DataFrame, col_label) -> pd.Series:
-        obj = frame[col_label]
-        if isinstance(obj, pd.DataFrame):
-            # pega a primeira coluna física
-            return obj.iloc[:, 0]
-        return obj
-
-    # Escolhe melhor 'valor' pelo score
-    best_val: Optional[str] = None
-    best_score: float = -1.0
-    for c in valor_cands:
-        try:
-            s = _as_series_safe(df, c)
-            sc = _score_money_col(s)
-            if sc > best_score:
-                best_score = sc
-                best_val = c
-        except Exception:
-            continue
-
-    # compras: se nenhum por nome, tenta col com inteiros pequenos
-    if not compras_cands:
-        for c in df.columns:
-            try:
-                s_raw = _as_series_safe(df, c)
-                s = pd.to_numeric(s_raw, errors="coerce")
-                if s.notna().sum() == 0:
-                    continue
-                # média de parte inteira ~1 e mediana baixa -> contagem discreta
-                if (s.dropna() % 1 == 0).mean() > 0.95 and s.dropna().median() <= 5:
-                    compras_cands.append(c)
-            except Exception:
-                continue
-
-    best_cmp = compras_cands[0] if compras_cands else None
-
-    return best_val, best_cmp
-
-
-# =========================
-# Preparadores
-# =========================
 
 def preparar_df_vendas(df: pd.DataFrame) -> pd.DataFrame:
+    """Prepara a planilha do colaborador: datas e valores."""
     if df.empty:
         return df
-    df = df.copy()
+    df.columns = [c.strip() for c in df.columns]
+
+    # DATA
     if "DATA DE INÍCIO" in df.columns:
         df["DATA DE INÍCIO"] = pd.to_datetime(df["DATA DE INÍCIO"], errors="coerce", dayfirst=True)
+
+    # VALOR
     if "VALOR (R$)" in df.columns:
-        df["VALOR (R$)"] = _to_float_brl_relaxed(df["VALOR (R$)"])
+        df["VALOR (R$)"] = (
+            df["VALOR (R$)"].astype(str)
+            .str.replace(r"R\$\s*", "", regex=True)
+            .str.replace(".", "", regex=False)   # milhar
+            .str.replace(",", ".", regex=False)  # decimal
+        )
+        df["VALOR (R$)"] = pd.to_numeric(df["VALOR (R$)"], errors="coerce").fillna(0.0)
+
     return df
 
 
-def preparar_df_historico_resumo(df: pd.DataFrame) -> Tuple[pd.DataFrame, Optional[str], Optional[str]]:
-    if df.empty:
-        return df.copy(), None, None
-    df = df.copy()
-    df.columns = [str(c).strip() for c in df.columns]
-
-    # Nome / Email / ID
-    nome_col = next((c for c in ["NOME COMPLETO", "CLIENTE", "NOME", "Nome"] if c in df.columns), df.columns[0])
-    email_col = next((c for c in ["E-MAIL", "EMAIL", "Email", "e-mail"] if c in df.columns), None)
-    df["CLIENTE_NOME"] = df[nome_col].astype(str).str.strip() if nome_col else ""
-    df["CLIENTE_EMAIL"] = df[email_col].astype(str).str.strip().str.lower() if email_col else ""
-    df["CLIENTE_ID"] = df["CLIENTE_EMAIL"].where(df["CLIENTE_EMAIL"] != "", df["CLIENTE_NOME"])
-
-    # Detecta colunas corretas
-    valor_col, compras_col = detectar_colunas_resumo(df)
-
-    # Converte
-    df["VALOR_PAD"] = _to_float_brl_strict(df[valor_col]) if valor_col else 0.0
-    if compras_col:
-        df["N_COMPRAS"] = pd.to_numeric(df[compras_col], errors="coerce").fillna(0).astype(int)
-    else:
-        df["N_COMPRAS"] = 0
-
-    # Remove linhas agregadoras
-    try:
-        mask_total = (
-            df[nome_col]
-            .astype(str)
-            .str.lower()
-            .str.contains("total|subtotal|geral", regex=True, na=False)
-            if nome_col
-            else False
-        )
-        df = df.loc[~mask_total].reset_index(drop=True)
-    except Exception:
-        pass
-
-    # Anti-outlier forte para casos de coluna errada residual
-    try:
-        s = df["VALOR_PAD"]
-        med = s.median()
-        q1, q3 = s.quantile(0.25), s.quantile(0.75)
-        iqr = max(q3 - q1, 1.0)
-        hard_cap = (med + 3 * iqr) * 10
-        df.loc[s > hard_cap, "VALOR_PAD"] = 0.0
-    except Exception:
-        pass
-
-    return df, valor_col, compras_col
-
-
-def preparar_df_historico_transacional(
-    df: pd.DataFrame,
-    valor_col: Optional[str] = None,
-    date_col: Optional[str] = None,
-    produto_col: Optional[str] = None,
-) -> pd.DataFrame:
+def preparar_df_historico_clientes(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Prepara a Planilha 2 como RESUMO POR CLIENTE (uma linha = um cliente).
+    Expectativas:
+      - Coluna 'Valor'  = gasto total do cliente (BRL)
+      - Coluna 'Compras' = número de compras do cliente (inteiro)
+    """
     if df.empty:
         return df.copy()
+
     df = df.copy()
     df.columns = [str(c).strip() for c in df.columns]
 
-    if not date_col or date_col not in df.columns:
-        for c in ["DATA", "DATA DA COMPRA", "DATA DE INÍCIO", "DATA VENDA", "DATA/HORA", "DATA HORA"]:
-            if c in df.columns:
-                date_col = c
-                break
-    df["DATA_REF"] = (
-        pd.to_datetime(df[date_col], errors="coerce", dayfirst=True)
-        if date_col and date_col in df.columns
-        else pd.NaT
-    )
+    # localizar colunas por nome (case-insensitive mas prioriza exatamente 'Valor'/'Compras')
+    def find_col(df, preferred):
+        cols = {c.lower(): c for c in df.columns}
+        for p in preferred:
+            if p.lower() in cols:
+                return cols[p.lower()]
+        return None
 
-    if not valor_col or valor_col not in df.columns:
-        for c in ["VALOR (R$)", "VALOR", "TOTAL (R$)", "TOTAL", "PREÇO", "PRECO"]:
-            if c in df.columns:
-                valor_col = c
-                break
-    df["VALOR_PAD"] = (
-        _to_float_brl_strict(df[valor_col]) if valor_col and valor_col in df.columns else 0.0
-    )
+    col_val = find_col(df, ["Valor"])
+    col_cmp = find_col(df, ["Compras"])
 
-    if not produto_col or produto_col not in df.columns:
-        for c in ["PRODUTO", "ITEM", "SKU", "DESCRIÇÃO", "DESCRICAO"]:
-            if c in df.columns:
-                produto_col = c
-                break
-    df["PRODUTO_PAD"] = df[produto_col].astype(str) if produto_col and produto_col in df.columns else ""
+    if col_val is None:
+        st.error("❌ A planilha 2 não tem a coluna **'Valor'**. Verifique o cabeçalho.")
+        df["VALOR_PAD"] = 0.0
+    else:
+        df["VALOR_PAD"] = _to_float_brl(df[col_val]).fillna(0.0)
 
-    nome_col = next((c for c in ["NOME COMPLETO", "CLIENTE", "NOME", "Nome"] if c in df.columns), None)
-    email_col = next((c for c in ["E-MAIL", "EMAIL", "Email", "e-mail"] if c in df.columns), None)
+    if col_cmp is None:
+        st.warning("⚠️ A planilha 2 não tem a coluna **'Compras'**. Usando 0.")
+        df["N_COMPRAS"] = 0
+    else:
+        df["N_COMPRAS"] = pd.to_numeric(df[col_cmp], errors="coerce").fillna(0).astype(int)
+
+    # Identificação de cliente
+    nome_col = find_col(df, ["NOME COMPLETO", "CLIENTE", "NOME", "Nome"])
+    email_col = find_col(df, ["E-MAIL", "EMAIL", "Email", "e-mail"])
+
     df["CLIENTE_NOME"] = df[nome_col].astype(str).str.strip() if nome_col else ""
     df["CLIENTE_EMAIL"] = df[email_col].astype(str).str.strip().str.lower() if email_col else ""
     df["CLIENTE_ID"] = df["CLIENTE_EMAIL"].where(df["CLIENTE_EMAIL"] != "", df["CLIENTE_NOME"])
+
+    # nesse formato, não há DATA_REF transacional
+    df["DATA_REF"] = pd.NaT
     return df
 
 
-# =========================
-# UI — Controles superiores
-# =========================
+# ==============================
+# Constantes auxiliares
+# ==============================
+PT_WEEK_ORDER = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
+PT_WEEK_MAP = {0: "Segunda", 1: "Terça", 2: "Quarta", 3: "Quinta", 4: "Sexta", 5: "Sábado", 6: "Domingo"}
+
+# ------------------------------
+# 📥 Carregamento da PLANILHA 1
+# ------------------------------
 with st.spinner("Carregando Planilha 1 (colaborador)…"):
     df_vendas_raw = carregar_csv(SHEET_URL_1)
-
 df_vendas = preparar_df_vendas(df_vendas_raw.copy())
 
-# Permite alterar a aba (sheet) da Planilha 2 via UI
-st.sidebar.header("Planilha 2 (Geral)")
-sheet2_sheetname = st.sidebar.text_input(
-    "Nome da aba (sheet)", value=DEFAULT_SHEET2_SHEETNAME
-).strip() or DEFAULT_SHEET2_SHEETNAME
+# ------------------------------
+# 🧭 Sidebar / Controles
+# ------------------------------
+st.sidebar.title("⚙️ Controles")
 
-SHEET_URL_2 = (
-    f"https://docs.google.com/spreadsheets/d/{SHEET2_ID}/gviz/tq?tqx=out:csv&sheet={quote(sheet2_sheetname)}"
+# Nome da aba da Planilha 2 (evita depender de gid)
+sheet2_sheetname = st.sidebar.text_input(
+    "📄 Nome da aba (Planilha 2)",
+    value=DEFAULT_SHEET2_SHEETNAME,
+    help="Ex.: Total (tem que ser exatamente como aparece na guia do Google Sheets)"
 )
-with st.spinner("Carregando Planilha 2…"):
+# Monta a URL por NOME da aba (gviz)
+SHEET_URL_2 = f"https://docs.google.com/spreadsheets/d/{SHEET2_ID}/gviz/tq?tqx=out:csv&sheet={quote(sheet2_sheetname)}"
+
+# Botão de refresh
+if st.sidebar.button("🔄 Atualizar dados agora"):
+    st.cache_data.clear()
+    time.sleep(0.3)
+    st.rerun()
+st.sidebar.success(f"✅ Dados atualizados às {time.strftime('%H:%M:%S')}")
+
+# Identificação do colaborador (rótulo)
+colab_detectado = None
+if not df_vendas.empty:
+    for c in ["COLABORADOR", "VENDEDOR", "RESPONSÁVEL"]:
+        if c in df_vendas.columns and not df_vendas[c].dropna().empty:
+            vals = df_vendas[c].dropna().astype(str).unique().tolist()
+            if len(vals) == 1:
+                colab_detectado = vals[0]
+            break
+colaborador = st.sidebar.text_input("👤 Nome do colaborador (rótulo do relatório)", value=colab_detectado or "")
+
+# ------------------------------
+# 📥 Carregamento da PLANILHA 2
+# ------------------------------
+with st.spinner("Carregando Planilha 2 (histórico)…"):
     try:
         df_extra_raw = carregar_csv(SHEET_URL_2)
     except Exception as e:
-        st.error(f"❌ Erro ao abrir Planilha 2: {e}")
-        df_extra_raw = pd.DataFrame()
-
-# Detecta modo transacional
-is_transacional = False
-if not df_extra_raw.empty:
-    date_candidates = [
-        c
-        for c in [
-            "DATA",
-            "DATA DA COMPRA",
-            "DATA DE INÍCIO",
-            "DATA VENDA",
-            "DATA/HORA",
-            "DATA HORA",
-        ]
-        if c in df_extra_raw.columns
-    ]
-    if date_candidates:
+        fallback_pub = f"https://docs.google.com/spreadsheets/d/{SHEET2_ID}/pub?output=csv"
+        st.warning("Não consegui pela URL da aba. Tentando fallback 'Publicar na Web'…")
         try:
-            dt = pd.to_datetime(df_extra_raw[date_candidates[0]], errors="coerce", dayfirst=True)
-            is_transacional = dt.notna().sum() >= max(10, int(len(df_extra_raw) * 0.2))
-        except Exception:
-            is_transacional = False
+            df_extra_raw = carregar_csv(fallback_pub)
+        except Exception as e2:
+            st.error(
+                "❌ Não consegui abrir a Planilha 2.\n\n"
+                "Verifique:\n"
+                "• Nome da aba digitado (igual ao do Google Sheets)\n"
+                "• Permissões: 'Qualquer pessoa com o link — Leitor'\n"
+                "• (Opcional) Arquivo → Compartilhar → Publicar na Web\n\n"
+                f"Erros: {e} | fallback: {e2}"
+            )
+            df_extra_raw = pd.DataFrame()
 
-if is_transacional:
-    df_hist = preparar_df_historico_transacional(df_extra_raw.copy())
-    valor_col_det = "VALOR_PAD"
-    compras_col_det = None
-else:
-    df_hist, valor_col_det, compras_col_det = preparar_df_historico_resumo(df_extra_raw.copy())
+# Preparo ESPECÍFICO: Valor/Compras (resumo por cliente)
+df_historico = preparar_df_historico_clientes(df_extra_raw.copy())
 
-# =========================
-# Topo
-# =========================
-c_a, c_b, _ = st.columns([1, 1, 2])
-with c_a:
-    if st.button("🔄 Atualizar dados"):
-        st.cache_data.clear()
-        time.sleep(0.2)
-        st.rerun()
-with c_b:
-    st.success(f"✅ Dados atualizados às {time.strftime('%H:%M:%S')}")
+# Status rápido no topo
+ok1 = "✅" if isinstance(df_vendas, pd.DataFrame) and not df_vendas.empty else "⚠️"
+ok2 = "✅" if isinstance(df_historico, pd.DataFrame) and not df_historico.empty else "⚠️"
+st.markdown(f"**Planilha 1 (Colaborador):** {ok1}  |  **Planilha 2 (Histórico):** {ok2}")
 
-ok1 = "✅" if not df_vendas.empty else "⚠️"
-ok2 = "✅" if not df_hist.empty else "⚠️"
-st.markdown(f"**Planilha 1 (Colaborador):** {ok1}  |  **Planilha 2 (Geral):** {ok2}")
-
-# =========================
-# Abas
-# =========================
+# ------------------------------
+# 🗂️ Abas principais (criar antes de usar)
+# ------------------------------
 aba1, aba2 = st.tabs([
     "📊 Análises do Colaborador (Planilha 1)",
-    "📑 Histórico Geral (Planilha 2)",
+    "📑 Histórico Geral de Clientes (Planilha 2)",
 ])
 
-# --------------------- ABA 1 ---------------------
+# ======================================================
+# 🟢 ABA 1 — PLANILHA 1 (Colaborador)
+# ======================================================
 with aba1:
-    colab_detectado = None
-    if not df_vendas.empty:
-        for c in ["COLABORADOR", "VENDEDOR", "RESPONSÁVEL"]:
-            if c in df_vendas.columns and not df_vendas[c].dropna().empty:
-                vals = df_vendas[c].dropna().astype(str).unique().tolist()
-                if len(vals) == 1:
-                    colab_detectado = vals[0]
-                break
-
-    st.subheader(
-        f"📦 Vendas do Colaborador{(' — ' + colab_detectado) if colab_detectado else ''}"
-    )
+    titulo_colab = f"📦 Vendas do Colaborador {f'— {colaborador}' if colaborador else ''}".strip()
+    st.subheader(titulo_colab)
 
     if df_vendas.empty:
-        st.warning("Sem dados na Planilha 1.")
+        st.warning("Sem dados para exibir na planilha do colaborador.")
     else:
-        total_vendas = float(df_vendas.get("VALOR (R$)", pd.Series(dtype=float)).sum())
-        clientes = int(
-            df_vendas.get("NOME COMPLETO", pd.Series(dtype=str)).nunique()
-            if "NOME COMPLETO" in df_vendas.columns
-            else 0
-        )
-        ticket = total_vendas / clientes if clientes > 0 else 0.0
+        # ------------------------------
+        # Filtros (somente da planilha 1)
+        # ------------------------------
+        st.sidebar.header("🔎 Filtros (Colaborador)")
+        grupos_opts = sorted(df_vendas.get("GRUPO RFM", pd.Series(dtype=str)).dropna().unique().tolist())
+        produtos_opts = sorted(df_vendas.get("PRODUTO", pd.Series(dtype=str)).dropna().unique().tolist())
+        grupos = st.sidebar.multiselect("Grupo RFM", grupos_opts)
+        produtos = st.sidebar.multiselect("Produto", produtos_opts)
 
-        c1, c2, c3 = st.columns(3)
-        c1.metric("💰 Total de Vendas", _format_brl(total_vendas))
-        c2.metric("👥 Clientes Únicos", clientes)
-        c3.metric("🎯 Ticket Médio", _format_brl(ticket))
+        df_filtrado = df_vendas.copy()
+        if grupos and "GRUPO RFM" in df_filtrado.columns:
+            df_filtrado = df_filtrado[df_filtrado["GRUPO RFM"].isin(grupos)]
+        if produtos and "PRODUTO" in df_filtrado.columns:
+            df_filtrado = df_filtrado[df_filtrado["PRODUTO"].isin(produtos)]
 
-        base = (
-            df_vendas[df_vendas.get("DATA DE INÍCIO").notna()]
-            if "DATA DE INÍCIO" in df_vendas.columns
-            else pd.DataFrame()
-        )
-        if not base.empty:
-            # remove domingos (weekday=6)
-            base = base[base["DATA DE INÍCIO"].dt.weekday != 6]
-
-        st.subheader("📊 Vendas por Dia com Linha de Tendência")
-        vendas_por_dia = (
-            base.groupby("DATA DE INÍCIO", as_index=False)["VALOR (R$)"]
-            .sum()
-            .sort_values("DATA DE INÍCIO")
-            if not base.empty
-            else pd.DataFrame()
-        )
-        if not vendas_por_dia.empty:
-            vendas_por_dia["Tendência"] = (
-                vendas_por_dia["VALOR (R$)"].rolling(window=7, min_periods=1).mean()
-            )
-            graf1 = px.line(
-                vendas_por_dia,
-                x="DATA DE INÍCIO",
-                y=["VALOR (R$)", "Tendência"],
-                markers=True,
-                labels={
-                    "DATA DE INÍCIO": "Data",
-                    "value": "Vendas (R$)",
-                    "variable": "Legenda",
-                },
-            )
-            # Destaques de traços
-            graf1.update_traces(selector=dict(name="VALOR (R$)"), line=dict(width=2))
-            graf1.update_traces(
-                selector=dict(name="Tendência"), line=dict(width=3, dash="dash")
-            )
-            st.plotly_chart(graf1, use_container_width=True)
+        if df_filtrado.empty:
+            st.info("A combinação de filtros não retornou resultados.")
         else:
-            st.info("Não há dados suficientes para o gráfico.")
+            total_colab = float(df_filtrado["VALOR (R$)"].sum())
+            clientes_colab = int(df_filtrado.get("NOME COMPLETO", pd.Series(dtype=str)).nunique())
+            ticket_medio_colab = total_colab / clientes_colab if clientes_colab > 0 else 0.0
 
-# --------------------- ABA 2 ---------------------
+            col1, col2, col3 = st.columns(3)
+            col1.metric("💰 Vendas do Colaborador", f"R$ {total_colab:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            col2.metric("👥 Clientes Únicos", clientes_colab)
+            col3.metric("🎯 Ticket Médio", f"R$ {ticket_medio_colab:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+
+            # Base temporal sem domingo
+            base = df_filtrado[df_filtrado["DATA DE INÍCIO"].notna()].copy()
+            if not base.empty:
+                base = base[base["DATA DE INÍCIO"].dt.weekday != 6]
+
+            # Vendas por dia + tendência
+            st.subheader("📊 Vendas por Dia com Linha de Tendência")
+            vendas_por_dia = (
+                base.groupby("DATA DE INÍCIO", as_index=False)["VALOR (R$)"].sum().sort_values("DATA DE INÍCIO")
+            ) if not base.empty else pd.DataFrame()
+            if not vendas_por_dia.empty:
+                vendas_por_dia["Tendência"] = vendas_por_dia["VALOR (R$)"].rolling(window=7, min_periods=1).mean()
+                graf1 = px.line(
+                    vendas_por_dia,
+                    x="DATA DE INÍCIO",
+                    y=["VALOR (R$)", "Tendência"],
+                    title="Vendas por Dia com Linha de Tendência",
+                    labels={"DATA DE INÍCIO": "Data", "value": "Vendas (R$)", "variable": "Legenda"},
+                    markers=True,
+                )
+                graf1.update_traces(selector=dict(name="VALOR (R$)"), line=dict(width=2, color="cyan"))
+                graf1.update_traces(selector=dict(name="Tendência"), line=dict(width=3, color="orange", dash="dash"))
+                graf1.update_layout(plot_bgcolor="black", paper_bgcolor="black", font=dict(color="white"),
+                                    xaxis=dict(showgrid=True, gridcolor="gray"),
+                                    yaxis=dict(showgrid=True, gridcolor="gray"))
+                st.plotly_chart(graf1, use_container_width=True)
+            else:
+                st.info("Não há dados de vendas diárias após aplicar filtros.")
+
+            # Distribuição por Grupo RFM e Produto
+            colg1, colg2 = st.columns(2)
+            with colg1:
+                st.subheader("Distribuição por Grupo RFM")
+                if "GRUPO RFM" in df_filtrado.columns and not df_filtrado["GRUPO RFM"].dropna().empty:
+                    graf2 = px.pie(df_filtrado, names="GRUPO RFM", title="Grupos RFM")
+                    graf2.update_layout(plot_bgcolor="black", paper_bgcolor="black", font=dict(color="white"))
+                    st.plotly_chart(graf2, use_container_width=True)
+                else:
+                    st.info("Sem dados de GRUPO RFM para exibir.")
+            with colg2:
+                st.subheader("Vendas por Produto")
+                if "PRODUTO" in df_filtrado.columns:
+                    vendas_prod = (
+                        df_filtrado.groupby("PRODUTO", as_index=False)["VALOR (R$)"].sum().sort_values("VALOR (R$)", ascending=False)
+                    )
+                    if not vendas_prod.empty:
+                        graf3 = px.bar(
+                            vendas_prod, x="PRODUTO", y="VALOR (R$)", title="Total de Vendas por Produto",
+                        )
+                        graf3.update_traces(
+                            marker_color="cyan",
+                            texttemplate="R$ %{y:,.2f}",
+                            textposition="outside",
+                            hovertemplate="<b>%{x}</b><br>Vendas: R$ %{y:,.2f}<extra></extra>"
+                        )
+                        graf3.update_yaxes(tickformat=",.2f")
+                        graf3.update_layout(plot_bgcolor="black", paper_bgcolor="black", font=dict(color="white"))
+                        st.plotly_chart(graf3, use_container_width=True)
+                    else:
+                        st.info("Sem dados de produtos após os filtros.")
+                else:
+                    st.info("Coluna 'PRODUTO' não encontrada na planilha.")
+
+# ======================================================
+# 🔵 ABA 2 — HISTÓRICO GERAL (Clientes) — RESUMO POR CLIENTE
+# ======================================================
 with aba2:
-    st.subheader("📑 Histórico Geral de Clientes")
+    st.subheader("📑 Histórico Geral de Clientes (Resumo por Cliente)")
 
-    if df_hist.empty:
-        st.info("Sem dados na Planilha 2.")
+    if df_historico.empty:
+        st.info("Ainda não há dados na planilha de histórico para exibir.")
     else:
-        if is_transacional:
-            # ----- Filtro de Data -----
-            min_data = pd.to_datetime(df_hist["DATA_REF"], errors="coerce").min()
-            max_data = pd.to_datetime(df_hist["DATA_REF"], errors="coerce").max()
-            today = datetime.today()
-            if pd.isna(min_data) or pd.isna(max_data):
-                min_data = today - timedelta(days=180)
-                max_data = today
+        # KPIs (usando Valor/Compras por cliente)
+        receita_total = float(df_historico["VALOR_PAD"].sum()) if "VALOR_PAD" in df_historico.columns else 0.0
+        total_compras = int(df_historico["N_COMPRAS"].sum()) if "N_COMPRAS" in df_historico.columns else int(df_historico.shape[0])
+        clientes_unicos = int(df_historico["CLIENTE_ID"].nunique()) if "CLIENTE_ID" in df_historico.columns else int(df_historico.shape[0])
+        aov = receita_total / total_compras if total_compras > 0 else 0.0
 
-            # Evita datas invertidas
-            if min_data > max_data:
-                min_data, max_data = max_data - timedelta(days=180), max_data
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("💰 Receita total (clientes)", f"R$ {receita_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        k2.metric("🧑‍🤝‍🧑 Clientes", clientes_unicos)
+        k3.metric("🧾 Nº de compras", total_compras)
+        k4.metric("🧮 Ticket médio", f"R$ {aov:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
 
-            periodo = st.date_input(
-                "Período",
-                value=(min_data.date(), max_data.date()),
-                min_value=(min_data - timedelta(days=365)).date(),
-                max_value=(max_data + timedelta(days=365)).date(),
-            )
-
-            df_hist_filt = df_hist.copy()
-            if isinstance(periodo, (tuple, list)) and len(periodo) == 2:
-                di, df_ = periodo
-                di = datetime.combine(di, datetime.min.time())
-                df_ = datetime.combine(df_, datetime.max.time())
-                df_hist_filt = df_hist_filt[
-                    (df_hist_filt["DATA_REF"] >= di) & (df_hist_filt["DATA_REF"] <= df_)
-                ]
-
-            total_geral = float(df_hist_filt["VALOR_PAD"].sum())
-            clientes_geral = int(df_hist_filt["CLIENTE_ID"].nunique())
-            pedidos_geral = int(df_hist_filt.shape[0])
-            aov = total_geral / pedidos_geral if pedidos_geral > 0 else 0.0
-
-            k1, k2, k3, k4 = st.columns(4)
-            k1.metric("💰 Receita (período)", _format_brl(total_geral))
-            k2.metric("🧑‍🤝‍🧑 Clientes únicos", clientes_geral)
-            k3.metric("🧾 Pedidos", pedidos_geral)
-            k4.metric("🧮 Ticket médio (AOV)", _format_brl(aov))
-
-            st.caption("Modo transacional (com datas por linha).")
-
-        else:
-            # ----- Resumo por cliente -----
-            receita_total = float(df_hist["VALOR_PAD"].sum())
-            total_compras = (
-                int(df_hist["N_COMPRAS"].sum()) if "N_COMPRAS" in df_hist.columns else 0
-            )
-            clientes = (
-                int(df_hist["CLIENTE_ID"].nunique())
-                if "CLIENTE_ID" in df_hist.columns
-                else int(df_hist.shape[0])
-            )
-            aov = receita_total / total_compras if total_compras > 0 else 0.0
-
-            k1, k2, k3, k4 = st.columns(4)
-            k1.metric("💰 Receita total (clientes)", _format_brl(receita_total))
-            k2.metric("🧑‍🤝‍🧑 Clientes", clientes)
-            k3.metric("🛒 Nº de compras", total_compras)
-            k4.metric("🎯 Ticket médio", _format_brl(aov))
-
-            # Info de auditoria
-            st.caption(
-                f"Coluna de VALOR detectada: **{valor_col_det}** | Coluna de COMPRAS detectada: **{compras_col_det or '—'}**"
-            )
-            st.caption(
-                "Observação: este modo é um resumo por cliente (sem datas por linha). Para filtrar por período, utilize uma aba transacional."
-            )
+        # Top clientes por Valor gasto
+        st.subheader("🏆 Top Clientes por Valor Gasto")
+        top_clientes = (
+            df_historico[["CLIENTE_ID", "CLIENTE_NOME", "VALOR_PAD", "N_COMPRAS"]]
+            .sort_values("VALOR_PAD", ascending=False)
+            .head(20)
+        )
+        graf_top = px.bar(
+            top_clientes,
+            x="CLIENTE_NOME",
+            y="VALOR_PAD",
+            title="Top 20 Clientes por Valor Gasto",
+        )
+        graf_top.update_traces(marker_color="cyan", texttemplate="R$ %{y:,.2f}", textposition="outside")
+        graf_top.update_layout(plot_bgcolor="black", paper_bgcolor="black", font=dict(color="white"))
+        st.plotly_chart(graf_top, use_container_width=True)
 
         st.markdown("---")
-        st.caption("Prévia (50 primeiras linhas)")
-        st.dataframe(df_hist.head(50), use_container_width=True)
+        st.caption("Prévia do histórico bruto (50 primeiras linhas)")
+        st.dataframe(df_historico.head(50), use_container_width=True)
