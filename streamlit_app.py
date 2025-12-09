@@ -162,8 +162,29 @@ def format_valor(v):
         return "—"
 
 
+import streamlit.components.v1 as components
+
 # ===================================================================
-# EXIBIÇÃO DOS CARDS (GRID CORRETA)
+# FUNÇÃO SEGURA DE FORMATAÇÃO DE VALOR
+# ===================================================================
+def format_valor(v):
+    try:
+        if pd.isna(v):
+            return "—"
+        v = str(v).replace("R$", "").replace(".", "").replace(",", ".").strip()
+        return f"R$ {float(v):.2f}"
+    except:
+        return "—"
+
+
+# ===================================================================
+# LER DIAS DESDE COMPRA DIRETO DA COLUNA I (ÍNDICE 8)
+# ===================================================================
+base["Dias desde compra"] = df.iloc[:, 8]  # agora lendo da planilha
+
+
+# ===================================================================
+# EXIBIÇÃO DOS CARDS
 # ===================================================================
 
 st.subheader("📋 Tarefas do Dia")
@@ -177,9 +198,9 @@ if df_dia.empty:
 
 
 # ===================================================================
-# CSS GLOBAL — AGORA PERFEITAMENTE CONFIGURADO
+# CSS DOS CARDS
 # ===================================================================
-st.markdown("""
+css = """
 <style>
 .grid-container {
     display: grid;
@@ -201,7 +222,7 @@ st.markdown("""
     justify-content: space-between;
 }
 
-.card h3 { margin: 0; padding: 0; font-size: 20px; }
+.card h3 { margin: 0; font-size: 20px; }
 .card p { margin: 6px 0; font-size: 14px; }
 
 .button-finish {
@@ -209,24 +230,23 @@ st.markdown("""
     color: white;
     padding: 10px 14px;
     border-radius: 8px;
-    cursor: pointer;
-    border: none;
     width: 100%;
     font-size: 14px;
+    cursor: pointer;
+    border: none;
 }
 </style>
-""", unsafe_allow_html=True)
-
+"""
 
 # ===================================================================
-# GERAR TODO O HTML EM UM ÚNICO BLOCÃO
+# GERAR TODA A GRADE EM UM BLOCÃO HTML
 # ===================================================================
-
-html_cards = '<div class="grid-container">'
+html_cards = css + '<div class="grid-container">'
 
 for idx, row in df_dia.iterrows():
 
     valor = format_valor(row["Valor"])
+    dias = row["Dias desde compra"] if pd.notna(row["Dias desde compra"]) else "—"
 
     html_cards += f"""
     <div class="card">
@@ -235,6 +255,7 @@ for idx, row in df_dia.iterrows():
             <p>📱 {row['Telefone']}</p>
             <p>🏷 Classificação: {row['Classificação']}</p>
             <p>💰 Valor gasto: {valor}</p>
+            <p>⏳ Dias desde compra: {dias}</p>
         </div>
 
         <button class="button-finish" onclick="document.getElementById('btn_{idx}').click();">
@@ -245,10 +266,12 @@ for idx, row in df_dia.iterrows():
 
 html_cards += "</div>"
 
+
 # ===================================================================
-# RENDERIZAR APENAS UMA VEZ
+# RENDERIZAR HTML PURO (SEM STREAMLIT INTERFERIR)
 # ===================================================================
-st.markdown(html_cards, unsafe_allow_html=True)
+components.html(html_cards, height=1500, scrolling=True)
+
 
 # ===================================================================
 # BOTÕES REAIS (OCULTOS)
