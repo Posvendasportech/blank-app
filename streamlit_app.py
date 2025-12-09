@@ -37,14 +37,15 @@ df = load_sheet(SHEET_ID, SHEET_NAME)
 # ------------------------------
 # Mapear colunas (A–I)
 # ------------------------------
-col_data = df.iloc[:, 0]      # A - Data
-col_nome = df.iloc[:, 1]      # B - Nome
-col_email = df.iloc[:, 2]     # C - Email
-col_valor = df.iloc[:, 3]     # D - Valor gasto total
-col_tel = df.iloc[:, 4]       # E - Telefone
-col_compras = df.iloc[:, 5]   # F - Nº compras
-col_class = df.iloc[:, 6]     # G - Classificação
-col_dias = df.iloc[:, 8]      # I - Dias desde a última compra
+col_data = df.iloc[:, 0]      
+col_nome = df.iloc[:, 1]      
+col_email = df.iloc[:, 2]     
+col_valor = df.iloc[:, 3]     
+col_tel = df.iloc[:, 4]       
+col_compras = df.iloc[:, 5]   
+col_class = df.iloc[:, 6]     
+col_dias = df.iloc[:, 8]      
+
 
 # ------------------------------
 # Criar coluna numérica segura de dias
@@ -55,33 +56,7 @@ def converte_dias(v):
         v = float(v)
         return int(round(v))
     except:
-        return None   # Nunca retorna string → evita erros do pandas
-
-base = pd.DataFrame({
-    "Data": pd.to_datetime(col_data, errors="coerce"),
-    "Cliente": col_nome,
-    "Email": col_email,
-    "Valor": col_valor,
-    "Telefone": col_tel.astype(str),
-    "Compras": col_compras,
-    "Classificação": col_class,
-})
-
-# cria coluna numérica final
-base["Dias_num"] = col_dias.apply(converte_dias)
-
-
-
-# ------------------------------
-# Função para arredondar dias (corrige 95,28 → 95)
-# ------------------------------
-def arredonda_dias(v):
-    try:
-        v = float(str(v).replace(",", "."))
-        return int(round(v))
-    except:
-        return "—"
-
+        return None  # Nunca retorna string → evita erro no filtro
 
 # ------------------------------
 # Função formatar valor com segurança
@@ -90,8 +65,7 @@ def safe_valor(v):
     try:
         if pd.isna(v):
             return "—"
-        v = str(v).replace("R$", "").replace(" ", "")
-        v = v.replace(",", ".")
+        v = str(v).replace("R$", "").replace(" ", "").replace(",", ".")
         v = float(v)
         return f"R$ {v:.2f}"
     except:
@@ -109,7 +83,7 @@ base = pd.DataFrame({
     "Telefone": col_tel.astype(str),
     "Compras": col_compras,
     "Classificação": col_class,
-    "Dias desde compra": col_dias.apply(arredonda_dias)   # 🔥 agora arredonda!
+    "Dias_num": col_dias.apply(converte_dias)   # 🔥 agora 100% numérico
 })
 
 
@@ -152,51 +126,46 @@ meta_leais = c3.number_input("Leais + Campeões por dia", value=10, min_value=0)
 # Seleção de tarefas do dia
 # ------------------------------
 
-# Novos com +15 dias
-novos = base[(base["Classificação"] == "Novo") & (base["Dias desde compra"] >= 15)]
-novos = novos.sort_values("Dias desde compra", ascending=False).head(meta_novos)
+# Novos com 15+ dias
+novos = base[(base["Classificação"] == "Novo") & (base["Dias_num"] >= 15)]
+novos = novos.sort_values("Dias_num", ascending=False).head(meta_novos)
 
 # Promissores
 prom = base[base["Classificação"] == "Promissor"]
-prom = prom.sort_values("Dias desde compra", ascending=False).head(meta_prom)
+prom = prom.sort_values("Dias_num", ascending=False).head(meta_prom)
 
 # Leais + Campeões
 leal_camp = base[base["Classificação"].isin(["Leal", "Campeão"])]
-leal_camp = leal_camp.sort_values("Dias desde compra", ascending=False).head(meta_leais)
+leal_camp = leal_camp.sort_values("Dias_num", ascending=False).head(meta_leais)
 
 # Em risco
-risco = base[base["Classificação"] == "Em risco"].sort_values("Dias desde compra")
-
+risco = base[base["Classificação"] == "Em risco"].sort_values("Dias_num")
 
 # Montar lista final
 frames = []
 
 if not novos.empty:
-    t = novos.copy()
-    t["Grupo"] = "Novo"
-    frames.append(t)
+    novos["Grupo"] = "Novo"
+    frames.append(novos)
 
 if not prom.empty:
-    t = prom.copy()
-    t["Grupo"] = "Promissor"
-    frames.append(t)
+    prom["Grupo"] = "Promissor"
+    frames.append(prom)
 
 if not leal_camp.empty:
-    t = leal_camp.copy()
-    t["Grupo"] = "Leal/Campeão"
-    frames.append(t)
+    leal_camp["Grupo"] = "Leal/Campeão"
+    frames.append(leal_camp)
 
 if not risco.empty:
-    t = risco.copy()
-    t["Grupo"] = "Em risco"
-    frames.append(t)
+    risco["Grupo"] = "Em risco"
+    frames.append(risco)
 
 df_dia = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 # Remover concluídos
 df_dia = df_dia[~df_dia["Telefone"].isin(st.session_state["concluidos"])]
 
-# Aplicar filtro de classificação
+# Aplicar filtro
 if class_filter != "Todos":
     df_dia = df_dia[df_dia["Classificação"] == class_filter]
 
@@ -206,7 +175,6 @@ if class_filter != "Todos":
 # ------------------------------
 css = """
 <style>
-
 .grid-container {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -246,13 +214,12 @@ css = """
     cursor: pointer;
     border: none;
 }
-
 .button-finish:hover {
     background-color: #004FCC;
 }
-
 </style>
 """
+
 
 # ------------------------------
 # Gerar HTML dos cards
@@ -262,7 +229,7 @@ html_cards = css + "<div class='grid-container'>"
 for idx, row in df_dia.iterrows():
 
     valor = safe_valor(row["Valor"])
-    dias = row["Dias desde compra"]
+    dias = row["Dias_num"] if pd.notna(row["Dias_num"]) else "—"
 
     html_cards += f"""
     <div id='card_{idx}' class='card'>
@@ -276,7 +243,7 @@ for idx, row in df_dia.iterrows():
 
         <button class='button-finish' onclick="
             document.getElementById('card_{idx}').classList.add('fade-out');
-            setTimeout(function() {{
+            setTimeout(function(){{
                 window.parent.document.getElementById('btn_{idx}').click();
             }}, 450);
         ">
@@ -287,10 +254,11 @@ for idx, row in df_dia.iterrows():
 
 html_cards += "</div>"
 
+
 # ------------------------------
 # Renderizar HTML
 # ------------------------------
-components.html(html_cards, height=1600, scrolling=True)
+components.html(html_cards, height=1800, scrolling=True)
 
 
 # ------------------------------
