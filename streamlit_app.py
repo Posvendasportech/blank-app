@@ -163,7 +163,7 @@ def format_valor(v):
 
 
 # ===================================================================
-# EXIBIÇÃO DOS CARDS (GRID CORRIGIDA)
+# EXIBIÇÃO DOS CARDS (GRID CORRETA)
 # ===================================================================
 
 st.subheader("📋 Tarefas do Dia")
@@ -172,17 +172,18 @@ if class_filter == "Dormente":
     df_dia = base[base["Classificação"] == "Dormente"]
 
 if df_dia.empty:
-    st.info("Nenhuma tarefa para hoje com os critérios selecionados.")
+    st.info("Nenhuma tarefa encontrada para hoje.")
     st.stop()
 
+
 # ===================================================================
-# CSS DOS CARDS QUADRADOS
+# CSS GLOBAL — AGORA PERFEITAMENTE CONFIGURADO
 # ===================================================================
 st.markdown("""
 <style>
 .grid-container {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     grid-gap: 20px;
     width: 100%;
 }
@@ -190,7 +191,7 @@ st.markdown("""
 .card {
     background-color: #111111;
     width: 100%;
-    height: 300px; 
+    height: 260px;
     padding: 18px;
     border-radius: 14px;
     border: 1px solid #222222;
@@ -199,7 +200,8 @@ st.markdown("""
     flex-direction: column;
     justify-content: space-between;
 }
-.card h3 { margin: 0; font-size: 20px; }
+
+.card h3 { margin: 0; padding: 0; font-size: 20px; }
 .card p { margin: 6px 0; font-size: 14px; }
 
 .button-finish {
@@ -215,37 +217,38 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
 # ===================================================================
-# GERAR HTML COMPLETO DOS CARDS
+# GERAR TODO O HTML EM UM ÚNICO BLOCÃO
 # ===================================================================
-cards_html = '<div class="grid-container">'
+
+html_cards = '<div class="grid-container">'
 
 for idx, row in df_dia.iterrows():
 
-    dias = int(row["Dias desde compra"]) if pd.notna(row["Dias desde compra"]) else "—"
     valor = format_valor(row["Valor"])
 
-    cards_html += f"""
+    html_cards += f"""
     <div class="card">
         <div>
             <h3>👤 {row['Cliente']}</h3>
             <p>📱 {row['Telefone']}</p>
             <p>🏷 Classificação: {row['Classificação']}</p>
             <p>💰 Valor gasto: {valor}</p>
-            <p>⏳ Dias desde compra: {dias}</p>
         </div>
+
         <button class="button-finish" onclick="document.getElementById('btn_{idx}').click();">
             ✔ Concluir
         </button>
     </div>
     """
 
-cards_html += "</div>"
+html_cards += "</div>"
 
 # ===================================================================
-# RENDERIZAR GRID COMPLETA DE UMA VEZ
+# RENDERIZAR APENAS UMA VEZ
 # ===================================================================
-st.markdown(cards_html, unsafe_allow_html=True)
+st.markdown(html_cards, unsafe_allow_html=True)
 
 # ===================================================================
 # BOTÕES REAIS (OCULTOS)
