@@ -277,3 +277,14 @@ components.html(html_cards, height=1600, scrolling=True)
 for idx, row in df_dia.iterrows():
     if st.button("✔", key=f"btn_{idx}"):
         concluir(row["Telefone"])
+
+
+df = load_sheet(SHEET_ID, SHEET_NAME)
+
+# Debug
+st.subheader("DEBUG — Verificando colunas da planilha")
+st.write("Quantidade de colunas:", len(df.columns))
+st.write("Nomes das colunas:", df.columns.tolist())
+st.write("Prévia dos dados:")
+st.write(df.head())
+
