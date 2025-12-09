@@ -150,42 +150,38 @@ if class_filter != "Todos":
     df_dia = df_dia[df_dia["Classificação"] == class_filter]
 
 # ------------------------------
-# Exibir Cards
-# ------------------------------
-# ------------------------------
-# Exibir Cards QUADRADOS EM GRID
+# EXIBIÇÃO DOS CARDS (SEÇÃO COMPLETA)
 # ------------------------------
 
 st.subheader("📋 Tarefas do Dia")
 
-# Se filtro for Dormente → ignorar metas e usar base completa
+# Se filtro for Dormente → mostrar diretamente da base completa
 if class_filter == "Dormente":
     df_dia = base[base["Classificação"] == "Dormente"]
 
-if df_dia.empty:
-    st.info("Nenhuma tarefa para hoje com os critérios selecionados.")
-else:
-    
-    # CSS para grid de cards
-   st.markdown("""
+# CSS dos cards quadrados
+st.markdown("""
 <style>
 .grid-container {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     grid-gap: 18px;
     justify-items: center;
+    margin-top: 20px;
 }
 
 .card {
     background-color: #101010;
     width: 300px;
-    height: 300px;                  /* CARD QUADRADO */
+    height: 300px;       
     padding: 18px;
     border-radius: 14px;
     border: 1px solid #1F1F1F;
+
     display: flex;
     flex-direction: column;
-    justify-content: space-between; /* Para que o botão fique no final */
+    justify-content: space-between;
+    box-shadow: 0px 0px 8px rgba(255,255,255,0.05);
 }
 
 .card h3 {
@@ -198,11 +194,56 @@ else:
     margin: 6px 0;
     font-size: 14px;
 }
+.button-wrapper {
+    text-align: center;
+}
+.button-finish {
+    background-color: #0066FF;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: none;
+}
 </style>
 """, unsafe_allow_html=True)
 
-        # botão concluir fora do HTML dentro do fluxo
-        if st.button(f"✔ Concluir {row['Cliente']}", key=f"btn_{idx}"):
+
+# ------------------------------
+# Renderização dos Cards
+# ------------------------------
+
+if df_dia.empty:
+    st.info("Nenhuma tarefa para hoje com os critérios selecionados.")
+else:
+
+    st.markdown('<div class="grid-container">', unsafe_allow_html=True)
+
+    for idx, row in df_dia.iterrows():
+
+        dias = int(row["Dias desde compra"]) if not pd.isna(row["Dias desde compra"]) else "—"
+        valor = f"R$ {float(row['Valor']):.2f}" if pd.notna(row["Valor"]) else "—"
+
+        st.markdown(f"""
+        <div class="card">
+            <div>
+                <h3>👤 {row['Cliente']}</h3>
+                <p>📱 {row['Telefone']}</p>
+                <p>🏷 Classificação: {row['Classificação']}</p>
+                <p>💰 Valor gasto: {valor}</p>
+                <p>⏳ Dias desde compra: {dias}</p>
+            </div>
+
+            <div class="button-wrapper">
+                <button class="button-finish" onclick="document.getElementById('btn_{idx}').click();">
+                    ✔ Concluir
+                </button>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Botão real do Streamlit (oculto)
+        if st.button("✔", key=f"btn_{idx}", help="Concluir tarefa"):
             concluir(row["Telefone"])
 
     st.markdown("</div>", unsafe_allow_html=True)
