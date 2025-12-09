@@ -8,7 +8,7 @@ import streamlit.components.v1 as components
 # ------------------------------
 st.set_page_config(page_title="CRM Sportech", page_icon="📅", layout="wide")
 
-# Tema escuro básico
+# Tema escuro de fundo
 st.markdown("""
 <style>
 [data-testid="stAppViewContainer"] {
@@ -33,19 +33,21 @@ SHEET_NAME = "Total"
 
 df = load_sheet(SHEET_ID, SHEET_NAME)
 
-
 # ------------------------------
-# Mapear colunas (A–I)
+# Mapear colunas (usando índices A–…)
 # ------------------------------
-col_data = df.iloc[:, 0]      # A - Data
-col_nome = df.iloc[:, 1]      # B - Nome
-col_email = df.iloc[:, 2]     # C - Email
-col_valor = df.iloc[:, 3]     # D - Valor gasto total
-col_tel = df.iloc[:, 4]       # E - Telefone
-col_compras = df.iloc[:, 5]   # F - Nº compras
-col_class = df.iloc[:, 6]     # G - Classificação
-col_dias = df.iloc[:, 8]      # I - Dias desde a última compra  **CORRETO**
+col_data   = df.iloc[:, 0]   # A - Data
+col_nome   = df.iloc[:, 1]   # B - Nome
+col_email  = df.iloc[:, 2]   # C - Email
+col_valor  = df.iloc[:, 3]   # D - Valor gasto total
+col_tel    = df.iloc[:, 4]   # E - Telefone
+col_compras = df.iloc[:, 5]  # F - Nº compras
+col_class  = df.iloc[:, 6]   # G - Classificação
 
+# Coluna de dias desde a última compra:
+# -> pega SEMPRE a última coluna da planilha (onde está sua fórmula)
+col_dias_raw = df.iloc[:, -1]          # texto exatamente como está na planilha
+col_dias_num = pd.to_numeric(col_dias_raw, errors="coerce")  # versão numérica p/ filtros
 
 # ------------------------------
 # Criar base limpa
@@ -58,7 +60,8 @@ base = pd.DataFrame({
     "Telefone": col_tel.astype(str),
     "Compras": col_compras,
     "Classificação": col_class,
-    "Dias desde compra": col_dias
+    "Dias desde compra": col_dias_raw,       # exibição
+    "Dias desde compra_num": col_dias_num    # lógica (>=15, ordenação)
 })
 
 
@@ -93,7 +96,7 @@ st.subheader("⚙️ Configurações do dia")
 c1, c2, c3 = st.columns(3)
 
 meta_novos = c1.number_input("Meta de Check-in (Novos)", value=10, min_value=0)
-meta_prom = c2.number_input("Promissores por dia", value=20, min_value=0)
+meta_prom  = c2.number_input("Promissores por dia", value=20, min_value=0)
 meta_leais = c3.number_input("Leais + Campeões por dia", value=10, min_value=0)
 
 
@@ -101,21 +104,20 @@ meta_leais = c3.number_input("Leais + Campeões por dia", value=10, min_value=0)
 # Seleção de tarefas do dia
 # ------------------------------
 
-# Novos com +15 dias
-novos = base[(base["Classificação"] == "Novo") & (base["Dias desde compra"] >= 15)]
-novos = novos.sort_values("Dias desde compra", ascending=False).head(meta_novos)
+# Novos com +15 dias (usando coluna numérica)
+novos = base[(base["Classificação"] == "Novo") & (base["Dias desde compra_num"] >= 15)]
+novos = novos.sort_values("Dias desde compra_num", ascending=False).head(meta_novos)
 
 # Promissores
 prom = base[base["Classificação"] == "Promissor"]
-prom = prom.sort_values("Dias desde compra", ascending=False).head(meta_prom)
+prom = prom.sort_values("Dias desde compra_num", ascending=False).head(meta_prom)
 
 # Leais + Campeões
 leal_camp = base[base["Classificação"].isin(["Leal", "Campeão"])]
-leal_camp = leal_camp.sort_values("Dias desde compra", ascending=False).head(meta_leais)
+leal_camp = leal_camp.sort_values("Dias desde compra_num", ascending=False).head(meta_leais)
 
 # Em risco
-risco = base[base["Classificação"] == "Em risco"].sort_values("Dias desde compra")
-
+risco = base[base["Classificação"] == "Em risco"].sort_values("Dias desde compra_num")
 
 # Montar lista final
 frames = []
@@ -149,6 +151,10 @@ df_dia = df_dia[~df_dia["Telefone"].isin(st.session_state["concluidos"])]
 if class_filter != "Todos":
     df_dia = df_dia[df_dia["Classificação"] == class_filter]
 
+# Se filtro for Dormente, ignora metas e pega direto da base
+if class_filter == "Dormente":
+    df_dia = base[base["Classificação"] == "Dormente"]
+
 
 # ------------------------------
 # Função formatar valor
@@ -161,6 +167,16 @@ def format_valor(v):
         return f"R$ {float(v):.2f}"
     except:
         return "—"
+
+
+# ------------------------------
+# Se não houver tarefas
+# ------------------------------
+st.subheader("📋 Tarefas do Dia")
+
+if df_dia.empty:
+    st.info("Nenhuma tarefa encontrada para hoje.")
+    st.stop()
 
 
 # ------------------------------
@@ -224,6 +240,7 @@ html_cards = css + "<div class='grid-container'>"
 for idx, row in df_dia.iterrows():
 
     valor = format_valor(row["Valor"])
+    # aqui usamos exatamente o que veio da planilha (coluna I)
     dias = row["Dias desde compra"] if pd.notna(row["Dias desde compra"]) else "—"
 
     html_cards += f"""
@@ -253,7 +270,6 @@ html_cards += "</div>"
 # Renderizar HTML
 # ------------------------------
 components.html(html_cards, height=1600, scrolling=True)
-
 
 # ------------------------------
 # Botões ocultos de conclusão
