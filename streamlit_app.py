@@ -74,7 +74,13 @@ df = load_sheet(SHEET2_ID, DEFAULT_SHEET2_SHEETNAME)
 df["data_dt"] = pd.to_datetime(df.iloc[:, 0], errors="coerce")
 df["Dias desde compra"] = (datetime.today() - df["data_dt"]).dt.days
 
-df.columns = ["Data", "Cliente", "Email", "Valor", "Telefone", "Compras", "Classificação", "data_dt", "Dias desde compra"]
+# Renomear corretamente as 7 colunas originais
+df.columns = ["Data", "Cliente", "Email", "Valor", "Telefone", "Compras", "Classificação"]
+
+# Criar colunas extras
+df["data_dt"] = pd.to_datetime(df["Data"], errors="coerce")
+df["Dias desde compra"] = (datetime.today() - df["data_dt"]).dt.days
+
 
 # ----------------------------------------
 # Título + Filtro
