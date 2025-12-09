@@ -1,32 +1,23 @@
 import streamlit as st
 import pandas as pd
 from urllib.parse import quote
-from datetime import datetime
+import streamlit.components.v1 as components
 
 # ------------------------------
 # Configuração da página
 # ------------------------------
 st.set_page_config(page_title="CRM Sportech", page_icon="📅", layout="wide")
 
-# Tema escuro
+# Tema escuro básico
 st.markdown("""
 <style>
 [data-testid="stAppViewContainer"] {
     background-color: #000000;
     color: #FFFFFF;
 }
-.card {
-    background-color: #0F0F0F;
-    padding: 18px;
-    border-radius: 14px;
-    border: 1px solid #1F1F1F;
-    margin-bottom: 12px;
-}
-.card h3 {
-    margin-bottom: 6px;
-}
 </style>
 """, unsafe_allow_html=True)
+
 
 # ------------------------------
 # Função para carregar planilha
@@ -42,8 +33,9 @@ SHEET_NAME = "Total"
 
 df = load_sheet(SHEET_ID, SHEET_NAME)
 
+
 # ------------------------------
-# Mapear colunas por índice (A–G)
+# Mapear colunas (A–I)
 # ------------------------------
 col_data = df.iloc[:, 0]      # A - Data
 col_nome = df.iloc[:, 1]      # B - Nome
@@ -52,10 +44,12 @@ col_valor = df.iloc[:, 3]     # D - Valor gasto total
 col_tel = df.iloc[:, 4]       # E - Telefone
 col_compras = df.iloc[:, 5]   # F - Nº compras
 col_class = df.iloc[:, 6]     # G - Classificação
-col_dias = df.iloc[:, 9]    # I - Dias desde a ultima compra
+col_dias = df.iloc[:, 8]      # I - Dias desde a última compra  **CORRETO**
 
 
-# Criar dataframe base sem renomear colunas originais
+# ------------------------------
+# Criar base limpa
+# ------------------------------
 base = pd.DataFrame({
     "Data": pd.to_datetime(col_data, errors="coerce"),
     "Cliente": col_nome,
@@ -63,9 +57,10 @@ base = pd.DataFrame({
     "Valor": col_valor,
     "Telefone": col_tel.astype(str),
     "Compras": col_compras,
-    "Classificação": col_class
-    "Dias desde a ultima compra": col_dias
+    "Classificação": col_class,
+    "Dias desde compra": col_dias
 })
+
 
 # ------------------------------
 # Estado de concluídos
@@ -76,6 +71,7 @@ if "concluidos" not in st.session_state:
 def concluir(tel):
     st.session_state["concluidos"].add(str(tel))
     st.rerun()
+
 
 # ------------------------------
 # Layout – Título + Filtro
@@ -88,8 +84,9 @@ class_filter = st.radio(
     horizontal=True
 )
 
+
 # ------------------------------
-# Configurações do dia (metas)
+# Configurações do dia
 # ------------------------------
 st.subheader("⚙️ Configurações do dia")
 
@@ -98,6 +95,7 @@ c1, c2, c3 = st.columns(3)
 meta_novos = c1.number_input("Meta de Check-in (Novos)", value=10, min_value=0)
 meta_prom = c2.number_input("Promissores por dia", value=20, min_value=0)
 meta_leais = c3.number_input("Leais + Campeões por dia", value=10, min_value=0)
+
 
 # ------------------------------
 # Seleção de tarefas do dia
@@ -115,10 +113,11 @@ prom = prom.sort_values("Dias desde compra", ascending=False).head(meta_prom)
 leal_camp = base[base["Classificação"].isin(["Leal", "Campeão"])]
 leal_camp = leal_camp.sort_values("Dias desde compra", ascending=False).head(meta_leais)
 
-# Em risco (todos)
+# Em risco
 risco = base[base["Classificação"] == "Em risco"].sort_values("Dias desde compra")
 
-# Montar lista final do dia
+
+# Montar lista final
 frames = []
 
 if not novos.empty:
@@ -150,13 +149,10 @@ df_dia = df_dia[~df_dia["Telefone"].isin(st.session_state["concluidos"])]
 if class_filter != "Todos":
     df_dia = df_dia[df_dia["Classificação"] == class_filter]
 
-import streamlit.components.v1 as components
 
-import streamlit.components.v1 as components
-
-# ===================================================================
-# FUNÇÃO PARA FORMATAR VALOR
-# ===================================================================
+# ------------------------------
+# Função formatar valor
+# ------------------------------
 def format_valor(v):
     try:
         if pd.isna(v):
@@ -166,23 +162,10 @@ def format_valor(v):
     except:
         return "—"
 
-# ===================================================================
-# LER DIAS DESDE A COMPRA DA COLUNA I (ÍNDICE 8)
-# ===================================================================
- "Dias desde a ultima compra": col_dias = df.iloc[:, 9]
 
-st.subheader("📋 Tarefas do Dia")
-
-if class_filter == "Dormente":
-    df_dia = base[base["Classificação"] == "Dormente"]
-
-if df_dia.empty:
-    st.info("Nenhuma tarefa encontrada para hoje.")
-    st.stop()
-
-# ===================================================================
-# CSS — BLOCO FECHADO CORRETAMENTE
-# ===================================================================
+# ------------------------------
+# CSS dos cards
+# ------------------------------
 css = """
 <style>
 
@@ -200,13 +183,10 @@ css = """
     padding: 16px;
     border-radius: 14px;
     border: 1px solid #dddddd;
-
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-
     box-shadow: 0px 2px 8px rgba(0,0,0,0.15);
-
     opacity: 1;
     transition: opacity 0.5s ease-out;
 }
@@ -236,9 +216,9 @@ css = """
 </style>
 """
 
-# ===================================================================
-# GERAR HTML COMPLETO
-# ===================================================================
+# ------------------------------
+# Gerar HTML dos cards
+# ------------------------------
 html_cards = css + "<div class='grid-container'>"
 
 for idx, row in df_dia.iterrows():
@@ -258,7 +238,7 @@ for idx, row in df_dia.iterrows():
 
         <button class='button-finish' onclick="
             document.getElementById('card_{idx}').classList.add('fade-out');
-            setTimeout(function(){{
+            setTimeout(function() {{
                 window.parent.document.getElementById('btn_{idx}').click();
             }}, 450);
         ">
@@ -269,14 +249,15 @@ for idx, row in df_dia.iterrows():
 
 html_cards += "</div>"
 
-# ===================================================================
-# RENDERIZAR HTML PURO
-# ===================================================================
+# ------------------------------
+# Renderizar HTML
+# ------------------------------
 components.html(html_cards, height=1600, scrolling=True)
 
-# ===================================================================
-# BOTÕES STREAMLIT OCULTOS
-# ===================================================================
+
+# ------------------------------
+# Botões ocultos de conclusão
+# ------------------------------
 for idx, row in df_dia.iterrows():
-    if st.button("✔", key=f"btn_{idx}", help="Concluir tarefa"):
+    if st.button("✔", key=f"btn_{idx}"):
         concluir(row["Telefone"])
