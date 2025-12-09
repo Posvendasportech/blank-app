@@ -35,58 +35,75 @@ def load_sheet(sheet_id, sheet_name):
 # ----------------------------------------
 df_leads = load_sheet(SHEET2_ID, DEFAULT_SHEET2_SHEETNAME)
 
-# ----------------------------------------
-# 📌 Título da página
-# ----------------------------------------
 st.title("📅 Tarefas do Dia – CRM Sportech")
+st.subheader("Selecione a classificação dos clientes que deseja visualizar")
 
-if df_leads.empty:
-    st.warning("⚠️ A planilha de leads não pôde ser carregada.")
+# ------------------------------
+# 🔘 Filtro de classificação
+# ------------------------------
+class_filter = st.radio(
+    "Filtrar por classificação:",
+    ["Todos", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"],
+    horizontal=True
+)
+
+# ------------------------------
+# 🧠 Processar colunas pelo índice (A-G)
+# ------------------------------
+col_data = df_leads.iloc[:, 0]          # A - Data do último pedido
+col_nome = df_leads.iloc[:, 1]          # B
+col_email = df_leads.iloc[:, 2]         # C
+col_valor = df_leads.iloc[:, 3]         # D
+col_telefone = df_leads.iloc[:, 4]      # E
+col_compras = df_leads.iloc[:, 5]       # F
+col_classificacao = df_leads.iloc[:, 6] # G
+
+# transformar data para datetime
+df_leads["data_dt"] = pd.to_datetime(col_data, errors="coerce")
+
+# calcular dias desde a última compra
+df_leads["dias_desde_compra"] = (datetime.today() - df_leads["data_dt"]).dt.days
+
+# aplicar filtro por classificação
+if class_filter != "Todos":
+    df_leads_filtered = df_leads[df_leads.iloc[:, 6] == class_filter]
 else:
-    st.subheader("Lista de tarefas (baseada na planilha de leads)")
+    df_leads_filtered = df_leads.copy()
 
-    # ----------------------------------------
-    # 📝 Mapeamento das colunas por índice
-    # ----------------------------------------
-    col_data = df_leads.iloc[:, 0]          # A - Data
-    col_nome = df_leads.iloc[:, 1]          # B - Nome
-    col_email = df_leads.iloc[:, 2]         # C - Email
-    col_valor = df_leads.iloc[:, 3]         # D - Valor total gasto
-    col_telefone = df_leads.iloc[:, 4]      # E - Telefone
-    col_compras = df_leads.iloc[:, 5]       # F - Nº de compras
-    col_classificacao = df_leads.iloc[:, 6] # G - Classificação
+# regra especial para NOVOS → só aparecem se passaram 15 dias desde a compra
+if class_filter == "Novo":
+    df_leads_filtered = df_leads_filtered[df_leads_filtered["dias_desde_compra"] >= 15]
 
-    # ----------------------------------------
-    # 🛠 Criar a lista de tarefas iniciais
-    # ----------------------------------------
-    df_tasks = pd.DataFrame({
-        "Cliente": col_nome.head(10),
-        "Telefone": col_telefone.head(10),
-        "Compras": col_compras.head(10),
-        "Total gasto": col_valor.head(10),
-        "Classificação": col_classificacao.head(10),
-        "Tarefa": ["Check-in inicial"] * 10,
-        "Prioridade": ["Alta"] * 10,
-        "Status": ["Pendente"] * 10
-    })
+# criar df_tasks com base no filtrado
+df_tasks = pd.DataFrame({
+    "Cliente": df_leads_filtered.iloc[:, 1],
+    "Telefone": df_leads_filtered.iloc[:, 4],
+    "Compras": df_leads_filtered.iloc[:, 5],
+    "Valor": df_leads_filtered.iloc[:, 3],
+    "Classificação": df_leads_filtered.iloc[:, 6],
+    "Dias desde compra": df_leads_filtered["dias_desde_compra"],
+    "Tarefa": ["Check-in"] * len(df_leads_filtered),
+    "Prioridade": ["Alta"] * len(df_leads_filtered),
+    "Status": ["Pendente"] * len(df_leads_filtered)
+})
 
-    # ----------------------------------------
-    # 🖥️ Exibir cada tarefa com botão de concluir
-    # ----------------------------------------
-    for idx, row in df_tasks.iterrows():
-        cols = st.columns([2, 2, 1, 1, 2, 1, 1])  # Layout de colunas
+st.markdown("---")
+st.subheader("📌 Tarefas pendentes")
 
-        cols[0].write(row["Cliente"])
-        cols[1].write(row["Telefone"])
-        cols[2].write(row["Compras"])
-        cols[3].write(f"R$ {row['Total gasto']}")
-        cols[4].write(row["Tarefa"])
-        cols[5].write(row["Prioridade"])
+# ------------------------------
+# Renderização das tarefas
+# ------------------------------
+for idx, row in df_tasks.iterrows():
+    with st.container():
+        cols = st.columns([2, 2, 1, 1, 2, 1, 1])
+
+        cols[0].markdown(f"**👤 {row['Cliente']}**")
+        cols[1].markdown(f"📱 {row['Telefone']}")
+        cols[2].write(f"🛒 {row['Compras']}")
+        cols[3].write(f"💰 R$ {row['Valor']}")
+        cols[4].write(f"📝 {row['Tarefa']}")
+        cols[5].write("🔴 Alta")
         cols[6].write(row["Status"])
 
-        # Botão de concluir tarefa
-        if cols[6].button("Concluir", key=f"done_{idx}"):
-            st.success(
-                f"✔️ Tarefa concluída para: {row['Cliente']} ({row['Telefone']})"
-            )
-            # Depois, aqui vamos remover da lista e registrar na planilha de agendamentos
+        if cols[6].button("✔ Concluir", key=f"done_{idx}"):
+            st.success(f"Tarefa concluída para {row['Cliente']}!")
