@@ -163,16 +163,14 @@ def format_valor(v):
 
 
 # ===================================================================
-# EXIBIÇÃO DOS CARDS (SEÇÃO COMPLETA)
+# EXIBIÇÃO DOS CARDS (GRID CORRIGIDA)
 # ===================================================================
 
 st.subheader("📋 Tarefas do Dia")
 
-# Se filtro for Dormente → mostrar diretamente da base
 if class_filter == "Dormente":
     df_dia = base[base["Classificação"] == "Dormente"]
 
-# Caso ainda esteja vazio após filtragem
 if df_dia.empty:
     st.info("Nenhuma tarefa para hoje com os critérios selecionados.")
     st.stop()
@@ -182,18 +180,16 @@ if df_dia.empty:
 # ===================================================================
 st.markdown("""
 <style>
-
 .grid-container {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     grid-gap: 20px;
-    justify-items: center;
-    margin-top: 20px;
+    width: 100%;
 }
 
 .card {
     background-color: #111111;
-    width: 300px;
+    width: 100%;
     height: 300px; 
     padding: 18px;
     border-radius: 14px;
@@ -202,29 +198,9 @@ st.markdown("""
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-
-    transition: 0.2s ease-in-out;
 }
-
-.card:hover {
-    transform: scale(1.03);
-    border-color: #444444;
-}
-
-.card h3 {
-    margin: 0;
-    padding: 0;
-    font-size: 20px;
-}
-
-.card p {
-    margin: 6px 0;
-    font-size: 14px;
-}
-
-.button-wrapper {
-    text-align: center;
-}
+.card h3 { margin: 0; font-size: 20px; }
+.card p { margin: 6px 0; font-size: 14px; }
 
 .button-finish {
     background-color: #0066FF;
@@ -233,35 +209,24 @@ st.markdown("""
     border-radius: 8px;
     cursor: pointer;
     border: none;
+    width: 100%;
     font-size: 14px;
 }
-.button-finish:hover {
-    background-color: #004FCC;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
-
 # ===================================================================
-# RENDERIZAÇÃO DOS CARDS
+# GERAR HTML COMPLETO DOS CARDS
 # ===================================================================
-
-st.markdown('<div class="grid-container">', unsafe_allow_html=True)
+cards_html = '<div class="grid-container">'
 
 for idx, row in df_dia.iterrows():
 
-    dias = (
-        int(row["Dias desde compra"])
-        if not pd.isna(row["Dias desde compra"])
-        else "—"
-    )
-
+    dias = int(row["Dias desde compra"]) if pd.notna(row["Dias desde compra"]) else "—"
     valor = format_valor(row["Valor"])
 
-    st.markdown(f"""
+    cards_html += f"""
     <div class="card">
-        
         <div>
             <h3>👤 {row['Cliente']}</h3>
             <p>📱 {row['Telefone']}</p>
@@ -269,18 +234,22 @@ for idx, row in df_dia.iterrows():
             <p>💰 Valor gasto: {valor}</p>
             <p>⏳ Dias desde compra: {dias}</p>
         </div>
-
-        <div class="button-wrapper">
-            <button class="button-finish" onclick="document.getElementById('btn_{idx}').click();">
-                ✔ Concluir
-            </button>
-        </div>
-
+        <button class="button-finish" onclick="document.getElementById('btn_{idx}').click();">
+            ✔ Concluir
+        </button>
     </div>
-    """, unsafe_allow_html=True)
+    """
 
-    # Botão real do Streamlit (oculto)
+cards_html += "</div>"
+
+# ===================================================================
+# RENDERIZAR GRID COMPLETA DE UMA VEZ
+# ===================================================================
+st.markdown(cards_html, unsafe_allow_html=True)
+
+# ===================================================================
+# BOTÕES REAIS (OCULTOS)
+# ===================================================================
+for idx, row in df_dia.iterrows():
     if st.button("✔", key=f"btn_{idx}", help="Concluir tarefa"):
         concluir(row["Telefone"])
-
-st.markdown("</div>", unsafe_allow_html=True)
