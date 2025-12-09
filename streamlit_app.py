@@ -1,39 +1,41 @@
-import streamlit as st 
+import streamlit as st
 import pandas as pd
 from urllib.parse import quote
-import streamlit.components.v1 as components
 
-# ------------------------------
-# Configuração da página
-# ------------------------------
-st.set_page_config(page_title="CRM Sportech", page_icon="📅", layout="wide")
+# =============== TESTE DE CARREGAMENTO REAL DA PLANILHA ===============
 
-# Tema escuro básico
-st.markdown("""
-<style>
-[data-testid="stAppViewContainer"] {
-    background-color: #000000;
-    color: #FFFFFF;
-}
-</style>
-""", unsafe_allow_html=True)
+st.title("🔍 Teste de Atualização da Planilha — CRM Sportech")
 
-
-# ------------------------------
-# Função para carregar planilha
-# ------------------------------
-@st.cache_data
+# FORÇAR NENHUM CACHE
 def load_sheet(sheet_id, sheet_name):
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={quote(sheet_name)}"
     return pd.read_csv(url)
 
-
 SHEET_ID = "1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc"
 SHEET_NAME = "Total"
 
-st.subheader("🔍 Teste — Data/Hora da última linha da planilha")
+# Carrega a planilha
+df = load_sheet(SHEET_ID, SHEET_NAME)
 
-try:
-    st.write("Última linha (raw):", df.tail(1))
-except Exception as e:
-    st.error(e)
+# ---------- TESTE 1: Mostrar última linha recebida ----------
+st.subheader("📄 Última linha da planilha (CSV real importado)")
+st.write(df.tail(1))
+
+# ---------- TESTE 2: Mostrar colunas reais importadas ----------
+st.subheader("📌 Colunas recebidas pelo Streamlit")
+st.write(df.columns.tolist())
+
+# ---------- TESTE 3: Mostrar 5 primeiras linhas ----------
+st.subheader("🔎 Primeiras linhas da planilha")
+st.write(df.head())
+
+# ---------- TESTE 4: Mostrar quantidade de colunas ----------
+st.subheader("🔢 Quantidade de colunas")
+st.write(len(df.columns))
+
+# ---------- TESTE 5: Timestamp para confirmar atualização ----------
+import time
+st.subheader("⏱ Timestamp da execução")
+st.write(time.time())
+
+st.success("Pronto! Agora altere a planilha e clique em *Reload* no Streamlit.")
