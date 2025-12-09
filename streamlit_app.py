@@ -46,6 +46,31 @@ col_compras = df.iloc[:, 5]   # F - Nº compras
 col_class = df.iloc[:, 6]     # G - Classificação
 col_dias = df.iloc[:, 8]      # I - Dias desde a última compra
 
+# ------------------------------
+# Criar coluna numérica segura de dias
+# ------------------------------
+def converte_dias(v):
+    try:
+        v = str(v).strip().replace(",", ".")
+        v = float(v)
+        return int(round(v))
+    except:
+        return None   # Nunca retorna string → evita erros do pandas
+
+base = pd.DataFrame({
+    "Data": pd.to_datetime(col_data, errors="coerce"),
+    "Cliente": col_nome,
+    "Email": col_email,
+    "Valor": col_valor,
+    "Telefone": col_tel.astype(str),
+    "Compras": col_compras,
+    "Classificação": col_class,
+})
+
+# cria coluna numérica final
+base["Dias_num"] = col_dias.apply(converte_dias)
+
+
 
 # ------------------------------
 # Função para arredondar dias (corrige 95,28 → 95)
