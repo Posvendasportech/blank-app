@@ -167,43 +167,39 @@ if df_dia.empty:
 else:
     
     # CSS para grid de cards
-    st.markdown("""
-    <style>
-    .grid-container {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        grid-gap: 16px;
-    }
-    .card {
-        background-color: #101010;
-        padding: 16px;
-        border-radius: 12px;
-        border: 1px solid #1F1F1F;
-        min-height: 150px;
-    }
-    .card h3 {
-        margin: 0;
-        padding: 0;
-        font-size: 20px;
-    }
-    .card p {
-        margin: 4px 0;
-        font-size: 14px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+   st.markdown("""
+<style>
+.grid-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-gap: 18px;
+    justify-items: center;
+}
 
-    st.markdown('<div class="grid-container">', unsafe_allow_html=True)
+.card {
+    background-color: #101010;
+    width: 300px;
+    height: 300px;                  /* CARD QUADRADO */
+    padding: 18px;
+    border-radius: 14px;
+    border: 1px solid #1F1F1F;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; /* Para que o botão fique no final */
+}
 
-    for idx, row in df_dia.iterrows():
+.card h3 {
+    margin: 0;
+    padding: 0;
+    font-size: 20px;
+}
 
-        st.markdown(f"""
-        <div class="card">
-            <h3>👤 {row['Cliente']}</h3>
-            <p>📱 {row['Telefone']}</p>
-            <p>🏷 Classificação: {row['Classificação']}</p>
-        </div>
-        """, unsafe_allow_html=True)
+.card p {
+    margin: 6px 0;
+    font-size: 14px;
+}
+</style>
+""", unsafe_allow_html=True)
 
         # botão concluir fora do HTML dentro do fluxo
         if st.button(f"✔ Concluir {row['Cliente']}", key=f"btn_{idx}"):
