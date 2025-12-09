@@ -151,6 +151,8 @@ if class_filter != "Todos":
 
 import streamlit.components.v1 as components
 
+import streamlit.components.v1 as components
+
 # ===================================================================
 # FUNÇÃO PARA FORMATAR VALOR
 # ===================================================================
@@ -178,7 +180,7 @@ if df_dia.empty:
     st.stop()
 
 # ===================================================================
-# CSS ATUALIZADO — CARDS BRANCOS + ANIMAÇÃO
+# CSS — BLOCO FECHADO CORRETAMENTE
 # ===================================================================
 css = """
 <style>
@@ -202,4 +204,78 @@ css = """
     flex-direction: column;
     justify-content: space-between;
 
-    box-shadow: 0px 2px 8px rgba
+    box-shadow: 0px 2px 8px rgba(0,0,0,0.15);
+
+    opacity: 1;
+    transition: opacity 0.5s ease-out;
+}
+
+.card.fade-out {
+    opacity: 0;
+}
+
+.card h3 { margin: 0; font-size: 19px; color: #000 }
+.card p { margin: 4px 0; font-size: 13px; color: #222 }
+
+.button-finish {
+    background-color: #0066FF;
+    color: white;
+    padding: 8px 10px;
+    border-radius: 8px;
+    width: 100%;
+    font-size: 14px;
+    cursor: pointer;
+    border: none;
+}
+
+.button-finish:hover {
+    background-color: #004FCC;
+}
+
+</style>
+"""
+
+# ===================================================================
+# GERAR HTML COMPLETO
+# ===================================================================
+html_cards = css + "<div class='grid-container'>"
+
+for idx, row in df_dia.iterrows():
+
+    valor = format_valor(row["Valor"])
+    dias = row["Dias desde compra"] if pd.notna(row["Dias desde compra"]) else "—"
+
+    html_cards += f"""
+    <div id='card_{idx}' class='card'>
+        <div>
+            <h3>👤 {row['Cliente']}</h3>
+            <p>📱 {row['Telefone']}</p>
+            <p>🏷 {row['Classificação']}</p>
+            <p>💰 {valor}</p>
+            <p>⏳ {dias} dias desde compra</p>
+        </div>
+
+        <button class='button-finish' onclick="
+            document.getElementById('card_{idx}').classList.add('fade-out');
+            setTimeout(function(){{
+                window.parent.document.getElementById('btn_{idx}').click();
+            }}, 450);
+        ">
+            ✔ Concluir
+        </button>
+    </div>
+    """
+
+html_cards += "</div>"
+
+# ===================================================================
+# RENDERIZAR HTML PURO
+# ===================================================================
+components.html(html_cards, height=1600, scrolling=True)
+
+# ===================================================================
+# BOTÕES STREAMLIT OCULTOS
+# ===================================================================
+for idx, row in df_dia.iterrows():
+    if st.button("✔", key=f"btn_{idx}", help="Concluir tarefa"):
+        concluir(row["Telefone"])
