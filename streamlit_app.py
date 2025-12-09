@@ -168,7 +168,7 @@ def format_valor(v):
 # ===================================================================
 # LER DIAS DESDE A COMPRA DA COLUNA I (ÍNDICE 8)
 # ===================================================================
-base["Dias desde compra"] = df.iloc[:, 8]
+base["Dias desde compra"] = df.iloc[:, 9]
 
 st.subheader("📋 Tarefas do Dia")
 
