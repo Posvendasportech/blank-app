@@ -149,23 +149,10 @@ df_dia = df_dia[~df_dia["Telefone"].isin(st.session_state["concluidos"])]
 if class_filter != "Todos":
     df_dia = df_dia[df_dia["Classificação"] == class_filter]
 
-# ===================================================================
-# FUNÇÃO SEGURA DE FORMATAÇÃO DE VALOR
-# ===================================================================
-def format_valor(v):
-    try:
-        if pd.isna(v):
-            return "—"
-        v = str(v).replace("R$", "").replace(".", "").replace(",", ".").strip()
-        return f"R$ {float(v):.2f}"
-    except:
-        return "—"
-
-
 import streamlit.components.v1 as components
 
 # ===================================================================
-# FUNÇÃO SEGURA DE FORMATAÇÃO DE VALOR
+# FUNÇÃO PARA FORMATAR VALOR
 # ===================================================================
 def format_valor(v):
     try:
@@ -176,16 +163,10 @@ def format_valor(v):
     except:
         return "—"
 
-
 # ===================================================================
-# LER DIAS DESDE COMPRA DIRETO DA COLUNA I (ÍNDICE 8)
+# LER DIAS DESDE A COMPRA DA COLUNA I (ÍNDICE 8)
 # ===================================================================
-base["Dias desde compra"] = df.iloc[:, 8]  # agora lendo da planilha
-
-
-# ===================================================================
-# EXIBIÇÃO DOS CARDS
-# ===================================================================
+base["Dias desde compra"] = df.iloc[:, 8]
 
 st.subheader("📋 Tarefas do Dia")
 
@@ -196,86 +177,29 @@ if df_dia.empty:
     st.info("Nenhuma tarefa encontrada para hoje.")
     st.stop()
 
-
 # ===================================================================
-# CSS DOS CARDS
+# CSS ATUALIZADO — CARDS BRANCOS + ANIMAÇÃO
 # ===================================================================
 css = """
 <style>
+
 .grid-container {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    grid-gap: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-gap: 28px;
     width: 100%;
 }
 
 .card {
-    background-color: #111111;
+    background-color: #FFFFFF;
     width: 100%;
-    height: 260px;
-    padding: 18px;
+    height: 230px;
+    padding: 16px;
     border-radius: 14px;
-    border: 1px solid #222222;
+    border: 1px solid #dddddd;
 
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-}
 
-.card h3 { margin: 0; font-size: 20px; }
-.card p { margin: 6px 0; font-size: 14px; }
-
-.button-finish {
-    background-color: #0066FF;
-    color: white;
-    padding: 10px 14px;
-    border-radius: 8px;
-    width: 100%;
-    font-size: 14px;
-    cursor: pointer;
-    border: none;
-}
-</style>
-"""
-
-# ===================================================================
-# GERAR TODA A GRADE EM UM BLOCÃO HTML
-# ===================================================================
-html_cards = css + '<div class="grid-container">'
-
-for idx, row in df_dia.iterrows():
-
-    valor = format_valor(row["Valor"])
-    dias = row["Dias desde compra"] if pd.notna(row["Dias desde compra"]) else "—"
-
-    html_cards += f"""
-    <div class="card">
-        <div>
-            <h3>👤 {row['Cliente']}</h3>
-            <p>📱 {row['Telefone']}</p>
-            <p>🏷 Classificação: {row['Classificação']}</p>
-            <p>💰 Valor gasto: {valor}</p>
-            <p>⏳ Dias desde compra: {dias}</p>
-        </div>
-
-        <button class="button-finish" onclick="document.getElementById('btn_{idx}').click();">
-            ✔ Concluir
-        </button>
-    </div>
-    """
-
-html_cards += "</div>"
-
-
-# ===================================================================
-# RENDERIZAR HTML PURO (SEM STREAMLIT INTERFERIR)
-# ===================================================================
-components.html(html_cards, height=1500, scrolling=True)
-
-
-# ===================================================================
-# BOTÕES REAIS (OCULTOS)
-# ===================================================================
-for idx, row in df_dia.iterrows():
-    if st.button("✔", key=f"btn_{idx}", help="Concluir tarefa"):
-        concluir(row["Telefone"])
+    box-shadow: 0px 2px 8px rgba
