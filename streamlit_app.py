@@ -18,6 +18,48 @@ DEFAULT_SHEET2_SHEETNAME = "Total"
 # ----------------------------------------
 # 📌 Função para carregar planilhas
 # ----------------------------------------
+
+# ------------------------------
+# 📌 Criar DataFrame de tarefas leve
+# ------------------------------
+
+df_leads["data_dt"] = pd.to_datetime(df_leads.iloc[:, 0], errors="coerce")
+df_leads["dias_desde_compra"] = (datetime.today() - df_leads["data_dt"]).dt.days
+
+# Criar DF base com tarefas
+df_tasks = pd.DataFrame({
+    "Cliente": df_leads.iloc[:, 1],
+    "Telefone": df_leads.iloc[:, 4],
+    "Compras": df_leads.iloc[:, 5],
+    "Valor gasto": df_leads.iloc[:, 3],
+    "Classificação": df_leads.iloc[:, 6],
+    "Dias desde compra": df_leads["dias_desde_compra"],
+    "Tarefa": "Check-in",
+    "Prioridade": "Alta",
+})
+
+# ------------------------------
+# 📌 Aplicar filtro
+# ------------------------------
+
+if class_filter != "Todos":
+    df_tasks = df_tasks[df_tasks["Classificação"] == class_filter]
+
+# Regra para Novos → só após 15 dias
+if class_filter == "Novo":
+    df_tasks = df_tasks[df_tasks["Dias desde compra"] >= 15]
+
+# ------------------------------
+# 📌 Exibir tabela em modo turbo
+# ------------------------------
+st.dataframe(
+    df_tasks,
+    use_container_width=True,
+    hide_index=True
+)
+
+st.info(f"Total de clientes exibidos: {len(df_tasks)}")
+
 @st.cache_data
 def load_sheet(sheet_id, sheet_name):
     url = (
