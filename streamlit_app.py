@@ -88,9 +88,28 @@ col_nome = df.iloc[:, 1]       # Nome
 col_email = df.iloc[:, 2]      # Email
 col_valor = df.iloc[:, 3]      # Valor
 col_tel = df.iloc[:, 4]        # Telefone
-col_compras = df.iloc[:, 5]    # Compras
+col_compras = df.iloc[:, 5]    # Nº compras
 col_class = df.iloc[:, 6]      # Classificação
 col_dias = df.iloc[:, 8]       # Coluna I (dias desde compra)
+
+# ----------------------------------------
+# FUNÇÃO PARA FORMATAR VALORES COM SEGURANÇA
+# ----------------------------------------
+def safe_valor(v):
+    try:
+        if pd.isna(v):
+            return "—"
+
+        v = str(v).strip()
+
+        v = v.replace("R$", "").replace(" ", "")
+        v = v.replace(",", ".")
+
+        v = float(v)
+
+        return f"R$ {v:.2f}"
+    except:
+        return "—"
 
 # ----------------------------------------
 # CRIAR BASE PRINCIPAL
@@ -105,6 +124,18 @@ base = pd.DataFrame({
     "Classificação": col_class,
     "Dias desde compra": col_dias
 })
+
+# ----------------------------------------
+# ARREDONDAMENTO DOS DIAS
+# ----------------------------------------
+def safe_round(value):
+    try:
+        value = float(str(value).replace(",", "."))
+        return int(round(value))
+    except:
+        return None
+
+base["Dias arredondados"] = base["Dias desde compra"].apply(safe_round)
 
 # ----------------------------------------
 # ESTADO DE CARDS CONCLUÍDOS
@@ -142,29 +173,15 @@ meta_leais = c3.number_input("Leais + Campeões por dia", value=10, min_value=0)
 # SELEÇÃO DAS TAREFAS
 # ----------------------------------------
 
-def safe_round(value):
-    """Converte e arredonda valores da coluna I."""
-    try:
-        value = float(str(value).replace(",", "."))
-        return int(round(value))
-    except:
-        return None
-
-base["Dias arredondados"] = base["Dias desde compra"].apply(safe_round)
-
-# Novos com +15 dias
 novos = base[(base["Classificação"] == "Novo") & (base["Dias arredondados"] >= 15)]
 novos = novos.sort_values("Dias arredondados", ascending=False).head(meta_novos)
 
-# Promissores
 prom = base[base["Classificação"] == "Promissor"]
 prom = prom.sort_values("Dias arredondados", ascending=False).head(meta_prom)
 
-# Leais + Campeões
 leal_camp = base[base["Classificação"].isin(["Leal", "Campeão"])]
 leal_camp = leal_camp.sort_values("Dias arredondados", ascending=False).head(meta_leais)
 
-# Em risco
 risco = base[base["Classificação"] == "Em risco"].sort_values("Dias arredondados")
 
 frames = []
@@ -191,10 +208,8 @@ if not risco.empty:
 
 df_dia = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
-# Remover concluídos
 df_dia = df_dia[~df_dia["Telefone"].isin(st.session_state["concluidos"])]
 
-# Aplicar filtro
 if class_filter != "Todos":
     df_dia = df_dia[df_dia["Classificação"] == class_filter]
 
@@ -214,8 +229,7 @@ html_cards = "<div class='grid-container'>"
 
 for idx, row in df_dia.iterrows():
 
-    valor = f"R$ {float(str(row['Valor']).replace(',', '.')):.2f}" if pd.notna(row["Valor"]) else "—"
-
+    valor = safe_valor(row["Valor"])
     dias = row["Dias arredondados"] if pd.notna(row["Dias arredondados"]) else "—"
 
     html_cards += f"""
