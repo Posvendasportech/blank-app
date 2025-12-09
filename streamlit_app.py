@@ -1,15 +1,14 @@
-# streamlit_app.py 
 import streamlit as st
 import pandas as pd
 from urllib.parse import quote
 from datetime import datetime
 
-# ----------------------------------------
-# ⚙️ Configuração da página
-# ----------------------------------------
+# ------------------------------
+# Configuração da página
+# ------------------------------
 st.set_page_config(page_title="CRM Sportech", page_icon="📅", layout="wide")
 
-# TEMA ESCURO
+# Tema escuro
 st.markdown("""
 <style>
 [data-testid="stAppViewContainer"] {
@@ -17,7 +16,7 @@ st.markdown("""
     color: #FFFFFF;
 }
 .card {
-    background-color: #0A0A0A;
+    background-color: #0F0F0F;
     padding: 18px;
     border-radius: 14px;
     border: 1px solid #1F1F1F;
@@ -26,36 +25,50 @@ st.markdown("""
 .card h3 {
     margin-bottom: 6px;
 }
-.button-finish {
-    background-color: #0066FF;
-    color: white;
-    padding: 8px 14px;
-    border-radius: 8px;
-    border: none;
-}
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------------------------------
-# 🔗 IDs / padrões das planilhas
-# ----------------------------------------
-SHEET2_ID = "1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc"
-DEFAULT_SHEET2_SHEETNAME = "Total"
-
-# ----------------------------------------
-# 📌 Função para carregar planilhas
-# ----------------------------------------
+# ------------------------------
+# Função para carregar planilha
+# ------------------------------
 @st.cache_data
 def load_sheet(sheet_id, sheet_name):
-    url = (
-        f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?"
-        f"tqx=out:csv&sheet={quote(sheet_name)}"
-    )
+    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={quote(sheet_name)}"
     return pd.read_csv(url)
 
-# ----------------------------------------
-# Estado para tarefas concluídas (por telefone)
-# ----------------------------------------
+
+SHEET_ID = "1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc"
+SHEET_NAME = "Total"
+
+df = load_sheet(SHEET_ID, SHEET_NAME)
+
+# ------------------------------
+# Mapear colunas por índice (A–G)
+# ------------------------------
+col_data = df.iloc[:, 0]      # A - Data
+col_nome = df.iloc[:, 1]      # B - Nome
+col_email = df.iloc[:, 2]     # C - Email
+col_valor = df.iloc[:, 3]     # D - Valor gasto total
+col_tel = df.iloc[:, 4]       # E - Telefone
+col_compras = df.iloc[:, 5]   # F - Nº compras
+col_class = df.iloc[:, 6]     # G - Classificação
+
+# Criar dataframe base sem renomear colunas originais
+base = pd.DataFrame({
+    "Data": pd.to_datetime(col_data, errors="coerce"),
+    "Cliente": col_nome,
+    "Email": col_email,
+    "Valor": col_valor,
+    "Telefone": col_tel.astype(str),
+    "Compras": col_compras,
+    "Classificação": col_class
+})
+
+base["Dias desde compra"] = (datetime.today() - base["Data"]).dt.days
+
+# ------------------------------
+# Estado de concluídos
+# ------------------------------
 if "concluidos" not in st.session_state:
     st.session_state["concluidos"] = set()
 
@@ -63,28 +76,9 @@ def concluir(tel):
     st.session_state["concluidos"].add(str(tel))
     st.rerun()
 
-# ----------------------------------------
-# Carregar planilha
-# ----------------------------------------
-df = load_sheet(SHEET2_ID, DEFAULT_SHEET2_SHEETNAME)
-
-# Nome das colunas:
-# A = data, B = nome, C = email, D = valor, E = telefone, F = compras, G = classificação
-
-df["data_dt"] = pd.to_datetime(df.iloc[:, 0], errors="coerce")
-df["Dias desde compra"] = (datetime.today() - df["data_dt"]).dt.days
-
-# Renomear corretamente as 7 colunas originais
-df.columns = ["Data", "Cliente", "Email", "Valor", "Telefone", "Compras", "Classificação"]
-
-# Criar colunas extras
-df["data_dt"] = pd.to_datetime(df["Data"], errors="coerce")
-df["Dias desde compra"] = (datetime.today() - df["data_dt"]).dt.days
-
-
-# ----------------------------------------
-# Título + Filtro
-# ----------------------------------------
+# ------------------------------
+# Layout – Título + Filtro
+# ------------------------------
 st.title("📅 CRM Sportech – Tarefas do Dia")
 
 class_filter = st.radio(
@@ -93,76 +87,71 @@ class_filter = st.radio(
     horizontal=True
 )
 
-# ----------------------------------------
+# ------------------------------
 # Configurações do dia (metas)
-# ----------------------------------------
+# ------------------------------
 st.subheader("⚙️ Configurações do dia")
 
-col1, col2, col3 = st.columns(3)
+c1, c2, c3 = st.columns(3)
 
-meta_novos = col1.number_input("Meta de Check-in (Novos)", min_value=0, value=10)
-meta_prom = col2.number_input("Promissores por dia", min_value=0, value=20)
-meta_leais = col3.number_input("Leais + Campeões por dia", min_value=0, value=10)
+meta_novos = c1.number_input("Meta de Check-in (Novos)", value=10, min_value=0)
+meta_prom = c2.number_input("Promissores por dia", value=20, min_value=0)
+meta_leais = c3.number_input("Leais + Campeões por dia", value=10, min_value=0)
 
-# ----------------------------------------
+# ------------------------------
 # Seleção de tarefas do dia
-# ----------------------------------------
+# ------------------------------
 
-# Novos (somente quem completou 15+ dias)
-novos = df[(df["Classificação"] == "Novo") & (df["Dias desde compra"] >= 15)].sort_values("Dias desde compra", ascending=False)
-novos = novos.head(meta_novos)
+# Novos com +15 dias
+novos = base[(base["Classificação"] == "Novo") & (base["Dias desde compra"] >= 15)]
+novos = novos.sort_values("Dias desde compra", ascending=False).head(meta_novos)
 
 # Promissores
-promissores = df[df["Classificação"] == "Promissor"].sort_values("Dias desde compra", ascending=False)
-promissores = promissores.head(meta_prom)
+prom = base[base["Classificação"] == "Promissor"]
+prom = prom.sort_values("Dias desde compra", ascending=False).head(meta_prom)
 
 # Leais + Campeões
-grupo_fidelidade = df[df["Classificação"].isin(["Leal", "Campeão"])].sort_values("Dias desde compra", ascending=False)
-grupo_fidelidade = grupo_fidelidade.head(meta_leais)
+leal_camp = base[base["Classificação"].isin(["Leal", "Campeão"])]
+leal_camp = leal_camp.sort_values("Dias desde compra", ascending=False).head(meta_leais)
 
-# Em risco (mostrar todos)
-em_risco = df[df["Classificação"] == "Em risco"].sort_values("Dias desde compra")
+# Em risco (todos)
+risco = base[base["Classificação"] == "Em risco"].sort_values("Dias desde compra")
 
-# Dormentes → só aparecem no filtro específico
-dormentes = df[df["Classificação"] == "Dormente"]
-
-# Montar lista final DO DIA
-dia_frames = []
+# Montar lista final do dia
+frames = []
 
 if not novos.empty:
-    temp = novos.copy()
-    temp["Grupo"] = "Novo"
-    dia_frames.append(temp)
+    t = novos.copy()
+    t["Grupo"] = "Novo"
+    frames.append(t)
 
-if not promissores.empty:
-    temp = promissores.copy()
-    temp["Grupo"] = "Promissor"
-    dia_frames.append(temp)
+if not prom.empty:
+    t = prom.copy()
+    t["Grupo"] = "Promissor"
+    frames.append(t)
 
-if not grupo_fidelidade.empty:
-    temp = grupo_fidelidade.copy()
-    temp["Grupo"] = "Leal/Campeão"
-    dia_frames.append(temp)
+if not leal_camp.empty:
+    t = leal_camp.copy()
+    t["Grupo"] = "Leal/Campeão"
+    frames.append(t)
 
-if not em_risco.empty:
-    temp = em_risco.copy()
-    temp["Grupo"] = "Em risco"
-    dia_frames.append(temp)
+if not risco.empty:
+    t = risco.copy()
+    t["Grupo"] = "Em risco"
+    frames.append(t)
 
-df_dia = pd.concat(dia_frames, ignore_index=True) if dia_frames else pd.DataFrame()
+df_dia = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
-# remover concluídos
-df_dia = df_dia[~df_dia["Telefone"].astype(str).isin(st.session_state["concluidos"])]
+# Remover concluídos
+df_dia = df_dia[~df_dia["Telefone"].isin(st.session_state["concluidos"])]
 
-# ----------------------------------------
-# Aplicar filtro por classificação
-# ----------------------------------------
+# Aplicar filtro de classificação
 if class_filter != "Todos":
     df_dia = df_dia[df_dia["Classificação"] == class_filter]
 
-# ----------------------------------------
-# Cards das tarefas
-# ----------------------------------------
+# ------------------------------
+# Exibir Cards
+# ------------------------------
 st.subheader("📋 Tarefas do Dia")
 
 if df_dia.empty:
@@ -173,11 +162,11 @@ else:
         <div class="card">
             <h3>👤 {row['Cliente']}</h3>
             <p>📱 {row['Telefone']}</p>
-            <p>🏷️ Classificação: {row['Classificação']} | 🔵 Grupo do dia: {row['Grupo']}</p>
-            <p>🛍️ Compras: {row['Compras']} | 💰 Valor gasto: R$ {row['Valor']}</p>
+            <p>🏷 Classificação: {row['Classificação']} | 🔵 Grupo: {row['Grupo']}</p>
+            <p>🛍 Compras: {row['Compras']} | 💰 Valor: R$ {row['Valor']}</p>
             <p>⏳ Dias desde compra: {row['Dias desde compra']}</p>
         </div>
         """, unsafe_allow_html=True)
 
-        if st.button(f"✔ Concluir {row['Cliente']}", key=f"concluir_{idx}"):
+        if st.button(f"✔ Concluir {row['Cliente']}", key=f"btn_{idx}"):
             concluir(row["Telefone"])
