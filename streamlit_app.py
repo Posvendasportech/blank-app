@@ -31,9 +31,9 @@ def load_sheet(sheet_id, sheet_name):
 SHEET_ID = "1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc"
 SHEET_NAME = "Total"
 
-df = load_sheet(SHEET_ID, SHEET_NAME)
+st.subheader("🔍 Teste — Data/Hora da última linha da planilha")
 
-st.subheader("DEBUG — Verificando estrutura da planilha")
-st.write("Colunas importadas:", df.columns.tolist())
-st.write("Quantidade:", len(df.columns))
-st.write(df.head())
+try:
+    st.write("Última linha (raw):", df.tail(1))
+except Exception as e:
+    st.error(e)
