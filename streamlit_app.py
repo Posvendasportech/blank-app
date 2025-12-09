@@ -152,21 +152,61 @@ if class_filter != "Todos":
 # ------------------------------
 # Exibir Cards
 # ------------------------------
+# ------------------------------
+# Exibir Cards QUADRADOS EM GRID
+# ------------------------------
+
 st.subheader("📋 Tarefas do Dia")
+
+# Se filtro for Dormente → ignorar metas e usar base completa
+if class_filter == "Dormente":
+    df_dia = base[base["Classificação"] == "Dormente"]
 
 if df_dia.empty:
     st.info("Nenhuma tarefa para hoje com os critérios selecionados.")
 else:
+    
+    # CSS para grid de cards
+    st.markdown("""
+    <style>
+    .grid-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        grid-gap: 16px;
+    }
+    .card {
+        background-color: #101010;
+        padding: 16px;
+        border-radius: 12px;
+        border: 1px solid #1F1F1F;
+        min-height: 150px;
+    }
+    .card h3 {
+        margin: 0;
+        padding: 0;
+        font-size: 20px;
+    }
+    .card p {
+        margin: 4px 0;
+        font-size: 14px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="grid-container">', unsafe_allow_html=True)
+
     for idx, row in df_dia.iterrows():
+
         st.markdown(f"""
         <div class="card">
             <h3>👤 {row['Cliente']}</h3>
             <p>📱 {row['Telefone']}</p>
-            <p>🏷 Classificação: {row['Classificação']} | 🔵 Grupo: {row['Grupo']}</p>
-            <p>🛍 Compras: {row['Compras']} | 💰 Valor: R$ {row['Valor']}</p>
-            <p>⏳ Dias desde compra: {row['Dias desde compra']}</p>
+            <p>🏷 Classificação: {row['Classificação']}</p>
         </div>
         """, unsafe_allow_html=True)
 
+        # botão concluir fora do HTML dentro do fluxo
         if st.button(f"✔ Concluir {row['Cliente']}", key=f"btn_{idx}"):
             concluir(row["Telefone"])
+
+    st.markdown("</div>", unsafe_allow_html=True)
