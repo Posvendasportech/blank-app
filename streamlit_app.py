@@ -52,6 +52,8 @@ col_valor = df.iloc[:, 3]     # D - Valor gasto total
 col_tel = df.iloc[:, 4]       # E - Telefone
 col_compras = df.iloc[:, 5]   # F - Nº compras
 col_class = df.iloc[:, 6]     # G - Classificação
+col_dias = df.iloc[:, 9]    # I - Dias desde a ultima compra
+
 
 # Criar dataframe base sem renomear colunas originais
 base = pd.DataFrame({
@@ -62,9 +64,8 @@ base = pd.DataFrame({
     "Telefone": col_tel.astype(str),
     "Compras": col_compras,
     "Classificação": col_class
+    "Dias desde a ultima compra": col_dias
 })
-
-base["Dias desde compra"] = (datetime.today() - base["Data"]).dt.days
 
 # ------------------------------
 # Estado de concluídos
@@ -168,7 +169,7 @@ def format_valor(v):
 # ===================================================================
 # LER DIAS DESDE A COMPRA DA COLUNA I (ÍNDICE 8)
 # ===================================================================
-base["Dias desde compra"] = df.iloc[:, 9]
+ "Dias desde a ultima compra": col_dias = df.iloc[:, 9]
 
 st.subheader("📋 Tarefas do Dia")
 
