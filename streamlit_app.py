@@ -149,39 +149,66 @@ df_dia = df_dia[~df_dia["Telefone"].isin(st.session_state["concluidos"])]
 if class_filter != "Todos":
     df_dia = df_dia[df_dia["Classificação"] == class_filter]
 
-# ------------------------------
+# ===================================================================
+# FUNÇÃO SEGURA DE FORMATAÇÃO DE VALOR
+# ===================================================================
+def format_valor(v):
+    try:
+        if pd.isna(v):
+            return "—"
+        v = str(v).replace("R$", "").replace(".", "").replace(",", ".").strip()
+        return f"R$ {float(v):.2f}"
+    except:
+        return "—"
+
+
+# ===================================================================
 # EXIBIÇÃO DOS CARDS (SEÇÃO COMPLETA)
-# ------------------------------
+# ===================================================================
 
 st.subheader("📋 Tarefas do Dia")
 
-# Se filtro for Dormente → mostrar diretamente da base completa
+# Se filtro for Dormente → mostrar diretamente da base
 if class_filter == "Dormente":
     df_dia = base[base["Classificação"] == "Dormente"]
 
-# CSS dos cards quadrados
+# Caso ainda esteja vazio após filtragem
+if df_dia.empty:
+    st.info("Nenhuma tarefa para hoje com os critérios selecionados.")
+    st.stop()
+
+# ===================================================================
+# CSS DOS CARDS QUADRADOS
+# ===================================================================
 st.markdown("""
 <style>
+
 .grid-container {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    grid-gap: 18px;
+    grid-gap: 20px;
     justify-items: center;
     margin-top: 20px;
 }
 
 .card {
-    background-color: #101010;
+    background-color: #111111;
     width: 300px;
-    height: 300px;       
+    height: 300px; 
     padding: 18px;
     border-radius: 14px;
-    border: 1px solid #1F1F1F;
+    border: 1px solid #222222;
 
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    box-shadow: 0px 0px 8px rgba(255,255,255,0.05);
+
+    transition: 0.2s ease-in-out;
+}
+
+.card:hover {
+    transform: scale(1.03);
+    border-color: #444444;
 }
 
 .card h3 {
@@ -194,56 +221,66 @@ st.markdown("""
     margin: 6px 0;
     font-size: 14px;
 }
+
 .button-wrapper {
     text-align: center;
 }
+
 .button-finish {
     background-color: #0066FF;
     color: white;
-    padding: 8px 14px;
+    padding: 10px 14px;
     border-radius: 8px;
     cursor: pointer;
     border: none;
+    font-size: 14px;
 }
+.button-finish:hover {
+    background-color: #004FCC;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
 
-# ------------------------------
-# Renderização dos Cards
-# ------------------------------
+# ===================================================================
+# RENDERIZAÇÃO DOS CARDS
+# ===================================================================
 
-if df_dia.empty:
-    st.info("Nenhuma tarefa para hoje com os critérios selecionados.")
-else:
+st.markdown('<div class="grid-container">', unsafe_allow_html=True)
 
-    st.markdown('<div class="grid-container">', unsafe_allow_html=True)
+for idx, row in df_dia.iterrows():
 
-    for idx, row in df_dia.iterrows():
+    dias = (
+        int(row["Dias desde compra"])
+        if not pd.isna(row["Dias desde compra"])
+        else "—"
+    )
 
-        dias = int(row["Dias desde compra"]) if not pd.isna(row["Dias desde compra"]) else "—"
-        valor = f"R$ {float(row['Valor']):.2f}" if pd.notna(row["Valor"]) else "—"
+    valor = format_valor(row["Valor"])
 
-        st.markdown(f"""
-        <div class="card">
-            <div>
-                <h3>👤 {row['Cliente']}</h3>
-                <p>📱 {row['Telefone']}</p>
-                <p>🏷 Classificação: {row['Classificação']}</p>
-                <p>💰 Valor gasto: {valor}</p>
-                <p>⏳ Dias desde compra: {dias}</p>
-            </div>
-
-            <div class="button-wrapper">
-                <button class="button-finish" onclick="document.getElementById('btn_{idx}').click();">
-                    ✔ Concluir
-                </button>
-            </div>
+    st.markdown(f"""
+    <div class="card">
+        
+        <div>
+            <h3>👤 {row['Cliente']}</h3>
+            <p>📱 {row['Telefone']}</p>
+            <p>🏷 Classificação: {row['Classificação']}</p>
+            <p>💰 Valor gasto: {valor}</p>
+            <p>⏳ Dias desde compra: {dias}</p>
         </div>
-        """, unsafe_allow_html=True)
 
-        # Botão real do Streamlit (oculto)
-        if st.button("✔", key=f"btn_{idx}", help="Concluir tarefa"):
-            concluir(row["Telefone"])
+        <div class="button-wrapper">
+            <button class="button-finish" onclick="document.getElementById('btn_{idx}').click();">
+                ✔ Concluir
+            </button>
+        </div>
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Botão real do Streamlit (oculto)
+    if st.button("✔", key=f"btn_{idx}", help="Concluir tarefa"):
+        concluir(row["Telefone"])
+
+st.markdown("</div>", unsafe_allow_html=True)
