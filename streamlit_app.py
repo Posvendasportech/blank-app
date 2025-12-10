@@ -206,71 +206,93 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
 
 def card_atendimento(idx, row):
     st.markdown("""
-        <style>
-        .card-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 35px;
-            width: 100%;
-        }
-        .crm-card {
-            background: #ffffff;
-            color: #000;
-            padding: 22px;
-            border-radius: 22px;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.25);
-            border: 1px solid #ccc;
-        }
-        .crm-box {
-            background: #0546b8;
-            color: white;
-            padding: 18px;
-            border-radius: 18px;
-            margin-bottom: 15px;
-            font-size: 16px;
-        }
-        .crm-button {
-            width: 100%;
-            background: #0546b8;
-            padding: 12px;
-            text-align: center;
-            font-weight: bold;
-            color: white;
-            border-radius: 14px;
-            cursor: pointer;
-            margin-top: 10px;
-        }
-        .crm-button:hover { filter: brightness(0.85); }
-        </style>
-    """, unsafe_allow_html=True)
+<style>
 
-    # ---- CARD EMOCIONAL COMPLETO ----
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(430px, 1fr));
+    gap: 32px;
+    margin-top: 25px;
+}
+
+.gym-card {
+    background: #111315;
+    border: 1px solid #222;
+    padding: 24px;
+    border-radius: 22px;
+    box-shadow: 0px 4px 18px rgba(0,0,0,0.35);
+}
+
+.gym-header {
+    background: #0B3BAA;
+    padding: 18px;
+    border-radius: 18px;
+    color: white;
+    font-size: 18px;
+    line-height: 1.6;
+    margin-bottom: 18px;
+}
+
+.gym-section-title {
+    font-weight: bold;
+    font-size: 15px;
+    margin-bottom: 6px;
+    color: #e6e6e6;
+}
+
+.gym-button {
+    margin-top: 14px;
+    width: 100%;
+    padding: 12px;
+    background: #0B3BAA;
+    color: white;
+    border-radius: 14px;
+    text-align: center;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.gym-button:hover {
+    filter: brightness(1.12);
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+
+  def card_atendimento(idx, row):
+
     with st.container():
-        st.markdown('<div class="card-grid">', unsafe_allow_html=True)
+        # abre a DIV do card em HTML
+        st.markdown('<div class="gym-card">', unsafe_allow_html=True)
 
-        with st.container():
-            st.markdown('<div class="crm-card">', unsafe_allow_html=True)
+        # --- CABEÇALHO DO CARD ---
+        st.markdown(f"""
+            <div class="gym-header">
+                <b>{row['Cliente']}</b><br>
+                📱 {row['Telefone']}<br>
+                🏷 {row['Classificação']}<br>
+                💰 {safe_valor(row['Valor'])}<br>
+                ⏳ {row['Dias_num']} dias desde compra
+            </div>
+        """, unsafe_allow_html=True)
 
-            st.markdown(f"""
-                <div class="crm-box">
-                    <b>{row['Cliente']}</b><br>
-                    📱 {row['Telefone']}<br>
-                    🏷 {row['Classificação']}<br>
-                    💰 {safe_valor(row['Valor'])}<br>
-                    ⏳ {row['Dias_num']} dias desde compra
-                </div>
-            """, unsafe_allow_html=True)
+        # --- INPUTS INTERNOS DO CARD ---
+        st.markdown("<div class='gym-section-title'>Motivo do contato</div>", unsafe_allow_html=True)
+        motivo = st.text_input("", key=f"motivo_{idx}")
 
-            motivo = st.text_input("Motivo do contato", key=f"motivo_{idx}")
-            resumo = st.text_area("Resumo da conversa", key=f"resumo_{idx}", height=80)
-            proxima = st.date_input("Próxima data", key=f"proxima_{idx}")
+        st.markdown("<div class='gym-section-title'>Resumo da conversa</div>", unsafe_allow_html=True)
+        resumo = st.text_area("", key=f"resumo_{idx}", height=80)
 
-            if st.button(f"Registrar e concluir ({row['Telefone']})", key=f"btn_{idx}"):
-                return motivo, resumo, proxima
+        st.markdown("<div class='gym-section-title'>Próxima data</div>", unsafe_allow_html=True)
+        proxima = st.date_input("", key=f"prox_{idx}")
 
-            st.markdown('</div>', unsafe_allow_html=True)
+        # --- BOTÃO GYMSHARK ---
+        if st.button(f"Registrar e concluir ({row['Telefone']})", key=f"save_{idx}"):
+            return motivo, resumo, proxima
 
-        st.markdown('</div>', unsafe_allow_html=True)
+        # fecha o card
+        st.markdown("</div>", unsafe_allow_html=True)
 
     return None, None, None
 
@@ -280,12 +302,14 @@ def card_atendimento(idx, row):
 # =========================================================
 st.markdown("## 📌 Atendimentos do dia")
 
-for idx, row in df_dia.iterrows():
+st.markdown('<div class="card-grid">', unsafe_allow_html=True)
 
-    motivo, resumo, data = card_atendimento(idx, row)
+for idx, row in df_dia.iterrows():
+    
+    motivo, resumo, proxima = card_atendimento(idx, row)
 
     if motivo:
-        registrar_agendamento(row, resumo, motivo, str(data))
-        st.success("Contato registrado!")
-        st.session_state["concluidos"].add(row["Telefone"])
-        st.rerun()
+        registrar_agendamento(row, motivo, resumo, str(proxima))
+        remover_card(row["Telefone"])
+
+st.markdown('</div>', unsafe_allow_html=True)
