@@ -211,50 +211,57 @@ st.markdown("""
 
 .card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(430px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 32px;
-    margin-top: 25px;
+    margin-top: 30px;
 }
 
-.gym-card {
-    background: #111315;
-    border: 1px solid #222;
-    padding: 24px;
+.card {
+    background: #ffffff10;
+    border: 1px solid #2a2a2a;
+    padding: 22px;
     border-radius: 22px;
-    box-shadow: 0px 4px 18px rgba(0,0,0,0.35);
+    backdrop-filter: blur(6px);
 }
 
-.gym-header {
-    background: #0B3BAA;
-    padding: 18px;
+.card-header {
+    background: #0A40B0;
+    padding: 20px;
     border-radius: 18px;
     color: white;
-    font-size: 18px;
-    line-height: 1.6;
-    margin-bottom: 18px;
+    font-size: 17px;
+    margin-bottom: 16px;
 }
 
-.gym-section-title {
-    font-weight: bold;
-    font-size: 15px;
-    margin-bottom: 6px;
-    color: #e6e6e6;
-}
-
-.gym-button {
-    margin-top: 14px;
-    width: 100%;
-    padding: 12px;
-    background: #0B3BAA;
+.input-box {
+    background: #111;
+    border: 1px solid #444;
+    padding: 10px;
+    border-radius: 12px;
     color: white;
-    border-radius: 14px;
-    text-align: center;
+    width: 100%;
+    margin-top: 8px;
+}
+
+.card-title {
+    color: #ddd;
+    font-size: 14px;
+    margin-top: 10px;
+}
+
+.submit-btn {
+    background: #0A40B0;
+    border-radius: 12px;
+    padding: 10px;
+    margin-top: 14px;
+    color: white;
     font-weight: bold;
+    text-align: center;
     cursor: pointer;
 }
 
-.gym-button:hover {
-    filter: brightness(1.12);
+.submit-btn:hover {
+    filter: brightness(1.15);
 }
 
 </style>
@@ -264,56 +271,72 @@ st.markdown("""
 # =========================================================
 # 🎯 FUNÇÃO DO CARD DE ATENDIMENTO
 # =========================================================
-def card_atendimento(idx, row):
+def card_html(idx, row):
 
-    with st.container():
-        st.markdown('<div class="gym-card">', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="card">
 
-        # --- Cabeçalho estilo Gymshark ---
-        st.markdown(f"""
-            <div class="gym-header">
-                <b>{row['Cliente']}</b><br>
-                📱 {row['Telefone']}<br>
-                🏷 {row['Classificação']}<br>
-                💰 {safe_valor(row['Valor'])}<br>
-                ⏳ {row['Dias_num']} dias desde compra
-            </div>
-        """, unsafe_allow_html=True)
+        <div class="card-header">
+            <b>{row['Cliente']}</b><br>
+            📱 {row['Telefone']}<br>
+            🏷 {row['Classificação']}<br>
+            💰 {safe_valor(row['Valor'])}<br>
+            ⏳ {row['Dias_num']} dias desde compra
+        </div>
 
-        # Campo Motivo
-        st.markdown("<div class='gym-section-title'>Motivo do contato</div>", unsafe_allow_html=True)
-        motivo = st.text_input("", key=f"motivo_{idx}")
+        <div class="card-title">Motivo do contato</div>
+        <input class="input-box" id="motivo_{idx}" placeholder="Ex.: Check-in">
 
-        # Campo Resumo da conversa
-        st.markdown("<div class='gym-section-title'>Resumo da conversa</div>", unsafe_allow_html=True)
-        resumo = st.text_area("", key=f"resumo_{idx}", height=80)
+        <div class="card-title">Resumo da conversa</div>
+        <textarea class="input-box" id="resumo_{idx}" rows="3"></textarea>
 
-        # Campo Próxima data
-        st.markdown("<div class='gym-section-title'>Próxima data</div>", unsafe_allow_html=True)
-        proxima = st.date_input("", key=f"prox_{idx}")
+        <div class="card-title">Próxima data</div>
+        <input class="input-box" type="date" id="data_{idx}">
 
-        # Botão estilo Gymshark
-        if st.button(f"Registrar e concluir ({row['Telefone']})", key=f"save_{idx}"):
-            return motivo, resumo, proxima
+        <div class="submit-btn" onclick="sendForm{idx}()">Registrar e concluir</div>
 
-        st.markdown("</div>", unsafe_allow_html=True)
+        <script>
+            function sendForm{idx}() {{
+                const motivo = document.getElementById("motivo_{idx}").value;
+                const resumo = document.getElementById("resumo_{idx}").value;
+                const data = document.getElementById("data_{idx}").value;
 
-    return None, None, None
+                window.parent.postMessage(
+                    {{
+                        type: "salvar",
+                        idx: "{idx}",
+                        motivo: motivo,
+                        resumo: resumo,
+                        data: data
+                    }},
+                    "*"
+                );
+            }}
+        </script>
 
+    </div>
+    """, unsafe_allow_html=True)
 
 # =========================================================
 # 🧩 RENDERIZAÇÃO FINAL — GRID COM VÁRIOS CARDS POR PÁGINA
 # =========================================================
-st.markdown("## 📌 Atendimentos do dia")
+message = st.experimental_get_query_params()
 
-st.markdown('<div class="card-grid">', unsafe_allow_html=True)
+if "event" in st.session_state:
+    evt = st.session_state["event"]
 
-for idx, row in df_dia.iterrows():
+    if evt["type"] == "salvar":
+        idx = int(evt["idx"])
+        row = df_dia.iloc[idx]
 
-    motivo, resumo, proxima = card_atendimento(idx, row)
-
-    if motivo:
-        registrar_agendamento(row, motivo, resumo, str(proxima))
+        registrar_agendamento(row, evt["motivo"], evt["resumo"], evt["data"])
         remover_card(row["Telefone"])
 
-st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown('<div class="card-grid">', unsafe_allow_html=True)
+
+for idx, row in df_dia.iterrows():
+    card_html(idx, row)
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+
