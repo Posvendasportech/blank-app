@@ -201,70 +201,70 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
 
 
 
-# =========================================================
-# 🔥 CSS ESTILO GYMSHARK + GRID DE CARDS
-# =========================================================
 st.markdown("""
 <style>
-
-.card-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr); /* 2 cards por linha */
-    gap: 32px;
-    margin-top: 30px;
-}
+/* ... seu CSS de fundo preto existente ... */
 
 .card {
-    background: #111315;
-    border: 1px solid #2a2a2a;
-    padding: 22px;
-    border-radius: 22px;
-    box-shadow: 0px 4px 18px rgba(0,0,0,0.35);
-    color: white;
+    background-color: #1a1a1a; /* Cinza escuro */
+    border: 1px solid #333333;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px; /* Espaço entre os cards verticais */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    height: 100%; /* Garante que os cards na mesma linha tenham a mesma altura */
+    display: flex;
+    flex-direction: column;
 }
 
 .card-header {
-    background: #0A40B0;
-    padding: 20px;
-    border-radius: 18px;
-    color: white;
-    font-size: 17px;
-    margin-bottom: 16px;
-    line-height: 1.5;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #333333;
+    color: #FFFFFF;
+}
+
+.card-header b {
+    font-size: 1.1em;
+    color: #4CAF50; /* Cor de destaque para o nome */
 }
 
 .card-title {
-    color: #dcdcdc;
-    font-size: 14px;
-    margin-top: 12px;
-    font-weight: 600;
+    font-weight: bold;
+    margin-top: 10px;
+    margin-bottom: 5px;
+    color: #999999;
 }
 
 .input-box {
-    background: #1b1b1b;
-    border: 1px solid #444;
-    padding: 10px;
-    border-radius: 12px;
-    color: white;
     width: 100%;
-    margin-top: 6px;
+    padding: 8px;
+    margin-bottom: 10px;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    background-color: #2a2a2a; /* Fundo do input */
+    color: #FFFFFF;
+    box-sizing: border-box;
+}
+
+textarea.input-box {
+    resize: vertical;
 }
 
 .submit-btn {
-    background: #0A40B0;
-    border-radius: 12px;
-    padding: 12px;
-    margin-top: 14px;
+    background-color: #4CAF50; /* Verde */
     color: white;
-    font-weight: bold;
-    text-align: center;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
     cursor: pointer;
+    text-align: center;
+    margin-top: auto; /* Empurra o botão para baixo */
 }
 
 .submit-btn:hover {
-    filter: brightness(1.18);
+    background-color: #45a049;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -273,16 +273,27 @@ st.markdown("""
 # =========================================================
 # 🧩 FUNÇÃO QUE GERA CADA CARD
 # =========================================================
+# =========================================================
+# FUNÇÃO DO CARD (HTML + JS)
+# =========================================================
+# Observação: A função safe_valor precisa estar definida e acessível globalmente
 def card_html(idx, row):
 
-    st.markdown(f"""
+    # Verifica se a função safe_valor está definida (apenas para garantir)
+    if 'safe_valor' not in globals():
+        # Caso não esteja, use o safe_valor original do seu código:
+        # def safe_valor(v): ...
+        pass
+        
+    # **CORREÇÃO APLICADA: safe_valor() no lugar de safe_val()**
+    html = f"""
     <div class="card">
 
         <div class="card-header">
             <b>{row['Cliente']}</b><br>
             📱 {row['Telefone']}<br>
             🏷 {row['Classificação']}<br>
-            💰 {safe_val(row['Valor'])}<br>
+            💰 {safe_valor(row['Valor'])}<br>
             ⏳ {row['Dias_num']} dias desde compra
         </div>
 
@@ -290,58 +301,68 @@ def card_html(idx, row):
         <input class="input-box" id="motivo_{idx}" placeholder="Ex.: Check-in">
 
         <div class="card-title">Resumo da conversa</div>
-        <textarea class="input-box" id="resumo_{idx}" rows="3"></textarea>
+        <textarea class="input-box" id="resumo_{idx}" rows="3" placeholder="O que foi conversado e quais os próximos passos..."></textarea>
 
         <div class="card-title">Próxima data</div>
         <input class="input-box" type="date" id="data_{idx}">
 
-        <div class="submit-btn" onclick="sendForm{idx}()">
-            Registrar e concluir
-        </div>
+        <div class="submit-btn" onclick="sendForm{idx}()">Registrar e concluir</div>
 
         <script>
-        function sendForm{idx}() {{
-            const motivo = document.getElementById("motivo_{idx}").value;
-            const resumo = document.getElementById("resumo_{idx}").value;
-            const data = document.getElementById("data_{idx}").value;
+            function sendForm{idx}() {{
+                const motivo = document.getElementById("motivo_{idx}").value;
+                const resumo = document.getElementById("resumo_{idx}").value;
+                const data = document.getElementById("data_{idx}").value;
 
-            window.parent.postMessage(
-                {{
-                    type: "salvar",
-                    idx: "{idx}",
-                    motivo: motivo,
-                    resumo: resumo,
-                    data: data
-                }},
-                "*"
-            );
-        }}
+                window.parent.postMessage(
+                    {{
+                        type: "salvar",
+                        idx: "{idx}",
+                        motivo: motivo,
+                        resumo: resumo,
+                        data: data
+                    }},
+                    "*"
+                );
+            }}
         </script>
 
     </div>
-    """, unsafe_allow_html=True)
+    """
+
+    st.markdown(html, unsafe_allow_html=True)
+
 
 
 
 # =========================================================
-# 🧩 RENDERIZAÇÃO FINAL — GRID COM 2 CARDS POR LINHA
+# RENDERIZAÇÃO FINAL – GRID (2 Colunas)
 # =========================================================
+st.title("📌 Atendimentos do dia")
 
-# captura eventos vindos do JS dos cards
-event = st.experimental_get_query_params()
+# Obtém a lista de índices (idx) do DataFrame para iterar
+indices = df_dia.index.tolist()
 
-if "event" in st.session_state:
-    evt = st.session_state["event"]
-    if evt["type"] == "salvar":
-        idx = int(evt["idx"])
-        row = df_dia.iloc[idx]
-        registrar_agendamento(row, evt["motivo"], evt["resumo"], evt["data"])
-        remover_card(row["Telefone"])
-
-# GRID
-st.markdown('<div class="card-grid">', unsafe_allow_html=True)
-
-for idx, row in df_dia.iterrows():
-    card_html(idx, row)
-
-st.markdown('</div>', unsafe_allow_html=True)
+# Itera sobre os índices em passos de 2
+for i in range(0, len(indices), 2):
+    
+    # Cria duas colunas para cada par de cards
+    col1, col2 = st.columns(2)
+    
+    # Renderiza o primeiro card (na coluna 1)
+    idx1 = indices[i]
+    row1 = df_dia.loc[idx1]
+    with col1:
+        # A função card_html recebe o índice original e a linha
+        card_html(idx1, row1)
+        
+    # Renderiza o segundo card, se existir (na coluna 2)
+    if i + 1 < len(indices):
+        idx2 = indices[i+1]
+        row2 = df_dia.loc[idx2]
+        with col2:
+            card_html(idx2, row2)
+            
+# Se df_dia estiver vazio
+if df_dia.empty:
+    st.info("🎉 Não há tarefas pendentes para a classificação selecionada hoje.")
