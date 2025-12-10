@@ -202,11 +202,80 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
 
 
 # =========================================================
-# FUNÇÃO DO CARD (HTML + JS)
+# 🔥 CSS ESTILO GYMSHARK + GRID DE CARDS
+# =========================================================
+st.markdown("""
+<style>
+
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); /* 2 cards por linha */
+    gap: 32px;
+    margin-top: 30px;
+}
+
+.card {
+    background: #111315;
+    border: 1px solid #2a2a2a;
+    padding: 22px;
+    border-radius: 22px;
+    box-shadow: 0px 4px 18px rgba(0,0,0,0.35);
+    color: white;
+}
+
+.card-header {
+    background: #0A40B0;
+    padding: 20px;
+    border-radius: 18px;
+    color: white;
+    font-size: 17px;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.card-title {
+    color: #dcdcdc;
+    font-size: 14px;
+    margin-top: 12px;
+    font-weight: 600;
+}
+
+.input-box {
+    background: #1b1b1b;
+    border: 1px solid #444;
+    padding: 10px;
+    border-radius: 12px;
+    color: white;
+    width: 100%;
+    margin-top: 6px;
+}
+
+.submit-btn {
+    background: #0A40B0;
+    border-radius: 12px;
+    padding: 12px;
+    margin-top: 14px;
+    color: white;
+    font-weight: bold;
+    text-align: center;
+    cursor: pointer;
+}
+
+.submit-btn:hover {
+    filter: brightness(1.18);
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+
+
+# =========================================================
+# 🧩 FUNÇÃO QUE GERA CADA CARD
 # =========================================================
 def card_html(idx, row):
 
-    html = f"""
+    st.markdown(f"""
     <div class="card">
 
         <div class="card-header">
@@ -226,70 +295,53 @@ def card_html(idx, row):
         <div class="card-title">Próxima data</div>
         <input class="input-box" type="date" id="data_{idx}">
 
-        <div class="submit-btn" onclick="sendForm{idx}()">Registrar e concluir</div>
+        <div class="submit-btn" onclick="sendForm{idx}()">
+            Registrar e concluir
+        </div>
 
         <script>
-            function sendForm{idx}() {{
-                const motivo = document.getElementById("motivo_{idx}").value;
-                const resumo = document.getElementById("resumo_{idx}").value;
-                const data = document.getElementById("data_{idx}").value;
+        function sendForm{idx}() {{
+            const motivo = document.getElementById("motivo_{idx}").value;
+            const resumo = document.getElementById("resumo_{idx}").value;
+            const data = document.getElementById("data_{idx}").value;
 
-                window.parent.postMessage(
-                    {{
-                        type: "salvar",
-                        idx: "{idx}",
-                        motivo: motivo,
-                        resumo: resumo,
-                        data: data
-                    }},
-                    "*"
-                );
-            }}
+            window.parent.postMessage(
+                {{
+                    type: "salvar",
+                    idx: "{idx}",
+                    motivo: motivo,
+                    resumo: resumo,
+                    data: data
+                }},
+                "*"
+            );
+        }}
         </script>
 
     </div>
-    """
+    """, unsafe_allow_html=True)
 
-    st.markdown(html, unsafe_allow_html=True)
-
-
-# =========================================================
-# RECEBE EVENTO DO JS
-# =========================================================
-if "event" not in st.session_state:
-    st.session_state["event"] = None
-
-event = st.session_state["event"]
-
-if event and event["type"] == "salvar":
-    idx = int(event["idx"])
-    row = df_dia.iloc[idx]
-    registrar_agendamento(row, event["motivo"], event["resumo"], event["data"])
 
 
 # =========================================================
-# RENDERIZAÇÃO FINAL – GRID
+# 🧩 RENDERIZAÇÃO FINAL — GRID COM 2 CARDS POR LINHA
 # =========================================================
-st.title("📌 Atendimentos do dia")
 
+# captura eventos vindos do JS dos cards
+event = st.experimental_get_query_params()
+
+if "event" in st.session_state:
+    evt = st.session_state["event"]
+    if evt["type"] == "salvar":
+        idx = int(evt["idx"])
+        row = df_dia.iloc[idx]
+        registrar_agendamento(row, evt["motivo"], evt["resumo"], evt["data"])
+        remover_card(row["Telefone"])
+
+# GRID
 st.markdown('<div class="card-grid">', unsafe_allow_html=True)
 
 for idx, row in df_dia.iterrows():
     card_html(idx, row)
 
 st.markdown('</div>', unsafe_allow_html=True)
-
-
-# =========================================================
-# LISTENER DE EVENTOS
-# =========================================================
-st.markdown("""
-<script>
-window.addEventListener("message", (event) => {
-    if (event.data.type){
-        const streamlitEvent = event.data;
-        window.parent.postMessage({isStreamlitMessage: true, ...streamlitEvent}, "*");
-    }
-});
-</script>
-""", unsafe_allow_html=True)
