@@ -266,27 +266,22 @@ prom = prom.sort_values("Dias_num", ascending=False).head(meta_prom)
 leal_camp = base[base["Classificação"].isin(["Leal", "Campeão"])].copy()
 leal_camp = leal_camp.sort_values("Dias_num", ascending=False).head(meta_leais)
 
+# 🔥 Agora Em risco respeita meta
 risco = base[base["Classificação"] == "Em risco"].copy()
-risco = risco.sort_values("Dias_num", ascending=True)
+risco = risco.sort_values("Dias_num", ascending=True).head(meta_risco)
 
 frames = []
 if not novos.empty:
-    novos["Grupo"] = "Novo"
-    frames.append(novos)
-
+    novos["Grupo"] = "Novo"; frames.append(novos)
 if not prom.empty:
-    prom["Grupo"] = "Promissor"
-    frames.append(prom)
-
+    prom["Grupo"] = "Promissor"; frames.append(prom)
 if not leal_camp.empty:
-    leal_camp["Grupo"] = "Leal/Campeão"
-    frames.append(leal_camp)
-
+    leal_camp["Grupo"] = "Leal/Campeão"; frames.append(leal_camp)
 if not risco.empty:
-    risco["Grupo"] = "Em risco"
-    frames.append(risco)
+    risco["Grupo"] = "Em risco"; frames.append(risco)
 
 df_dia = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
 
 # Remover concluidos e pulados
 todos_ocultos = st.session_state["concluidos"].union(st.session_state["pulados"])
