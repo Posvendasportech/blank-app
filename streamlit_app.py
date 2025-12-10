@@ -109,7 +109,7 @@ class_filter = st.radio(
 )
 
 # ------------------------------
-# Configurações do dia (versão compacta)
+# Configurações & Resumo do dia (versão compacta)
 # ------------------------------
 st.markdown("## ⚙️ Configurações & Resumo do Dia")
 
@@ -130,6 +130,7 @@ with colB:
     r2.metric("Promissores", count_prom)
     r3.metric("Leais/Campeões", count_leais)
     r4.metric("Em risco", count_risco)
+
 
 
 
