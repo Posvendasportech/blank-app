@@ -107,6 +107,25 @@ class_filter = st.radio(
     ["Todos", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"],
     horizontal=True
 )
+# ------------------------------
+# Contadores por categoria
+# ------------------------------
+count_novos = len(df_dia[df_dia["Classificação"] == "Novo"])
+count_prom = len(df_dia[df_dia["Classificação"] == "Promissor"])
+count_leais = len(df_dia[df_dia["Classificação"].isin(["Leal", "Campeão"])])
+count_risco = len(df_dia[df_dia["Classificação"] == "Em risco"])
+
+# ------------------------------
+# Exibir cards de contadores
+# ------------------------------
+st.markdown("### 📊 Resumo das tarefas de hoje")
+
+c1, c2, c3, c4 = st.columns(4)
+
+c1.metric("Novos", count_novos)
+c2.metric("Promissores", count_prom)
+c3.metric("Leais/Campeões", count_leais)
+c4.metric("Em risco", count_risco)
 
 
 # ------------------------------
