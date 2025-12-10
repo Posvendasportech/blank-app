@@ -238,6 +238,7 @@ with st.sidebar:
             st.session_state["historico_stack"] = []
 
 
+
 # =========================================================
 # Configurações & metas do dia
 # =========================================================
@@ -245,10 +246,12 @@ st.markdown("## 🎯 Configurações & Metas do Dia")
 
 colA, colB = st.columns([2, 2])
 with colA:
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     meta_novos = c1.number_input("Novos", value=10, min_value=0)
     meta_prom = c2.number_input("Promissores", value=20, min_value=0)
     meta_leais = c3.number_input("Leais/Campeões", value=10, min_value=0)
+    meta_risco = c4.number_input("Em risco", value=10, min_value=0)
+
 
 
 # =========================================================
