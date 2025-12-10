@@ -207,30 +207,26 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
 def card_atendimento(idx, row):
     st.markdown("""
         <style>
-        .grid-2col {
+        .card-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 25px;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 35px;
+            width: 100%;
         }
         .crm-card {
-            background: #fff;
+            background: #ffffff;
             color: #000;
             padding: 22px;
             border-radius: 22px;
-            box-shadow: 0 4px 14px rgba(255,255,255,0.15);
-            border: 1px solid #ddd;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+            border: 1px solid #ccc;
         }
-        .crm-title {
-            font-size: 20px;
-            font-weight: 700;
-            margin-bottom: 10px;
-        }
-        .crm-block {
+        .crm-box {
             background: #0546b8;
             color: white;
             padding: 18px;
             border-radius: 18px;
-            margin-bottom: 12px;
+            margin-bottom: 15px;
             font-size: 16px;
         }
         .crm-button {
@@ -242,34 +238,39 @@ def card_atendimento(idx, row):
             color: white;
             border-radius: 14px;
             cursor: pointer;
-            margin-top: 8px;
+            margin-top: 10px;
         }
         .crm-button:hover { filter: brightness(0.85); }
         </style>
     """, unsafe_allow_html=True)
 
-    col1, col2 = st.columns(2)
+    # ---- CARD EMOCIONAL COMPLETO ----
+    with st.container():
+        st.markdown('<div class="card-grid">', unsafe_allow_html=True)
 
-    with col1:
-        st.markdown(f"""
-            <div class="crm-card">
-                <div class="crm-block">
+        with st.container():
+            st.markdown('<div class="crm-card">', unsafe_allow_html=True)
+
+            st.markdown(f"""
+                <div class="crm-box">
                     <b>{row['Cliente']}</b><br>
                     📱 {row['Telefone']}<br>
                     🏷 {row['Classificação']}<br>
                     💰 {safe_valor(row['Valor'])}<br>
                     ⏳ {row['Dias_num']} dias desde compra
                 </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
-        motivo = st.text_input("Motivo do contato", key=f"motivo_{idx}")
-        resumo = st.text_area("Resumo da conversa", key=f"resumo_{idx}", height=80)
-        proxima = st.date_input("Próxima data", key=f"prox_{idx}")
+            motivo = st.text_input("Motivo do contato", key=f"motivo_{idx}")
+            resumo = st.text_area("Resumo da conversa", key=f"resumo_{idx}", height=80)
+            proxima = st.date_input("Próxima data", key=f"proxima_{idx}")
 
-        if st.button(f"Registrar e concluir ({row['Telefone']})", key=f"btn_{idx}"):
-            return motivo, resumo, proxima
+            if st.button(f"Registrar e concluir ({row['Telefone']})", key=f"btn_{idx}"):
+                return motivo, resumo, proxima
 
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
 
     return None, None, None
 
