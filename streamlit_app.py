@@ -5,6 +5,16 @@ import streamlit.components.v1 as components
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+import gspread
+from google.oauth2.service_account import Credentials
+
+def get_gsheet_client():
+    credentials = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    )
+    client = gspread.authorize(credentials)
+    return client
 
 
 # ------------------------------
