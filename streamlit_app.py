@@ -445,29 +445,33 @@ for i in range(0, len(indices), 2):
     idx1 = indices[i]
     row1 = df_dia.loc[idx1]
 
-with col1:
-    acao, motivo, resumo, proxima, vendedor = card_component(idx1, row1)
-    if acao == "concluir" and motivo:
-        registrar_agendamento(row1, resumo, motivo, str(proxima), vendedor)
-        remover_card(row1["Telefone"], concluido=True)
-        st.rerun()
+    with col1:
+        acao, motivo, resumo, proxima, vendedor = card_component(idx1, row1)
 
-    elif acao == "pular":
-        remover_card(row1["Telefone"], concluido=False)
-        st.rerun()
+        if acao == "concluir" and motivo:
+            registrar_agendamento(row1, resumo, motivo, str(proxima), vendedor)
+            remover_card(row1["Telefone"], concluido=True)
+            st.rerun()
 
+        elif acao == "pular":
+            remover_card(row1["Telefone"], concluido=False)
+            st.rerun()
 
     if i + 1 < len(indices):
         idx2 = indices[i + 1]
         row2 = df_dia.loc[idx2]
 
-   with col2:
-    acao2, motivo2, resumo2, proxima2, vendedor2 = card_component(idx2, row2)
-    if acao2 == "concluir" and motivo2:
-        registrar_agendamento(row2, resumo2, motivo2, str(proxima2), vendedor2)
-        remover_card(row2["Telefone"], concluido=True)
-        st.rerun()
+        with col2:
+            acao2, motivo2, resumo2, proxima2, vendedor2 = card_component(idx2, row2)
 
-    elif acao2 == "pular":
-        remover_card(row2["Telefone"], concluido=False)
-        st.rerun()
+            if acao2 == "concluir" and motivo2:
+                registrar_agendamento(row2, resumo2, motivo2, str(proxima2), vendedor2)
+                remover_card(row2["Telefone"], concluido=True)
+                st.rerun()
+
+            elif acao2 == "pular":
+                remover_card(row2["Telefone"], concluido=False)
+                st.rerun()
+
+if df_dia.empty:
+    st.info("🎉 Não há tarefas pendentes para hoje dentro dos filtros selecionados.")
