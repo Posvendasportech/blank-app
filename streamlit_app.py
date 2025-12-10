@@ -376,7 +376,8 @@ def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
 # =========================================================
 # 🔥 CSS — Card + componente funcional
 # =========================================================
-def card_component(idx, row):
+def card_component(id_fix, row):
+
     with st.container():
         st.markdown('<div class="card">', unsafe_allow_html=True)
 
@@ -400,12 +401,12 @@ def card_component(idx, row):
         vendedor = st.selectbox(
             "Responsável",
             ["João", "Maria", "Patrick", "Guilherme", "Outro"],
-            key=f"vend_{idx}"
+            key=f"vend_{id_fix}"
         )
 
-        motivo = st.text_input("Motivo do contato", key=f"mot_{idx}")
-        resumo = st.text_area("Resumo da conversa", key=f"res_{idx}", height=80)
-        proxima = st.date_input("Próxima data", key=f"dt_{idx}")
+        motivo = st.text_input("Motivo do contato", key=f"mot_{id_fix}")
+        resumo = st.text_area("Resumo da conversa", key=f"res_{id_fix}", height=80)
+        proxima = st.date_input("Próxima data", key=f"dt_{id_fix}")
 
         # Botões lado a lado
         bcol1, bcol2 = st.columns(2)
@@ -443,10 +444,10 @@ for i in range(0, len(indices), 2):
     col1, col2 = st.columns(2)
 
     idx1 = indices[i]
-    row1 = df_dia.loc[idx1]
+   row1 = df_dia.loc[idx1]
 
     with col1:
-        acao, motivo, resumo, proxima, vendedor = card_component(idx1, row1)
+        acao, motivo, resumo, proxima, vendedor = card_component(id1, row1)
 
         if acao == "concluir" and motivo:
             registrar_agendamento(row1, resumo, motivo, str(proxima), vendedor)
