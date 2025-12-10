@@ -274,16 +274,14 @@ textarea.input-box {
 
 
 # =========================================================
-# 🧩 FUNÇÃO QUE GERA CADA CARD
-# =========================================================
-# =========================================================
-# FUNÇÃO DO CARD (HTML + JS)
+# FUNÇÃO DO CARD (HTML + JS) - VERSÃO CORRIGIDA E COMPLETA
 # =========================================================
 def card_html(idx, row):
 
-    # ... seu código HTML e JS aqui ...
+    # O HTML deve incluir todos os campos de input e o JavaScript de comunicação
     html = f"""
     <div class="card">
+
         <div class="card-header">
             <b>{row['Cliente']}</b><br>
             📱 {row['Telefone']}<br>
@@ -294,20 +292,60 @@ def card_html(idx, row):
 
         <div class="card-title">Motivo do contato</div>
         <input class="input-box" id="motivo_{idx}" placeholder="Ex.: Check-in">
-        
+
+        <div class="card-title">Resumo da conversa</div>
+        <textarea class="input-box" id="resumo_{idx}" rows="3" placeholder="O que foi conversado e quais os próximos passos..."></textarea>
+
+        <div class="card-title">Próxima data (Opcional)</div>
+        <input class="input-box" type="date" id="data_{idx}">
+
+        <div class="submit-btn" onclick="sendForm{idx}()">Registrar e concluir</div>
+
         <script>
             function sendForm{idx}() {{
-                // ... seu código JS ...
+                // 1. Captura os valores dos inputs
+                const motivo = document.getElementById("motivo_{idx}").value;
+                const resumo = document.getElementById("resumo_{idx}").value;
+                const data = document.getElementById("data_{idx}").value;
+
+                // 2. Envia os dados capturados via postMessage para o Streamlit (iframe pai)
+                window.parent.postMessage(
+                    {{
+                        type: "salvar",
+                        idx: "{idx}",
+                        motivo: motivo,
+                        resumo: resumo,
+                        data: data
+                    }},
+                    "*"
+                );
             }}
         </script>
 
     </div>
     """
-    
-    # 🚨 PONTO CRÍTICO: VOCÊ DEVE USAR ESTA LINHA:
-    st.markdown(html, unsafe_allow_html=True)
-    # ---------------------------------------------
 
+    st.markdown(html, unsafe_allow_html=True)
+
+    # =========================================================
+# RECEBE EVENTO DO JS (VERIFIQUE SE ESTÁ ASSIM)
+# =========================================================
+if "event" not in st.session_state:
+    st.session_state["event"] = None
+
+event = st.session_state["event"]
+
+if event and event["type"] == "salvar":
+    idx = int(event["idx"])
+    row = df_dia.loc[idx] # Use .loc[idx] pois idx é o índice do DataFrame original
+    
+    registrar_agendamento(row, event["resumo"], event["motivo"], event["data"]) # ATENÇÃO: Verifique a ordem dos parâmetros aqui, o seu original era (row, comentario, motivo, proxima_data)
+    
+    # 🌟 Melhoria: Feedback e remoção do card
+    st.session_state["concluidos"].add(row["Telefone"])
+    st.success(f"Tarefa registrada para **{row['Cliente']}** e concluída.")
+    st.session_state["event"] = None # Limpa o evento para evitar reexecução
+    st.rerun() # Reexecuta o script para que o card suma
 
 # =========================================================
 # RENDERIZAÇÃO FINAL – GRID (2 Colunas)
