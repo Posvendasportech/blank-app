@@ -428,7 +428,56 @@ def card_component(id_fix, row):
 # =========================================================
 st.markdown("## 📌 Atendimentos do dia")
 
-# Download CSV da lista atual
+# Criar ID fixo para evitar travamento nos inputs
+df_dia["ID"] = df_dia["Telefone"].astype(str)
+
+# Função com keys estáveis
+def card_component(id_fix, row):
+    with st.container():
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+
+        dias_txt = f"{row['Dias_num']} dias desde compra" if pd.notna(row["Dias_num"]) else "Sem informação de dias"
+
+        st.markdown(
+            f"""
+            <div class="card-header">
+                <b>{row['Cliente']}</b><br>
+                📱 {row['Telefone']}<br>
+                🏷 {row['Classificação']}<br>
+                💰 {safe_valor(row['Valor'])}<br>
+                ⏳ {dias_txt}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        vendedor = st.selectbox(
+            "Responsável",
+            ["João", "Maria", "Patrick", "Outro"],
+            key=f"vend_{id_fix}"
+        )
+
+        motivo = st.text_input("Motivo do contato", key=f"mot_{id_fix}")
+        resumo = st.text_area("Resumo da conversa", key=f"res_{id_fix}", height=80)
+        proxima = st.date_input("Próxima data", key=f"dt_{id_fix}")
+
+        colA, colB = st.columns(2)
+        acao = None
+
+        with colA:
+            if st.button("✅ Registrar e concluir", key=f"ok_{id_fix}"):
+                acao = "concluir"
+
+        with colB:
+            if st.button("⏭ Pular cliente", key=f"skip_{id_fix}"):
+                acao = "pular"
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    return acao, motivo, resumo, proxima, vendedor
+
+
+# Download CSV
 if not df_dia.empty:
     csv = df_dia.to_csv(index=False).encode("utf-8-sig")
     st.download_button(
@@ -438,13 +487,13 @@ if not df_dia.empty:
         mime="text/csv"
     )
 
-indices = df_dia.index.tolist()
-
-for i in range(0, len(indices), 2):
+# Loop corrigido sem tabs
+for i in range(0, len(df_dia), 2):
     col1, col2 = st.columns(2)
 
-    idx1 = indices[i]
-   row1 = df_dia.loc[idx1]
+    # CARD 1
+    row1 = df_dia.iloc[i]
+    id1 = row1["ID"]
 
     with col1:
         acao, motivo, resumo, proxima, vendedor = card_component(id1, row1)
@@ -458,12 +507,13 @@ for i in range(0, len(indices), 2):
             remover_card(row1["Telefone"], concluido=False)
             st.rerun()
 
-    if i + 1 < len(indices):
-        idx2 = indices[i + 1]
-        row2 = df_dia.loc[idx2]
+    # CARD 2 (se existir)
+    if i + 1 < len(df_dia):
+        row2 = df_dia.iloc[i + 1]
+        id2 = row2["ID"]
 
         with col2:
-            acao2, motivo2, resumo2, proxima2, vendedor2 = card_component(idx2, row2)
+            acao2, motivo2, resumo2, proxima2, vendedor2 = card_component(id2, row2)
 
             if acao2 == "concluir" and motivo2:
                 registrar_agendamento(row2, resumo2, motivo2, str(proxima2), vendedor2)
@@ -474,5 +524,6 @@ for i in range(0, len(indices), 2):
                 remover_card(row2["Telefone"], concluido=False)
                 st.rerun()
 
+# Caso vazio
 if df_dia.empty:
     st.info("🎉 Não há tarefas pendentes para hoje dentro dos filtros selecionados.")
