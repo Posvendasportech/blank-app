@@ -138,7 +138,7 @@ with colA:
 
 
 # ------------------------------
-# Seleção das tarefas (lógica)
+# Seleção das tarefas
 # ------------------------------
 novos = base[(base["Classificação"] == "Novo") & (base["Dias_num"] >= 15)]
 novos = novos.sort_values("Dias_num", ascending=True).head(meta_novos)
@@ -182,18 +182,20 @@ with colB:
 
 
 # ------------------------------
-# 📌 Função para registrar agendamento e histórico
+# 📌 Registrar agendamento + histórico
 # ------------------------------
 def registrar_agendamento(row, comentario, motivo, proxima_data):
+
     client = get_gsheet_client()
-    sh = client.open("CRM_Sportech")
+
+    # AQUI ESTAVA O ERRO! Nome corrigido:
+    sh = client.open("Agendamentos")
 
     ws_ag = sh.worksheet("AGENDAMENTOS_ATIVOS")
     ws_hist = sh.worksheet("HISTORICO")
 
     agora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    # → salvar histórico
     ws_hist.append_row([
         agora,
         row["Cliente"],
@@ -205,7 +207,6 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
         proxima_data
     ], value_input_option="USER_ENTERED")
 
-    # → salvar agendamento futuro
     if proxima_data:
         ws_ag.append_row([
             row["Cliente"],
@@ -218,7 +219,7 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
 
 
 # ------------------------------
-# CSS visual dos cards
+# CSS
 # ------------------------------
 css = """
 <style>
@@ -249,8 +250,9 @@ css = """
 </style>
 """
 
+
 # ------------------------------
-# Renderização dos cards + FORMULÁRIO
+# Renderização dos cards + formulário
 # ------------------------------
 html_cards = css + "<div class='grid-container'>"
 
@@ -271,7 +273,6 @@ for idx, row in df_dia.iterrows():
         st.success("Contato registrado com sucesso!")
         remover_card(row["Telefone"])
 
-    # Card visual
     html_cards += f"""
     <div id='card_{idx}' class='card'>
         <div>
