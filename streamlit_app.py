@@ -214,10 +214,10 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
 
 
 # =========================================================
-# RENDERIZAÇÃO DOS CARDS (com formulário embutido)
+# RENDERIZAÇÃO DOS CARDS MODERNOS E COMPACTOS
 # =========================================================
 
-st.markdown("## 🧾 Tarefas do dia")
+st.markdown("<h2>🧾 Tarefas do dia</h2>", unsafe_allow_html=True)
 
 for idx, row in df_dia.iterrows():
 
@@ -226,48 +226,62 @@ for idx, row in df_dia.iterrows():
 
     with st.container():
 
-        # CARD VISUAL + FORMULÁRIO
+        # CARD COMPACTO ESTILIZADO
         st.markdown(
             f"""
             <div style="
-                background:white;
-                color:black;
-                padding:20px;
-                border-radius:16px;
-                margin-bottom:15px;
-                border:1px solid #e1e1e1;
-                box-shadow:0 4px 10px rgba(0,0,0,0.2);
+                background:#FFFFFF;
+                color:#000;
+                padding:18px;
+                border-radius:14px;
+                border:1px solid #d9d9d9;
+                width:600px;
+                margin-bottom:20px;
+                box-shadow:0 4px 8px rgba(0,0,0,0.18);
             ">
-                <h3>👤 {row['Cliente']}</h3>
-                <p>📱 {row['Telefone']}</p>
-                <p>🏷 {row['Classificação']}</p>
-                <p>💰 {valor}</p>
-                <p>⏳ {dias} dias desde compra</p>
+                <h3 style="margin:0;">👤 {row['Cliente']}</h3>
+                <p style="margin:4px 0;">📱 {row['Telefone']}</p>
+                <p style="margin:4px 0;">🏷 {row['Classificação']}</p>
+                <p style="margin:4px 0;">💰 {valor}</p>
+                <p style="margin:4px 0;">⏳ {dias} dias desde compra</p>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-        # ===========================
-        # FORMULÁRIO DENTRO DO CARD
-        # ===========================
-        comentario = st.text_area("📝 Como foi a conversa?", key=f"com_{idx}")
-        motivo = st.text_input("📌 Motivo do contato", key=f"mot_{idx}")
-        proxima_data = st.date_input("📅 Próxima data de contato", key=f"prox_{idx}")
+        st.write("")  # espaçamento
 
-        # -------------------------------
-        # BOTÃO: SALVAR + CONCLUIR
-        # -------------------------------
-        if st.button(f"✔ Concluir contato ({row['Telefone']})", key=f"save_{idx}"):
+        # ================================
+        # FORMULÁRIO COMPACTO DENTRO DO CARD
+        # ================================
 
-            registrar_agendamento(
-                row=row,
-                comentario=comentario,
-                motivo=motivo,
-                proxima_data=str(proxima_data)
+        with st.container():
+
+            st.markdown("### 📝 Registro rápido do atendimento")
+
+            # ORGANIZA EM 2 COLUNAS PARA FICAR ENXUTO
+            col1, col2 = st.columns(2)
+
+            comentario = col1.text_area(
+                "Como foi a conversa?",
+                key=f"com_{idx}",
+                height=80
             )
 
-            st.success("Contato registrado e agendado com sucesso!")
+            motivo = col2.text_input(
+                "Motivo do contato",
+                key=f"mot_{idx}"
+            )
 
-            # Remove somente este card
-            remover_card(row["Telefone"])
+            proxima_data = col1.date_input(
+                "Próxima data",
+                key=f"prox_{idx}"
+            )
+
+            st.write("")
+
+            # BOTÃO CENTRALIZADO
+            if st.button(f"✔ Concluir contato ({row['Telefone']})", key=f"save_{idx}"):
+                registrar_agendamento(row, comentario, motivo, str(proxima_data))
+                st.success("Contato registrado e agendado!")
+                remover_card(row["Telefone"])
