@@ -184,27 +184,48 @@ css = """
 .card {
     background-color: #FFFFFF;
     width: 100%;
-    height: 230px;
-    padding: 16px;
-    border-radius: 14px;
-    border: 1px solid #dddddd;
+    min-height: 230px;
+    
+    padding: 20px;
+    border-radius: 18px;
+
+    border: 1px solid #e1e1e1;
+
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    box-shadow: 0px 2px 8px rgba(0,0,0,0.15);
-    opacity: 1;
-    transition: opacity 0.5s ease-out;
+
+    box-shadow: 0px 4px 12px rgba(0,0,0,0.15);
+
+    transition: all 0.25s ease;
 }
+
+.card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0px 8px 20px rgba(0,0,0,0.25);
+}
+
 
 .card.fade-out {
     opacity: 0;
 }
 
-.card h3 { margin: 0; font-size: 19px; color: #000 }
-.card p { margin: 4px 0; font-size: 13px; color: #222 }
+.card h3 {
+    margin: 0;
+    font-size: 20px;
+    color: #111;
+    font-weight: 700;
+}
+
+.card p {
+    margin: 3px 0;
+    font-size: 14px;
+    color: #333;
+}
+
 
 .button-finish {
-    background-color: #0066FF;
+    background: linear-gradient(90deg, #007bff, #0057d9);
     color: white;
     padding: 8px 10px;
     border-radius: 8px;
@@ -214,7 +235,9 @@ css = """
     border: none;
 }
 .button-finish:hover {
-    background-color: #004FCC;
+    background: linear-gradient(90deg, #0057d9, #003ea8);
+}
+
 }
 </style>
 """
