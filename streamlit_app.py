@@ -202,92 +202,18 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
 
 
 # =========================================================
-# 🔥 CSS ESTILO GYMSHARK + GRID DE CARDS
-# =========================================================
-# =========================================================
-# 🔥 CSS ESTILO GYMSHARK + GRID DE CARDS
-# =========================================================
-st.markdown("""
-<style>
-
-.card-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 32px;
-    margin-top: 35px;
-}
-
-.card {
-    background: rgba(255,255,255,0.07);
-    border: 1px solid #2a2a2a;
-    padding: 22px;
-    border-radius: 22px;
-    backdrop-filter: blur(6px);
-    box-shadow: 0 4px 14px rgba(0,0,0,0.30);
-}
-
-.card-header {
-    background: #0A40B0;
-    padding: 18px;
-    border-radius: 18px;
-    color: white;
-    font-size: 17px;
-    margin-bottom: 16px;
-    line-height: 1.6;
-}
-
-.card-title {
-    color: #cccccc;
-    font-size: 14px;
-    margin-top: 10px;
-}
-
-.input-box {
-    background: #111;
-    border: 1px solid #444;
-    padding: 10px;
-    border-radius: 12px;
-    color: white;
-    width: 100%;
-    margin-top: 6px;
-}
-
-.submit-btn {
-    background: #0A40B0;
-    border-radius: 14px;
-    padding: 12px;
-    margin-top: 16px;
-    color: white;
-    font-weight: bold;
-    text-align: center;
-    cursor: pointer;
-    transition: 0.2s;
-}
-
-.submit-btn:hover {
-    filter: brightness(1.15);
-}
-
-</style>
-""", unsafe_allow_html=True)
-
-
-# =========================================================
-# 🎯 FUNÇÃO DO CARD DE ATENDIMENTO
-# =========================================================
-# =========================================================
-# 🎯 FUNÇÃO DO CARD DE ATENDIMENTO
+# FUNÇÃO DO CARD (HTML + JS)
 # =========================================================
 def card_html(idx, row):
 
-    card = f"""
+    html = f"""
     <div class="card">
 
         <div class="card-header">
             <b>{row['Cliente']}</b><br>
             📱 {row['Telefone']}<br>
             🏷 {row['Classificação']}<br>
-            💰 {safe_valor(row['Valor'])}<br>
+            💰 {safe_val(row['Valor'])}<br>
             ⏳ {row['Dias_num']} dias desde compra
         </div>
 
@@ -324,30 +250,46 @@ def card_html(idx, row):
     </div>
     """
 
-    st.markdown(card, unsafe_allow_html=True)
-
+    st.markdown(html, unsafe_allow_html=True)
 
 
 # =========================================================
-# 🧩 RENDERIZAÇÃO FINAL — GRID COM VÁRIOS CARDS POR PÁGINA
+# RECEBE EVENTO DO JS
 # =========================================================
-event = st.session_state.get("event", None)
+if "event" not in st.session_state:
+    st.session_state["event"] = None
 
-# Recebe eventos de JS
-message = st.experimental_get_query_params()
+event = st.session_state["event"]
 
 if event and event["type"] == "salvar":
     idx = int(event["idx"])
     row = df_dia.iloc[idx]
     registrar_agendamento(row, event["motivo"], event["resumo"], event["data"])
-    remover_card(row["Telefone"])
 
-# Abre o GRID
+
+# =========================================================
+# RENDERIZAÇÃO FINAL – GRID
+# =========================================================
+st.title("📌 Atendimentos do dia")
+
 st.markdown('<div class="card-grid">', unsafe_allow_html=True)
 
-# Renderiza cards
 for idx, row in df_dia.iterrows():
     card_html(idx, row)
 
-# Fecha o GRID
 st.markdown('</div>', unsafe_allow_html=True)
+
+
+# =========================================================
+# LISTENER DE EVENTOS
+# =========================================================
+st.markdown("""
+<script>
+window.addEventListener("message", (event) => {
+    if (event.data.type){
+        const streamlitEvent = event.data;
+        window.parent.postMessage({isStreamlitMessage: true, ...streamlitEvent}, "*");
+    }
+});
+</script>
+""", unsafe_allow_html=True)
