@@ -34,6 +34,27 @@ SHEET_NAME = "Total"
 df = load_sheet(SHEET_ID, SHEET_NAME)
 
 # ------------------------------
+# Conexão com Google Sheets API
+# ------------------------------
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+
+creds = Credentials.from_service_account_file(
+    "credentials.json",
+    scopes=SCOPES
+)
+
+client = gspread.authorize(creds)
+
+# ABRIR PLANILHAS DAS ABAS NOVAS
+sh = client.open("CRM_Sportech")  # <-- Nome da planilha no Google
+ws_ag = sh.worksheet("AGENDAMENTOS_ATIVOS")
+ws_hist = sh.worksheet("HISTORICO")
+
+
+# ------------------------------
 # Mapear colunas (A–I)
 # ------------------------------
 col_data = df.iloc[:, 0]
