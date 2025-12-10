@@ -329,8 +329,7 @@ if total_tarefas == 0:
     st.success("🎉 Você está em dia! Nenhum atendimento pendente dentro dos filtros atuais.")
 elif total_tarefas < 10:
     st.info(f"🔔 Hoje você tem **{total_tarefas}** contatos para trabalhar.")
-else:
-    st.warning(f"🔥 Dia cheio! Você tem **{total_tarefas}** contatos para trabalhar.")
+
 
 
 # =========================================================
