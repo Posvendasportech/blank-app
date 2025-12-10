@@ -200,8 +200,9 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
         ], value_input_option="USER_ENTERED")
 
 
+
 # =========================================================
-# CARD LADO A LADO (2 por linha)
+# 🔥 CSS ESTILO GYMSHARK + GRID DE CARDS
 # =========================================================
 # =========================================================
 # 🔥 CSS ESTILO GYMSHARK + GRID DE CARDS
@@ -213,24 +214,32 @@ st.markdown("""
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 32px;
-    margin-top: 30px;
+    margin-top: 35px;
 }
 
 .card {
-    background: #ffffff10;
+    background: rgba(255,255,255,0.07);
     border: 1px solid #2a2a2a;
     padding: 22px;
     border-radius: 22px;
     backdrop-filter: blur(6px);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.30);
 }
 
 .card-header {
     background: #0A40B0;
-    padding: 20px;
+    padding: 18px;
     border-radius: 18px;
     color: white;
     font-size: 17px;
     margin-bottom: 16px;
+    line-height: 1.6;
+}
+
+.card-title {
+    color: #cccccc;
+    font-size: 14px;
+    margin-top: 10px;
 }
 
 .input-box {
@@ -240,24 +249,19 @@ st.markdown("""
     border-radius: 12px;
     color: white;
     width: 100%;
-    margin-top: 8px;
-}
-
-.card-title {
-    color: #ddd;
-    font-size: 14px;
-    margin-top: 10px;
+    margin-top: 6px;
 }
 
 .submit-btn {
     background: #0A40B0;
-    border-radius: 12px;
-    padding: 10px;
-    margin-top: 14px;
+    border-radius: 14px;
+    padding: 12px;
+    margin-top: 16px;
     color: white;
     font-weight: bold;
     text-align: center;
     cursor: pointer;
+    transition: 0.2s;
 }
 
 .submit-btn:hover {
@@ -271,9 +275,12 @@ st.markdown("""
 # =========================================================
 # 🎯 FUNÇÃO DO CARD DE ATENDIMENTO
 # =========================================================
+# =========================================================
+# 🎯 FUNÇÃO DO CARD DE ATENDIMENTO
+# =========================================================
 def card_html(idx, row):
 
-    st.markdown(f"""
+    card = f"""
     <div class="card">
 
         <div class="card-header">
@@ -315,28 +322,32 @@ def card_html(idx, row):
         </script>
 
     </div>
-    """, unsafe_allow_html=True)
+    """
+
+    st.markdown(card, unsafe_allow_html=True)
+
+
 
 # =========================================================
 # 🧩 RENDERIZAÇÃO FINAL — GRID COM VÁRIOS CARDS POR PÁGINA
 # =========================================================
+event = st.session_state.get("event", None)
+
+# Recebe eventos de JS
 message = st.experimental_get_query_params()
 
-if "event" in st.session_state:
-    evt = st.session_state["event"]
+if event and event["type"] == "salvar":
+    idx = int(event["idx"])
+    row = df_dia.iloc[idx]
+    registrar_agendamento(row, event["motivo"], event["resumo"], event["data"])
+    remover_card(row["Telefone"])
 
-    if evt["type"] == "salvar":
-        idx = int(evt["idx"])
-        row = df_dia.iloc[idx]
+# Abre o GRID
+st.markdown('<div class="card-grid">', unsafe_allow_html=True)
 
-        registrar_agendamento(row, evt["motivo"], evt["resumo"], evt["data"])
-        remover_card(row["Telefone"])
-
-        st.markdown('<div class="card-grid">', unsafe_allow_html=True)
-
+# Renderiza cards
 for idx, row in df_dia.iterrows():
     card_html(idx, row)
 
+# Fecha o GRID
 st.markdown('</div>', unsafe_allow_html=True)
-
-
