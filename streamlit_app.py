@@ -118,7 +118,7 @@ with colA:
 
 # Novos 15+ dias
 novos = base[(base["Classificação"] == "Novo") & (base["Dias_num"] >= 15)]
-novos = novos.sort_values("Dias_num", ascending=False).head(meta_novos)
+novos = novos.sort_values("Dias_num", ascending=True).head(meta_novos)
 
 # Promissores
 prom = base[base["Classificação"] == "Promissor"]
