@@ -201,162 +201,132 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
 
 
 # =========================================================
-# Cards
+# 🔥 CSS — ESTILO CLEAN / GYMSHARK
 # =========================================================
-
 st.markdown("""
 <style>
-/* ... seu CSS de fundo preto existente ... */
 
 .card {
-    background-color: #1a1a1a; /* Cinza escuro */
-    border: 1px solid #333333;
-    border-radius: 8px;
-    padding: 15px;
-    margin-bottom: 20px; /* Espaço entre os cards verticais */
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    height: 100%; /* Garante que os cards na mesma linha tenham a mesma altura */
-    display: flex;
-    flex-direction: column;
+    background-color: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 18px;
+    color: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
 }
 
 .card-header {
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #333333;
-    color: #FFFFFF;
-}
-
-.card-header b {
-    font-size: 1.1em;
-    color: #4CAF50; /* Cor de destaque para o nome */
+    background-color: #0A40B0;
+    padding: 14px;
+    border-radius: 10px;
+    font-size: 17px;
+    margin-bottom: 14px;
+    line-height: 1.5;
 }
 
 .card-title {
-    font-weight: bold;
-    margin-top: 10px;
-    margin-bottom: 5px;
-    color: #999999;
+    margin-top: 8px;
+    color: #cccccc;
+    font-size: 14px;
+    font-weight: 600;
 }
 
 .input-box {
     width: 100%;
     padding: 8px;
-    margin-bottom: 10px;
-    border: 1px solid #555555;
-    border-radius: 4px;
-    background-color: #2a2a2a; /* Fundo do input */
-    color: #FFFFFF;
-    box-sizing: border-box;
-}
-
-textarea.input-box {
-    resize: vertical;
+    border-radius: 8px;
+    border: 1px solid #444;
+    background-color: #222;
+    color: white;
+    margin-top: 4px;
 }
 
 .submit-btn {
-    background-color: #4CAF50; /* Verde */
+    margin-top: 12px;
+    width: 100%;
+    background-color: #0A40B0;
     color: white;
-    padding: 10px 15px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
+    padding: 10px;
+    border-radius: 8px;
     text-align: center;
-    margin-top: auto; /* Empurra o botão para baixo */
+    font-weight: bold;
+    cursor: pointer;
 }
 
 .submit-btn:hover {
-    background-color: #45a049;
+    filter: brightness(1.15);
 }
+
 </style>
 """, unsafe_allow_html=True)
 
 
-
 # =========================================================
-# FUNÇÃO DO CARD (HTML + JS) - VERSÃO CORRIGIDA E COMPLETA
+# 🧩 FUNÇÃO — GERAÇÃO DO CARD FUNCIONAL
 # =========================================================
-def card_html(idx, row):
+def card_component(idx, row):
 
-    # O HTML deve incluir todos os campos de input e o JavaScript de comunicação
-    html = f"""
-    <div class="card">
+    with st.container():
+        st.markdown('<div class="card">', unsafe_allow_html=True)
 
-        <div class="card-header">
-            <b>{row['Cliente']}</b><br>
-            📱 {row['Telefone']}<br>
-            🏷 {row['Classificação']}<br>
-            💰 {safe_valor(row['Valor'])}<br>
-            ⏳ {row['Dias_num']} dias desde compra
-        </div>
+        # HEADER
+        st.markdown(
+            f"""
+            <div class="card-header">
+                <b>{row['Cliente']}</b><br>
+                📱 {row['Telefone']}<br>
+                🏷 {row['Classificação']}<br>
+                💰 {safe_valor(row['Valor'])}<br>
+                ⏳ {row['Dias_num']} dias desde compra
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-        <div class="card-title">Motivo do contato</div>
-        <input class="input-box" id="motivo_{idx}" placeholder="Ex.: Check-in">
+        # Campos funcionais (Streamlit)
+        motivo = st.text_input("Motivo do contato", key=f"mot_{idx}")
+        resumo = st.text_area("Resumo da conversa", key=f"res_{idx}", height=80)
+        proxima = st.date_input("Próxima data", key=f"dt_{idx}")
 
-        <div class="card-title">Resumo da conversa</div>
-        <textarea class="input-box" id="resumo_{idx}" rows="3" placeholder="O que foi conversado e quais os próximos passos..."></textarea>
+        # Botão
+        if st.button("Registrar e concluir", key=f"btn_{idx}"):
+            return motivo, resumo, proxima
 
-        <div class="card-title">Próxima data (Opcional)</div>
-        <input class="input-box" type="date" id="data_{idx}">
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        <div class="submit-btn" onclick="sendForm{idx}()">Registrar e concluir</div>
-
-        <script>
-            function sendForm{idx}() {{
-                // 1. Captura os valores dos inputs
-                const motivo = document.getElementById("motivo_{idx}").value;
-                const resumo = document.getElementById("resumo_{idx}").value;
-                const data = document.getElementById("data_{idx}").value;
-
-                // 2. Envia os dados capturados via postMessage para o Streamlit (iframe pai)
-                window.parent.postMessage(
-                    {{
-                        type: "salvar",
-                        idx: "{idx}",
-                        motivo: motivo,
-                        resumo: resumo,
-                        data: data
-                    }},
-                    "*"
-                );
-            }}
-        </script>
-
-    </div>
-    """
-
-    st.markdown(html, unsafe_allow_html=True)
-
+    return None, None, None
 
 
 # =========================================================
-# RENDERIZAÇÃO FINAL – GRID (2 Colunas)
+# 🧩 GRID — 2 CARDS POR LINHA
 # =========================================================
+
 st.title("📌 Atendimentos do dia")
-
-# Obtém a lista de índices (idx) do DataFrame para iterar
 indices = df_dia.index.tolist()
 
-# Itera sobre os índices em passos de 2
 for i in range(0, len(indices), 2):
-    
-    # Cria duas colunas para cada par de cards
+
     col1, col2 = st.columns(2)
-    
-    # Renderiza o primeiro card (na coluna 1)
+
     idx1 = indices[i]
     row1 = df_dia.loc[idx1]
+
     with col1:
-        # A função card_html recebe o índice original e a linha
-        card_html(idx1, row1)
-        
-    # Renderiza o segundo card, se existir (na coluna 2)
+        motivo, resumo, proxima = card_component(idx1, row1)
+        if motivo:
+            registrar_agendamento(row1, resumo, motivo, str(proxima))
+            remover_card(row1["Telefone"])
+
     if i + 1 < len(indices):
-        idx2 = indices[i+1]
+        idx2 = indices[i + 1]
         row2 = df_dia.loc[idx2]
+
         with col2:
-            card_html(idx2, row2)
-            
-# Se df_dia estiver vazio
+            motivo2, resumo2, proxima2 = card_component(idx2, row2)
+            if motivo2:
+                registrar_agendamento(row2, resumo2, motivo2, str(proxima2))
+                remover_card(row2["Telefone"])
+
+
 if df_dia.empty:
-    st.info("🎉 Não há tarefas pendentes para a classificação selecionada hoje.")
+    st.info("🎉 Não há tarefas pendentes para hoje.")
