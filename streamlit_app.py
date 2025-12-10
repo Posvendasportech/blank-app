@@ -399,7 +399,7 @@ def card_component(idx, row):
         # Responsável
         vendedor = st.selectbox(
             "Responsável",
-            ["João", "Maria", "Patrick", "Outro"],
+            ["João", "Maria", "Patrick", "Guilherme", "Outro"],
             key=f"vend_{idx}"
         )
 
