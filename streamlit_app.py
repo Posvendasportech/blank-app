@@ -203,9 +203,10 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
 # =========================================================
 # CARD LADO A LADO (2 por linha)
 # =========================================================
-
-def card_atendimento(idx, row):
-    st.markdown("""
+# =========================================================
+# 🔥 CSS ESTILO GYMSHARK + GRID DE CARDS
+# =========================================================
+st.markdown("""
 <style>
 
 .card-grid {
@@ -260,13 +261,15 @@ def card_atendimento(idx, row):
 """, unsafe_allow_html=True)
 
 
-  def card_atendimento(idx, row):
+# =========================================================
+# 🎯 FUNÇÃO DO CARD DE ATENDIMENTO
+# =========================================================
+def card_atendimento(idx, row):
 
     with st.container():
-        # abre a DIV do card em HTML
         st.markdown('<div class="gym-card">', unsafe_allow_html=True)
 
-        # --- CABEÇALHO DO CARD ---
+        # --- Cabeçalho estilo Gymshark ---
         st.markdown(f"""
             <div class="gym-header">
                 <b>{row['Cliente']}</b><br>
@@ -277,39 +280,40 @@ def card_atendimento(idx, row):
             </div>
         """, unsafe_allow_html=True)
 
-        # --- INPUTS INTERNOS DO CARD ---
+        # Campo Motivo
         st.markdown("<div class='gym-section-title'>Motivo do contato</div>", unsafe_allow_html=True)
         motivo = st.text_input("", key=f"motivo_{idx}")
 
+        # Campo Resumo da conversa
         st.markdown("<div class='gym-section-title'>Resumo da conversa</div>", unsafe_allow_html=True)
         resumo = st.text_area("", key=f"resumo_{idx}", height=80)
 
+        # Campo Próxima data
         st.markdown("<div class='gym-section-title'>Próxima data</div>", unsafe_allow_html=True)
         proxima = st.date_input("", key=f"prox_{idx}")
 
-        # --- BOTÃO GYMSHARK ---
+        # Botão estilo Gymshark
         if st.button(f"Registrar e concluir ({row['Telefone']})", key=f"save_{idx}"):
             return motivo, resumo, proxima
 
-        # fecha o card
         st.markdown("</div>", unsafe_allow_html=True)
 
     return None, None, None
 
 
 # =========================================================
-# RENDERIZAÇÃO FINAL DOS CARDS
+# 🧩 RENDERIZAÇÃO FINAL — GRID COM VÁRIOS CARDS POR PÁGINA
 # =========================================================
 st.markdown("## 📌 Atendimentos do dia")
 
 st.markdown('<div class="card-grid">', unsafe_allow_html=True)
 
 for idx, row in df_dia.iterrows():
-    
+
     motivo, resumo, proxima = card_atendimento(idx, row)
 
     if motivo:
         registrar_agendamento(row, motivo, resumo, str(proxima))
         remover_card(row["Telefone"])
 
-st.markdown('</div>', unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
