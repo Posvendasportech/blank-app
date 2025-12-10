@@ -30,6 +30,75 @@ st.markdown("""
     background-color: #000000;
     color: #FFFFFF;
 }
+
+/* Remove bordas padrão de expander */
+.streamlit-expanderHeader {
+    background-color: #111 !important;
+}
+
+/* Ajuste tabelas */
+[data-testid="stDataFrame"] {
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* Cards */
+.card {
+    background-color: #101010;
+    border: 1px solid #222;
+    border-radius: 16px;
+    padding: 18px;
+    color: white;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    margin-bottom: 18px;
+}
+
+.card-header {
+    background: linear-gradient(135deg, #0A40B0, #183b8c);
+    padding: 14px;
+    border-radius: 12px;
+    font-size: 16px;
+    margin-bottom: 14px;
+    line-height: 1.5;
+}
+
+.card-title {
+    margin-top: 8px;
+    color: #cccccc;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.input-box {
+    width: 100%;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    background-color: #1b1b1b;
+    color: white;
+    margin-top: 4px;
+}
+
+.submit-btn {
+    margin-top: 12px;
+    width: 100%;
+    background-color: #0A40B0;
+    color: white;
+    padding: 10px;
+    border-radius: 8px;
+    text-align: center;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.submit-btn:hover {
+    filter: brightness(1.15);
+}
+
+.small-label {
+    font-size: 12px;
+    color: #bbbbbb;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -71,11 +140,21 @@ def converte_dias(v):
 
 def safe_valor(v):
     try:
-        if pd.isna(v): return "—"
-        v = str(v).replace("R$", "").replace(",", ".").strip()
+        if pd.isna(v):
+            return "—"
+        v = str(v).replace("R$", "").replace(".", "").replace(",", ".").strip()
         return f"R$ {float(v):.2f}"
     except:
         return "—"
+
+def valor_num(v):
+    try:
+        if pd.isna(v):
+            return None
+        v = str(v).replace("R$", "").replace(".", "").replace(",", ".").strip()
+        return float(v)
+    except:
+        return None
 
 
 # =========================================================
@@ -92,12 +171,29 @@ base = pd.DataFrame({
     "Dias_num": col_dias.apply(converte_dias)
 })
 
+base["Valor_num"] = base["Valor"].apply(valor_num)
+
 
 # =========================================================
 # Estado do app
 # =========================================================
 if "concluidos" not in st.session_state:
     st.session_state["concluidos"] = set()
+
+if "pulados" not in st.session_state:
+    st.session_state["pulados"] = set()
+
+if "historico_stack" not in st.session_state:
+    st.session_state["historico_stack"] = []
+
+
+def remover_card(telefone, concluido=True):
+    tel = str(telefone)
+    if concluido:
+        st.session_state["concluidos"].add(tel)
+    else:
+        st.session_state["pulados"].add(tel)
+    st.session_state["historico_stack"].append(tel)
 
 
 # =========================================================
@@ -113,9 +209,39 @@ class_filter = st.radio(
 
 
 # =========================================================
-# Configurações
+# Sidebar – Filtros avançados & busca
 # =========================================================
-st.markdown("## ⚙️ Configurações & Resumo do Dia")
+with st.sidebar:
+    st.header("⚙️ Filtros avançados")
+
+    min_dias = st.number_input("Mínimo de dias desde a última compra", min_value=0, value=0)
+    max_dias = st.number_input("Máximo de dias desde a última compra", min_value=0, value=365)
+
+    min_valor = st.number_input("Valor mínimo (R$)", min_value=0.0, value=0.0, step=10.0)
+    max_valor = st.number_input("Valor máximo (R$)", min_value=0.0, value=1000.0, step=10.0)
+
+    telefone_busca = st.text_input("Buscar por telefone (qualquer parte)")
+
+    st.markdown("---")
+    st.markdown("### 🔁 Controles da sessão")
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        if st.button("↩ Voltar último cliente"):
+            if st.session_state["historico_stack"]:
+                ultimo = st.session_state["historico_stack"].pop()
+                st.session_state["concluidos"].discard(ultimo)
+                st.session_state["pulados"].discard(ultimo)
+    with col_s2:
+        if st.button("🧹 Resetar sessão"):
+            st.session_state["concluidos"] = set()
+            st.session_state["pulados"] = set()
+            st.session_state["historico_stack"] = []
+
+
+# =========================================================
+# Configurações & metas do dia
+# =========================================================
+st.markdown("## 🎯 Configurações & Metas do Dia")
 
 colA, colB = st.columns([2, 2])
 with colA:
@@ -128,33 +254,67 @@ with colA:
 # =========================================================
 # Seleção das tarefas
 # =========================================================
-novos = base[(base["Classificação"] == "Novo") & (base["Dias_num"] >= 15)]
+novos = base[(base["Classificação"] == "Novo") & (base["Dias_num"].fillna(0) >= 15)].copy()
 novos = novos.sort_values("Dias_num", ascending=True).head(meta_novos)
 
-prom = base[base["Classificação"] == "Promissor"].sort_values("Dias_num", ascending=False).head(meta_prom)
-leal_camp = base[base["Classificação"].isin(["Leal", "Campeão"])].sort_values("Dias_num", ascending=False).head(meta_leais)
-risco = base[base["Classificação"] == "Em risco"].sort_values("Dias_num", ascending=True)
+prom = base[base["Classificação"] == "Promissor"].copy()
+prom = prom.sort_values("Dias_num", ascending=False).head(meta_prom)
+
+leal_camp = base[base["Classificação"].isin(["Leal", "Campeão"])].copy()
+leal_camp = leal_camp.sort_values("Dias_num", ascending=False).head(meta_leais)
+
+risco = base[base["Classificação"] == "Em risco"].copy()
+risco = risco.sort_values("Dias_num", ascending=True)
 
 frames = []
-if not novos.empty: novos["Grupo"] = "Novo"; frames.append(novos)
-if not prom.empty: prom["Grupo"] = "Promissor"; frames.append(prom)
-if not leal_camp.empty: leal_camp["Grupo"] = "Leal/Campeão"; frames.append(leal_camp)
-if not risco.empty: risco["Grupo"] = "Em risco"; frames.append(risco)
+if not novos.empty:
+    novos["Grupo"] = "Novo"
+    frames.append(novos)
+
+if not prom.empty:
+    prom["Grupo"] = "Promissor"
+    frames.append(prom)
+
+if not leal_camp.empty:
+    leal_camp["Grupo"] = "Leal/Campeão"
+    frames.append(leal_camp)
+
+if not risco.empty:
+    risco["Grupo"] = "Em risco"
+    frames.append(risco)
 
 df_dia = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-df_dia = df_dia[~df_dia["Telefone"].isin(st.session_state["concluidos"])]
 
+# Remover concluidos e pulados
+todos_ocultos = st.session_state["concluidos"].union(st.session_state["pulados"])
+df_dia = df_dia[~df_dia["Telefone"].isin(todos_ocultos)]
+
+# Filtro por classificação (radio principal)
 if class_filter != "Todos":
     df_dia = df_dia[df_dia["Classificação"] == class_filter]
 
+# Aplicar filtros avançados
+df_dia = df_dia[
+    df_dia["Dias_num"].fillna(0).between(min_dias, max_dias)
+]
+
+df_dia = df_dia[
+    df_dia["Valor_num"].fillna(0).between(min_valor, max_valor)
+]
+
+# Busca por telefone
+if telefone_busca:
+    df_dia = df_dia[df_dia["Telefone"].str.contains(telefone_busca)]
+
 
 # =========================================================
-# Contadores
+# Contadores & resumo
 # =========================================================
 count_novos = len(df_dia[df_dia["Classificação"] == "Novo"])
 count_prom = len(df_dia[df_dia["Classificação"] == "Promissor"])
 count_leais = len(df_dia[df_dia["Classificação"].isin(["Leal", "Campeão"])])
 count_risco = len(df_dia[df_dia["Classificação"] == "Em risco"])
+total_tarefas = len(df_dia)
 
 with colB:
     st.markdown("### 📊 Resumo")
@@ -164,12 +324,21 @@ with colB:
     c3.metric("Leais/Campeões", count_leais)
     c4.metric("Em risco", count_risco)
 
+st.markdown("---")
+
+# Notificação geral
+if total_tarefas == 0:
+    st.success("🎉 Você está em dia! Nenhum atendimento pendente dentro dos filtros atuais.")
+elif total_tarefas < 10:
+    st.info(f"🔔 Hoje você tem **{total_tarefas}** contatos para trabalhar.")
+else:
+    st.warning(f"🔥 Dia cheio! Você tem **{total_tarefas}** contatos para trabalhar.")
+
 
 # =========================================================
 # Função de gravação no Google Sheets
 # =========================================================
-def registrar_agendamento(row, comentario, motivo, proxima_data):
-
+def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
     client = get_gsheet_client()
     sh = client.open("Agendamentos")
 
@@ -178,6 +347,7 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
 
     agora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
+    # Histórico (com vendedor)
     ws_hist.append_row([
         agora,
         row["Cliente"],
@@ -186,9 +356,11 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
         safe_valor(row["Valor"]),
         comentario,
         motivo,
-        proxima_data
+        proxima_data,
+        vendedor
     ], value_input_option="USER_ENTERED")
 
+    # Agendamento futuro (se houver data)
     if proxima_data:
         ws_ag.append_row([
             row["Cliente"],
@@ -196,78 +368,43 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
             row["Classificação"],
             comentario,
             motivo,
-            proxima_data
+            proxima_data,
+            vendedor
         ], value_input_option="USER_ENTERED")
 
 
 # =========================================================
-# 🔥 CSS — ESTILO CLEAN / GYMSHARK
+# Agendamentos ativos (consolidação)
 # =========================================================
-st.markdown("""
-<style>
+@st.cache_data(ttl=60)
+def load_agendamentos_df():
+    try:
+        client = get_gsheet_client()
+        sh = client.open("Agendamentos")
+        ws_ag = sh.worksheet("AGENDAMENTOS_ATIVOS")
+        data = ws_ag.get_all_records()
+        if not data:
+            return pd.DataFrame()
+        return pd.DataFrame(data)
+    except Exception:
+        return pd.DataFrame()
 
-.card {
-    background-color: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 12px;
-    padding: 18px;
-    color: white;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-}
-
-.card-header {
-    background-color: #0A40B0;
-    padding: 14px;
-    border-radius: 10px;
-    font-size: 17px;
-    margin-bottom: 14px;
-    line-height: 1.5;
-}
-
-.card-title {
-    margin-top: 8px;
-    color: #cccccc;
-    font-size: 14px;
-    font-weight: 600;
-}
-
-.input-box {
-    width: 100%;
-    padding: 8px;
-    border-radius: 8px;
-    border: 1px solid #444;
-    background-color: #222;
-    color: white;
-    margin-top: 4px;
-}
-
-.submit-btn {
-    margin-top: 12px;
-    width: 100%;
-    background-color: #0A40B0;
-    color: white;
-    padding: 10px;
-    border-radius: 8px;
-    text-align: center;
-    font-weight: bold;
-    cursor: pointer;
-}
-
-.submit-btn:hover {
-    filter: brightness(1.15);
-}
-
-</style>
-""", unsafe_allow_html=True)
+with st.expander("📅 Ver agendamentos ativos"):
+    df_ag = load_agendamentos_df()
+    if df_ag.empty:
+        st.write("Nenhum agendamento ativo encontrado.")
+    else:
+        st.dataframe(df_ag, use_container_width=True)
 
 
 # =========================================================
-# 🧩 FUNÇÃO — GERAÇÃO DO CARD FUNCIONAL
+# 🔥 CSS — Card + componente funcional
 # =========================================================
 def card_component(idx, row):
-
     with st.container():
         st.markdown('<div class="card">', unsafe_allow_html=True)
+
+        dias_txt = f"{row['Dias_num']} dias desde compra" if pd.notna(row["Dias_num"]) else "Sem informação de dias"
 
         # HEADER
         st.markdown(
@@ -277,56 +414,81 @@ def card_component(idx, row):
                 📱 {row['Telefone']}<br>
                 🏷 {row['Classificação']}<br>
                 💰 {safe_valor(row['Valor'])}<br>
-                ⏳ {row['Dias_num']} dias desde compra
+                ⏳ {dias_txt}
             </div>
             """,
             unsafe_allow_html=True
         )
 
-        # Campos funcionais (Streamlit)
+        # Responsável
+        vendedor = st.selectbox(
+            "Responsável",
+            ["João", "Maria", "Patrick", "Outro"],
+            key=f"vend_{idx}"
+        )
+
         motivo = st.text_input("Motivo do contato", key=f"mot_{idx}")
         resumo = st.text_area("Resumo da conversa", key=f"res_{idx}", height=80)
         proxima = st.date_input("Próxima data", key=f"dt_{idx}")
 
-        # Botão
-        if st.button("Registrar e concluir", key=f"btn_{idx}"):
-            return motivo, resumo, proxima
+        # Botões lado a lado
+        bcol1, bcol2 = st.columns(2)
+        acao = None
+        with bcol1:
+            if st.button("✅ Registrar e concluir", key=f"btn_conc_{idx}"):
+                acao = "concluir"
+        with bcol2:
+            if st.button("⏭ Pular cliente", key=f"btn_pula_{idx}"):
+                acao = "pular"
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    return None, None, None
+    return acao, motivo, resumo, proxima, vendedor
 
 
 # =========================================================
-# 🧩 GRID — 2 CARDS POR LINHA
+# 📌 Atendimentos do dia (grid 2 por linha)
 # =========================================================
+st.markdown("## 📌 Atendimentos do dia")
 
-st.title("📌 Atendimentos do dia")
+# Download CSV da lista atual
+if not df_dia.empty:
+    csv = df_dia.to_csv(index=False).encode("utf-8-sig")
+    st.download_button(
+        "📥 Baixar lista do dia (CSV)",
+        data=csv,
+        file_name="tarefas_dia.csv",
+        mime="text/csv"
+    )
+
 indices = df_dia.index.tolist()
 
 for i in range(0, len(indices), 2):
-
     col1, col2 = st.columns(2)
 
     idx1 = indices[i]
     row1 = df_dia.loc[idx1]
 
     with col1:
-        motivo, resumo, proxima = card_component(idx1, row1)
-        if motivo:
-            registrar_agendamento(row1, resumo, motivo, str(proxima))
-            remover_card(row1["Telefone"])
+        acao, motivo, resumo, proxima, vendedor = card_component(idx1, row1)
+        if acao == "concluir" and motivo:
+            registrar_agendamento(row1, resumo, motivo, str(proxima), vendedor)
+            remover_card(row1["Telefone"], concluido=True)
+        elif acao == "pular":
+            remover_card(row1["Telefone"], concluido=False)
 
     if i + 1 < len(indices):
         idx2 = indices[i + 1]
         row2 = df_dia.loc[idx2]
 
         with col2:
-            motivo2, resumo2, proxima2 = card_component(idx2, row2)
-            if motivo2:
-                registrar_agendamento(row2, resumo2, motivo2, str(proxima2))
-                remover_card(row2["Telefone"])
+            acao2, motivo2, resumo2, proxima2, vendedor2 = card_component(idx2, row2)
+            if acao2 == "concluir" and motivo2:
+                registrar_agendamento(row2, resumo2, motivo2, str(proxima2), vendedor2)
+                remover_card(row2["Telefone"], concluido=True)
+            elif acao2 == "pular":
+                remover_card(row2["Telefone"], concluido=False)
 
 
 if df_dia.empty:
-    st.info("🎉 Não há tarefas pendentes para hoje.")
+    st.info("🎉 Não há tarefas pendentes para hoje dentro dos filtros selecionados.")
