@@ -213,6 +213,9 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
         ], value_input_option="USER_ENTERED")
 
 
+# ------------------------------
+# Renderização dos cards + formulário compacto
+# ------------------------------
 def card_atendimento(idx, row):
     st.markdown(
         """
