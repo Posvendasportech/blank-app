@@ -37,7 +37,10 @@ st.markdown("""
 # ------------------------------
 # Carregar planilha SEM CACHE
 # ------------------------------
-def load_sheet(sheet_id, sheet_name):
+@st.cache_data(ttl=60) 
+def load_sheet(sheet_id, sheet_name):     
+    url = ...     
+    return pd.read_csv(url)
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={quote(sheet_name)}"
     return pd.read_csv(url)
 
@@ -107,7 +110,8 @@ if "concluidos" not in st.session_state:
 
 def remover_card(tel):
     st.session_state["concluidos"].add(str(tel))
-    st.rerun()
+    # NÃO recarrega mais a página toda
+
 
 
 # ------------------------------
