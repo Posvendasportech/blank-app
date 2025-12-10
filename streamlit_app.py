@@ -370,28 +370,7 @@ def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
         ], value_input_option="USER_ENTERED")
 
 
-# =========================================================
-# Agendamentos ativos (consolidação)
-# =========================================================
-@st.cache_data(ttl=60)
-def load_agendamentos_df():
-    try:
-        client = get_gsheet_client()
-        sh = client.open("Agendamentos")
-        ws_ag = sh.worksheet("AGENDAMENTOS_ATIVOS")
-        data = ws_ag.get_all_records()
-        if not data:
-            return pd.DataFrame()
-        return pd.DataFrame(data)
-    except Exception:
-        return pd.DataFrame()
 
-with st.expander("📅 Ver agendamentos ativos"):
-    df_ag = load_agendamentos_df()
-    if df_ag.empty:
-        st.write("Nenhum agendamento ativo encontrado.")
-    else:
-        st.dataframe(df_ag, use_container_width=True)
 
 
 # =========================================================
