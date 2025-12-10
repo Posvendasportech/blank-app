@@ -108,31 +108,6 @@ class_filter = st.radio(
     horizontal=True
 )
 
-# ------------------------------
-# Configurações & Resumo do dia (versão compacta)
-# ------------------------------
-st.markdown("## ⚙️ Configurações & Resumo do Dia")
-
-colA, colB = st.columns([2, 2])
-
-with colA:
-    c1, c2, c3 = st.columns(3)
-
-    meta_novos = c1.number_input("Novos", value=10, min_value=0)
-    meta_prom = c2.number_input("Promissores", value=20, min_value=0)
-    meta_leais = c3.number_input("Leais/Campeões", value=10, min_value=0)
-
-with colB:
-    st.markdown("### 📊 Resumo")
-    r1, r2, r3, r4 = st.columns(4)
-
-    r1.metric("Novos", count_novos)
-    r2.metric("Promissores", count_prom)
-    r3.metric("Leais/Campeões", count_leais)
-    r4.metric("Em risco", count_risco)
-
-
-
 
 # ------------------------------
 # Seleção das tarefas do dia
@@ -180,6 +155,38 @@ df_dia = df_dia[~df_dia["Telefone"].isin(st.session_state["concluidos"])]
 # Aplicar filtro
 if class_filter != "Todos":
     df_dia = df_dia[df_dia["Classificação"] == class_filter]
+
+# ------------------------------
+# Contadores das tarefas do dia
+# ------------------------------
+count_novos = len(df_dia[df_dia["Classificação"] == "Novo"])
+count_prom = len(df_dia[df_dia["Classificação"] == "Promissor"])
+count_leais = len(df_dia[df_dia["Classificação"].isin(["Leal", "Campeão"])])
+count_risco = len(df_dia[df_dia["Classificação"] == "Em risco"])
+
+
+# ------------------------------
+# Configurações & Resumo do dia (versão compacta)
+# ------------------------------
+st.markdown("## ⚙️ Configurações & Resumo do Dia")
+
+colA, colB = st.columns([2, 2])
+
+with colA:
+    c1, c2, c3 = st.columns(3)
+
+    meta_novos = c1.number_input("Novos", value=10, min_value=0)
+    meta_prom = c2.number_input("Promissores", value=20, min_value=0)
+    meta_leais = c3.number_input("Leais/Campeões", value=10, min_value=0)
+
+with colB:
+    st.markdown("### 📊 Resumo")
+    r1, r2, r3, r4 = st.columns(4)
+
+    r1.metric("Novos", count_novos)
+    r2.metric("Promissores", count_prom)
+    r3.metric("Leais/Campeões", count_leais)
+    r4.metric("Em risco", count_risco)
 
 
 
