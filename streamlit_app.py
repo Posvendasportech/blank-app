@@ -213,100 +213,122 @@ def registrar_agendamento(row, comentario, motivo, proxima_data):
         ], value_input_option="USER_ENTERED")
 
 
-# ------------------------------
-# Renderização dos cards + formulário compacto
-# ------------------------------
-css = """
-<style>
-.compact-card {
-    background-color: #FFFFFF;
-    border-radius: 14px;
-    padding: 16px;
-    border: 1px solid #e1e1e1;
-    box-shadow: 0px 3px 10px rgba(0,0,0,0.15);
-    margin-bottom: 18px;
-}
-.compact-header {
-    font-size: 18px; 
-    font-weight: bold; 
-    color: #000;
-}
-.compact-field {
-    font-size: 14px;
-    margin: 2px 0;
-    color: #222;
-}
-</style>
-"""
-st.markdown(css, unsafe_allow_html=True)
+def card_atendimento(idx, row):
+    st.markdown(
+        """
+        <style>
+        .card-container {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 20px;
+            margin-bottom: 30px;
+            display: grid;
+            grid-template-columns: 260px 1fr 120px;
+            grid-template-rows: auto auto;
+            grid-gap: 20px;
+            border: 1px solid #e6e6e6;
+            box-shadow: 0px 4px 15px rgba(0,0,0,0.10);
+        }
+        
+        /* BLOCO ESQUERDO — DADOS DO CLIENTE */
+        .dados {
+            grid-row: 1 / span 2;
+            background-color: #0546b8;
+            color: white;
+            padding: 22px;
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            font-size: 18px;
+            line-height: 1.6;
+        }
 
-for idx, row in df_dia.iterrows():
+        /* MOTIVO DO CONTATO */
+        .motivo {
+            background-color: #0546b8;
+            color: white;
+            padding: 15px;
+            border-radius: 20px;
+            font-size: 17px;
+        }
 
-    valor = safe_valor(row["Valor"])
-    dias = row["Dias_num"]
+        /* RESUMO DA CONVERSA */
+        .resumo {
+            background-color: #0546b8;
+            color: white;
+            padding: 15px;
+            border-radius: 20px;
+            font-size: 17px;
+        }
 
-    with st.container():
-        st.markdown("<div class='compact-card'>", unsafe_allow_html=True)
+        /* BOTÃO DE CONCLUIR */
+        .bt-concluir {
+            background-color: #0546b8;
+            color: white;
+            padding: 15px 10px;
+            border-radius: 20px;
+            text-align: center;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .bt-concluir:hover {
+            filter: brightness(0.85);
+        }
 
-        # ------------------------------
-        # CABEÇALHO DO CARD
-        # ------------------------------
-        st.markdown(
-            f"""
-            <div class='compact-header'>👤 {row['Cliente']}</div>
-            <div class='compact-field'>📱 {row['Telefone']}</div>
-            <div class='compact-field'>🏷 {row['Classificação']}</div>
-            <div class='compact-field'>💰 {valor}</div>
-            <div class='compact-field'>⏳ {dias} dias desde compra</div>
-            """,
-            unsafe_allow_html=True
-        )
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-        st.markdown("### 📝 Registro rápido")
+    # -------------------------------
+    # CAMPOS INTERATIVOS EM STREAMLIT
+    # -------------------------------
+    motivo = st.text_input("Motivo do próximo contato", key=f"motivo_{idx}")
+    resumo = st.text_area("Resumo da conversa", key=f"resumo_{idx}", height=80)
+    proxima = st.date_input("Próxima data", key=f"prox_{idx}")
 
-        # ------------------------------
-        # FORMULÁRIO COMPACTO
-        # ------------------------------
-        col1, col2 = st.columns([2, 1])
+    # -------------------------------
+    # RENDER DO CARD PRINCIPAL
+    # -------------------------------
+    st.markdown(
+        f"""
+        <div class="card-container">
+            
+            <!-- BLOCO ESQUERDO -->
+            <div class="dados">
+                <b>{row['Cliente']}</b><br>
+                📱 {row['Telefone']}<br>
+                🏷 {row['Classificação']}<br>
+                💰 {safe_valor(row['Valor'])}<br>
+                ⏳ {row['Dias_num']} dias desde a compra
+            </div>
 
-        with col1:
-            comentario = st.text_input(
-                "Como foi a conversa?",
-                key=f"com_{idx}",
-                max_chars=120,
-                placeholder="Resumo curto..."
-            )
+            <!-- MOTIVO DO CONTATO -->
+            <div class="motivo">
+                <b>Motivo do próximo contato:</b><br>
+                {motivo if motivo else "—"}
+            </div>
 
-        with col2:
-            motivo = st.text_input(
-                "Motivo do contato",
-                key=f"mot_{idx}",
-                max_chars=40,
-                placeholder="Ex.: check-in"
-            )
+            <!-- RESUMO DA CONVERSA -->
+            <div class="resumo">
+                <b>Resumo da conversa:</b><br>
+                {resumo if resumo else "—"}
+            </div>
 
-        col3, col4 = st.columns([1, 1])
+            <!-- BOTÃO CONCLUIR -->
+            <div class="bt-concluir" onclick="window.parent.document.getElementById('btn_{idx}').click();">
+                ✔ Concluir
+            </div>
 
-        with col3:
-            proxima_data = st.date_input(
-                "Próxima data",
-                key=f"prox_{idx}"
-            )
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-        with col4:
-            st.write("")  # espaçamento
-            registrar = st.button(
-                f"✔ Registrar contato",
-                key=f"save_{idx}",
-                use_container_width=True
-            )
+    # Botão invisível do Streamlit
+    if st.button("✔", key=f"btn_{idx}", help="Botão oculto"):
+        return motivo, resumo, proxima
 
-        # ------------------------------
-        # AÇÃO DE REGISTRAR + REMOVER CARD
-        # ------------------------------
-        if registrar:
-            registrar_agendamento(row, comentario, motivo, str(proxima_data))
-            st.success("Contato registrado!")
-            remover_card(row["Telefone"])
-
-        st.markdown("</div>", unsafe_allow_html=True)
+    return None, None, None
