@@ -109,15 +109,28 @@ class_filter = st.radio(
 )
 
 # ------------------------------
-# Configurações do dia
+# Configurações do dia (versão compacta)
 # ------------------------------
-st.subheader("⚙️ Configurações do dia")
+st.markdown("## ⚙️ Configurações & Resumo do Dia")
 
-c1, c2, c3 = st.columns(3)
+colA, colB = st.columns([2, 2])
 
-meta_novos = c1.number_input("Meta de Check-in (Novos)", value=10, min_value=0)
-meta_prom = c2.number_input("Promissores por dia", value=20, min_value=0)
-meta_leais = c3.number_input("Leais + Campeões por dia", value=10, min_value=0)
+with colA:
+    c1, c2, c3 = st.columns(3)
+
+    meta_novos = c1.number_input("Novos", value=10, min_value=0)
+    meta_prom = c2.number_input("Promissores", value=20, min_value=0)
+    meta_leais = c3.number_input("Leais/Campeões", value=10, min_value=0)
+
+with colB:
+    st.markdown("### 📊 Resumo")
+    r1, r2, r3, r4 = st.columns(4)
+
+    r1.metric("Novos", count_novos)
+    r2.metric("Promissores", count_prom)
+    r3.metric("Leais/Campeões", count_leais)
+    r4.metric("Em risco", count_risco)
+
 
 
 # ------------------------------
