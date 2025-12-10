@@ -2,16 +2,18 @@ import streamlit as st
 import pandas as pd
 from urllib.parse import quote
 import streamlit.components.v1 as components
-import gspread
 from google.oauth2.service_account import Credentials
+import gspread
 from datetime import datetime
-import gspread
-from google.oauth2.service_account import Credentials
 
+# ------------------------------
+# 🔑 Conexão com Google API
+# ------------------------------
 def get_gsheet_client():
     credentials = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
-        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        scopes=["https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive"]
     )
     client = gspread.authorize(credentials)
     return client
@@ -22,7 +24,6 @@ def get_gsheet_client():
 # ------------------------------
 st.set_page_config(page_title="CRM Sportech", page_icon="📅", layout="wide")
 
-# Tema escuro básico
 st.markdown("""
 <style>
 [data-testid="stAppViewContainer"] {
@@ -31,6 +32,7 @@ st.markdown("""
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 # ------------------------------
 # Carregar planilha SEM CACHE
@@ -41,27 +43,8 @@ def load_sheet(sheet_id, sheet_name):
 
 SHEET_ID = "1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc"
 SHEET_NAME = "Total"
+
 df = load_sheet(SHEET_ID, SHEET_NAME)
-
-# ------------------------------
-# Conexão com Google Sheets API
-# ------------------------------
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
-
-creds = Credentials.from_service_account_file(
-    "credentials.json",
-    scopes=SCOPES
-)
-
-client = gspread.authorize(creds)
-
-# ABRIR PLANILHAS DAS ABAS NOVAS
-sh = client.open("CRM_Sportech")  # <-- Nome da planilha no Google
-ws_ag = sh.worksheet("AGENDAMENTOS_ATIVOS")
-ws_hist = sh.worksheet("HISTORICO")
 
 
 # ------------------------------
@@ -74,7 +57,8 @@ col_valor = df.iloc[:, 3]
 col_tel = df.iloc[:, 4]
 col_compras = df.iloc[:, 5]
 col_class = df.iloc[:, 6]
-col_dias = df.iloc[:, 8]  # IMPORTANTE
+col_dias = df.iloc[:, 8]  # Dias desde a compra
+
 
 # ------------------------------
 # Conversão segura de dias
@@ -82,13 +66,13 @@ col_dias = df.iloc[:, 8]  # IMPORTANTE
 def converte_dias(v):
     try:
         v = str(v).replace(",", ".")
-        v = float(v)
-        return int(round(v))
+        return int(round(float(v)))
     except:
         return None
 
+
 # ------------------------------
-# Conversão segura de valor monetário
+# Conversão segura de valor
 # ------------------------------
 def safe_valor(v):
     try:
@@ -99,8 +83,9 @@ def safe_valor(v):
     except:
         return "—"
 
+
 # ------------------------------
-# Criar dataframe base
+# Criar base
 # ------------------------------
 base = pd.DataFrame({
     "Data": pd.to_datetime(col_data, errors="coerce"),
@@ -113,18 +98,20 @@ base = pd.DataFrame({
     "Dias_num": col_dias.apply(converte_dias)
 })
 
+
 # ------------------------------
-# Estado de concluídos
+# Estado local — concluídos
 # ------------------------------
 if "concluidos" not in st.session_state:
     st.session_state["concluidos"] = set()
 
-def concluir(tel):
+def remover_card(tel):
     st.session_state["concluidos"].add(str(tel))
     st.rerun()
 
+
 # ------------------------------
-# Layout – Título + Filtro
+# Título e filtro
 # ------------------------------
 st.title("📅 CRM Sportech – Tarefas do Dia")
 
@@ -134,8 +121,10 @@ class_filter = st.radio(
     horizontal=True
 )
 
+
+
 # ------------------------------
-# Configurações & Resumo do dia
+# Configurações & Resumo
 # ------------------------------
 st.markdown("## ⚙️ Configurações & Resumo do Dia")
 
@@ -147,52 +136,33 @@ with colA:
     meta_prom = c2.number_input("Promissores", value=20, min_value=0)
     meta_leais = c3.number_input("Leais/Campeões", value=10, min_value=0)
 
-# ------------------------------
-# Seleção das tarefas DO DIA (usando metas acima)
-# ------------------------------
 
-# Novos 15+ dias
+# ------------------------------
+# Seleção das tarefas (lógica)
+# ------------------------------
 novos = base[(base["Classificação"] == "Novo") & (base["Dias_num"] >= 15)]
 novos = novos.sort_values("Dias_num", ascending=True).head(meta_novos)
 
-# Promissores
 prom = base[base["Classificação"] == "Promissor"]
 prom = prom.sort_values("Dias_num", ascending=False).head(meta_prom)
 
-# Leais + Campeões
 leal_camp = base[base["Classificação"].isin(["Leal", "Campeão"])]
 leal_camp = leal_camp.sort_values("Dias_num", ascending=False).head(meta_leais)
 
-# Em risco
 risco = base[base["Classificação"] == "Em risco"].sort_values("Dias_num")
 
-# Montagem final
 frames = []
-
-if not novos.empty:
-    novos["Grupo"] = "Novo"
-    frames.append(novos)
-
-if not prom.empty:
-    prom["Grupo"] = "Promissor"
-    frames.append(prom)
-
-if not leal_camp.empty:
-    leal_camp["Grupo"] = "Leal/Campeão"
-    frames.append(leal_camp)
-
-if not risco.empty:
-    risco["Grupo"] = "Em risco"
-    frames.append(risco)
+if not novos.empty: novos["Grupo"] = "Novo"; frames.append(novos)
+if not prom.empty: prom["Grupo"] = "Promissor"; frames.append(prom)
+if not leal_camp.empty: leal_camp["Grupo"] = "Leal/Campeão"; frames.append(leal_camp)
+if not risco.empty: risco["Grupo"] = "Em risco"; frames.append(risco)
 
 df_dia = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
-# Remover concluídos
 df_dia = df_dia[~df_dia["Telefone"].isin(st.session_state["concluidos"])]
-
-# Aplicar filtro escolhido
 if class_filter != "Todos":
     df_dia = df_dia[df_dia["Classificação"] == class_filter]
+
 
 # ------------------------------
 # Contadores
@@ -210,8 +180,45 @@ with colB:
     r3.metric("Leais/Campeões", count_leais)
     r4.metric("Em risco", count_risco)
 
+
 # ------------------------------
-# CSS dos cards
+# 📌 Função para registrar agendamento e histórico
+# ------------------------------
+def registrar_agendamento(row, comentario, motivo, proxima_data):
+    client = get_gsheet_client()
+    sh = client.open("CRM_Sportech")
+
+    ws_ag = sh.worksheet("AGENDAMENTOS_ATIVOS")
+    ws_hist = sh.worksheet("HISTORICO")
+
+    agora = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    # → salvar histórico
+    ws_hist.append_row([
+        agora,
+        row["Cliente"],
+        row["Telefone"],
+        row["Classificação"],
+        safe_valor(row["Valor"]),
+        comentario,
+        motivo,
+        proxima_data
+    ], value_input_option="USER_ENTERED")
+
+    # → salvar agendamento futuro
+    if proxima_data:
+        ws_ag.append_row([
+            row["Cliente"],
+            row["Telefone"],
+            row["Classificação"],
+            comentario,
+            motivo,
+            proxima_data
+        ], value_input_option="USER_ENTERED")
+
+
+# ------------------------------
+# CSS visual dos cards
 # ------------------------------
 css = """
 <style>
@@ -224,13 +231,11 @@ css = """
 .card {
     background-color: #FFFFFF;
     width: 100%;
-    min-height: 230px;
+    min-height: 260px;
     padding: 20px;
     border-radius: 18px;
     border: 1px solid #e1e1e1;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
+    display: flex; flex-direction: column; justify-content: space-between;
     box-shadow: 0px 4px 12px rgba(0,0,0,0.15);
     transition: all 0.25s ease;
 }
@@ -241,32 +246,32 @@ css = """
 .card.fade-out { opacity: 0; }
 .card h3 { margin: 0; font-size: 20px; color: #111; font-weight: 700; }
 .card p { margin: 3px 0; font-size: 14px; color: #333; }
-.button-finish {
-    background: linear-gradient(90deg, #007bff, #0057d9);
-    color: white;
-    padding: 8px 10px;
-    border-radius: 8px;
-    width: 100%;
-    font-size: 14px;
-    cursor: pointer;
-    border: none;
-}
-.button-finish:hover {
-    background: linear-gradient(90deg, #0057d9, #003ea8);
-}
 </style>
 """
 
 # ------------------------------
-# Gerar HTML dos cards
+# Renderização dos cards + FORMULÁRIO
 # ------------------------------
 html_cards = css + "<div class='grid-container'>"
 
 for idx, row in df_dia.iterrows():
 
     valor = safe_valor(row["Valor"])
-    dias = row["Dias_num"] if pd.notna(row["Dias_num"]) else "—"
+    dias = row["Dias_num"]
 
+    st.markdown(f"### 🧩 Registro do contato — {row['Cliente']} ({row['Telefone']})")
+
+    comentario = st.text_input("📝 Como foi a conversa?", key=f"com_{idx}")
+    motivo = st.text_input("📌 Motivo do contato", key=f"mot_{idx}")
+    proxima_data = st.date_input("📅 Próxima data de contato", key=f"prox_{idx}")
+
+    if st.button(f"Salvar e concluir ({row['Telefone']})", key=f"save_{idx}"):
+
+        registrar_agendamento(row, comentario, motivo, str(proxima_data))
+        st.success("Contato registrado com sucesso!")
+        remover_card(row["Telefone"])
+
+    # Card visual
     html_cards += f"""
     <div id='card_{idx}' class='card'>
         <div>
@@ -276,24 +281,9 @@ for idx, row in df_dia.iterrows():
             <p>💰 {valor}</p>
             <p>⏳ {dias} dias desde compra</p>
         </div>
-
-        <button class='button-finish' onclick="
-            document.getElementById('card_{idx}').classList.add('fade-out');
-            setTimeout(function(){{
-                window.parent.document.getElementById('btn_{idx}').click();
-            }}, 450);
-        ">
-            ✔ Concluir
-        </button>
     </div>
     """
 
 html_cards += "</div>"
 
-# Renderizar HTML
-components.html(html_cards, height=1800, scrolling=True)
-
-# Botões ocultos
-for idx, row in df_dia.iterrows():
-    if st.button("✔", key=f"btn_{idx}"):
-        concluir(row["Telefone"])
+components.html(html_cards, height=1500, scrolling=True)
