@@ -327,25 +327,7 @@ def card_html(idx, row):
 
     st.markdown(html, unsafe_allow_html=True)
 
-    # =========================================================
-# RECEBE EVENTO DO JS (VERIFIQUE SE ESTÁ ASSIM)
-# =========================================================
-if "event" not in st.session_state:
-    st.session_state["event"] = None
 
-event = st.session_state["event"]
-
-if event and event["type"] == "salvar":
-    idx = int(event["idx"])
-    row = df_dia.loc[idx] # Use .loc[idx] pois idx é o índice do DataFrame original
-    
-    registrar_agendamento(row, event["resumo"], event["motivo"], event["data"]) # ATENÇÃO: Verifique a ordem dos parâmetros aqui, o seu original era (row, comentario, motivo, proxima_data)
-    
-    # 🌟 Melhoria: Feedback e remoção do card
-    st.session_state["concluidos"].add(row["Telefone"])
-    st.success(f"Tarefa registrada para **{row['Cliente']}** e concluída.")
-    st.session_state["event"] = None # Limpa o evento para evitar reexecução
-    st.rerun() # Reexecuta o script para que o card suma
 
 # =========================================================
 # RENDERIZAÇÃO FINAL – GRID (2 Colunas)
