@@ -343,53 +343,10 @@ if "historico_stack" not in st.session_state:
     st.session_state["historico_stack"] = []
 
 
-# =========================================================
-# 6. HEADER E SIDEBAR (DEFINIÇÃO DE VARIÁVEIS DE FILTRO)
-# =========================================================
-st.title("📅 CRM Sportech – Tarefas do Dia")
-
-with st.sidebar:
-    st.header("⚙️ Filtros avançados")
-
-    min_dias = st.number_input("Mínimo de dias desde a última compra", min_value=0, value=0)
-    max_dias = st.number_input("Máximo de dias desde a última compra", min_value=0, value=365)
-
-    min_valor = st.number_input("Valor mínimo (R$)", min_value=0.0, value=0.0, step=10.0)
-    max_valor = st.number_input("Valor máximo (R$)", min_value=0.0, value=1000.0, step=10.0)
-
-    telefone_busca = st.text_input("Buscar por telefone (qualquer parte)").strip()
-
-    st.markdown("---")
-    st.markdown("### 🔁 Controles da sessão")
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        if st.button("↩ Voltar último cliente"):
-            if st.session_state["historico_stack"]:
-                ultimo = st.session_state["historico_stack"].pop()
-                st.session_state["concluidos"].discard(ultimo)
-                st.session_state["pulados"].discard(ultimo)
-            st.rerun()
-    with col_s2:
-        if st.button("🧹 Resetar sessão"):
-            st.session_state["concluidos"] = set()
-            st.session_state["pulados"] = set()
-            st.session_state["historico_stack"] = []
-            st.rerun()
-
-
-st.markdown("## 🎯 Configurações & Metas do Dia")
-
-colA, colB_resumo = st.columns([2, 2])
-with colA:
-    c1, c2, c3, c4 = st.columns(4)
-    meta_novos = c1.number_input("Novos", value=10, min_value=0)
-    meta_prom = c2.number_input("Promissores", value=20, min_value=0)
-    meta_leais = c3.number_input("Leais/Campeões", value=10, min_value=0)
-    meta_risco = c4.number_input("Em risco", value=10, min_value=0)
 
 
 # =========================================================
-# 7. FILTRAGEM E CÁLCULO DE TAREFAS (CRÍTICO)
+# 6. FILTRAGEM E CÁLCULO DE TAREFAS (CRÍTICO)
 # =========================================================
 base_para_checkin = base[~base["Telefone"].isin(telefones_agendados)].copy()
 
@@ -479,21 +436,40 @@ with colB_resumo:
 # =========================================================
 # 🟦 ABA 1 — TAREFAS DO DIA
 # =========================================================
+# =========================================================
+# 📅 ABA 1 — TAREFAS DO DIA (ORGANIZADA E CORRIGIDA)
+# =========================================================
 with aba1:
     st.header("📅 Tarefas do dia")
 
-    modo_filtro = st.selectbox(
-        "Filtro de Tarefas",
-        ["Clientes para Check-in (Base de Leitura)", "Agendamentos Ativos"],
-        key="modo_filtro_aba1"
-    )
+    # ==========================
+    # 🎯 Metas do dia + Filtro principal
+    # ==========================
+    st.markdown("## 🎯 Configurações & Metas do Dia")
 
-    df_tarefas_para_renderizar = pd.DataFrame()
+    colA, colB_resumo = st.columns([2, 2])
+
+    with colA:
+        c1, c2, c3, c4 = st.columns(4)
+        meta_novos = c1.number_input("Novos", value=10, min_value=0)
+        meta_prom = c2.number_input("Promissores", value=20, min_value=0)
+        meta_leais = c3.number_input("Leais/Campeões", value=10, min_value=0)
+        meta_risco = c4.number_input("Em risco", value=10, min_value=0)
+
+        modo_filtro = st.selectbox(
+            "Filtro de Tarefas",
+            ["Clientes para Check-in (Base de Leitura)", "Agendamentos Ativos"],
+            key="modo_filtro_aba1"
+        )
 
     st.markdown("---")
 
+    # ########################################################################
+    # 🟦 MODO 1 — CHECK-IN (BASE DE LEITURA)
+    # ########################################################################
     if modo_filtro == "Clientes para Check-in (Base de Leitura)":
 
+        # Filtro de Classificação
         class_filter = st.radio(
             "Filtrar por classificação:",
             ["Todos", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"],
@@ -507,20 +483,20 @@ with aba1:
 
         df_tarefas_para_renderizar = df_checkin
 
+        # Mensagens de progresso
         if len(df_tarefas_para_renderizar) == 0:
             st.success("🎉 Você está em dia! Nenhum Check-in pendente dentro dos filtros atuais.")
         elif len(df_tarefas_para_renderizar) < 10:
             st.info(f"🔔 Você tem **{len(df_tarefas_para_renderizar)}** contatos para Check-in.")
 
+        # Título do bloco
         st.markdown("## 📌 Atendimentos do dia (Check-in)")
 
+        # Botão para baixar CSV
         if not df_tarefas_para_renderizar.empty:
-            csv = (
-                df_tarefas_para_renderizar
-                .drop(columns=["Telefone_limpo"], errors="ignore")
-                .to_csv(index=False)
-                .encode("utf-8-sig")
-            )
+            csv = df_tarefas_para_renderizar.drop(columns=["Telefone_limpo"], errors="ignore") \
+                                             .to_csv(index=False).encode("utf-8-sig")
+
             st.download_button(
                 "📥 Baixar lista do dia (CSV)",
                 data=csv,
@@ -528,9 +504,13 @@ with aba1:
                 mime="text/csv"
             )
 
+        # =====================================================================
+        # 🟩 EXIBIÇÃO DOS CARDS – 2 por linha
+        # =====================================================================
         for i in range(0, len(df_tarefas_para_renderizar), 2):
             col1, col2 = st.columns(2)
 
+            # CARD 1
             row1 = df_tarefas_para_renderizar.iloc[i]
             id1 = row1["ID"]
 
@@ -544,12 +524,13 @@ with aba1:
                         remover_card(row1["Telefone"], concluido=True)
                         st.rerun()
                     else:
-                        st.warning("⚠️ **Preencha o Motivo do contato** para registrar a conclusão.", icon="🚨")
+                        st.warning("⚠️ Preencha o motivo do contato antes de concluir.", icon="🚨")
 
                 elif acao == "pular":
                     remover_card(row1["Telefone"], concluido=False)
                     st.rerun()
 
+            # CARD 2 (se existir)
             if i + 1 < len(df_tarefas_para_renderizar):
                 row2 = df_tarefas_para_renderizar.iloc[i + 1]
                 id2 = row2["ID"]
@@ -564,31 +545,35 @@ with aba1:
                             remover_card(row2["Telefone"], concluido=True)
                             st.rerun()
                         else:
-                            st.warning("⚠️ **Preencha o Motivo do contato** para registrar a conclusão.", icon="🚨")
+                            st.warning("⚠️ Preencha o motivo do contato antes de concluir.", icon="🚨")
 
                     elif acao2 == "pular":
                         remover_card(row2["Telefone"], concluido=False)
                         st.rerun()
 
+    # ########################################################################
+    # 🟧 MODO 2 — AGENDAMENTOS ATIVOS
+    # ########################################################################
     else:
-        st.subheader("Clientes com Próximo Contato Agendado")
+        st.subheader("📂 Clientes com Próximo Contato Agendado")
 
         df_agendamentos = load_df_agendamentos()
 
         if df_agendamentos.empty:
             st.success("🎉 Não há agendamentos ativos pendentes.")
         else:
+
+            # Converte a coluna de data (se existir)
             if "Data de chamada" in df_agendamentos.columns:
                 try:
                     df_agendamentos["Data de chamada"] = pd.to_datetime(
                         df_agendamentos["Data de chamada"],
-                        errors="coerce"
+                        errors="ignore"
                     )
                 except Exception:
-                    st.warning(
-                        "A coluna 'Data de chamada' não está no formato esperado. Exibindo sem ordenação por data."
-                    )
+                    st.warning("⚠️ Data de chamada não está em um formato válido para ordenação.")
 
+            # Colunas esperadas
             cols_show = [
                 "Data de chamada",
                 "Nome",
@@ -598,26 +583,18 @@ with aba1:
                 "Relato da conversa"
             ]
 
-            existing_cols = [col for col in cols_show if col in df_agendamentos.columns]
+            existing_cols = [c for c in cols_show if c in df_agendamentos.columns]
 
             if not existing_cols:
-                st.warning(
-                    "As colunas esperadas para exibição (Data de chamada, Nome, Telefone, etc.) "
-                    "não foram encontradas na planilha de Agendamentos."
-                )
+                st.warning("❌ As colunas esperadas não foram encontradas na planilha AGENDAMENTOS_ATIVOS.")
             else:
                 sort_col = "Data de chamada" if "Data de chamada" in existing_cols else existing_cols[0]
-                df_display = df_agendamentos[existing_cols].sort_values(
-                    by=[sort_col],
-                    ascending=True
-                )
 
-                st.dataframe(
-                    df_display,
-                    use_container_width=True
-                )
+                df_display = df_agendamentos[existing_cols].sort_values(by=sort_col, ascending=True)
 
-                st.caption("Esta lista é atualizada a partir da planilha AGENDAMENTOS_ATIVOS.")
+                st.dataframe(df_display, use_container_width=True)
+                st.caption("🔄 Lista carregada diretamente da planilha AGENDAMENTOS_ATIVOS.")
+
 
 
 # =========================================================
