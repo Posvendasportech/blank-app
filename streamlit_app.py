@@ -490,15 +490,21 @@ def render_aba1(aba, df_dia, metas):
       # =========================================================
 # 🎯 METAS DO DIA (AJUSTÁVEIS NA ABA 1)
 # =========================================================
+# =========================================================
+# 🎯 METAS DO DIA (AJUSTÁVEIS NA ABA 1)
+# =========================================================
+
+colA, colB = st.columns([2, 2])
+
 with colA:
     st.subheader("🎯 Seleção de Contatos do Dia")
 
-    # Inicializa caso não exista
+    # Inicializa metas no session_state (caso ainda não existam)
     if "meta_novos" not in st.session_state:
-        st.session_state["meta_novos"] = metas["meta_novos"]
-        st.session_state["meta_prom"] = metas["meta_prom"]
-        st.session_state["meta_leais"] = metas["meta_leais"]
-        st.session_state["meta_risco"] = metas["meta_risco"]
+        st.session_state["meta_novos"]  = metas["meta_novos"]
+        st.session_state["meta_prom"]   = metas["meta_prom"]
+        st.session_state["meta_leais"]  = metas["meta_leais"]
+        st.session_state["meta_risco"]  = metas["meta_risco"]
 
     c1, c2 = st.columns(2)
     c3, c4 = st.columns(2)
@@ -531,20 +537,21 @@ with colA:
         step=1
     )
 
-    # Atualiza dicionário metas automaticamente
+    # Atualiza o dicionário metas
     metas["meta_novos"] = st.session_state["meta_novos"]
     metas["meta_prom"] = st.session_state["meta_prom"]
     metas["meta_leais"] = st.session_state["meta_leais"]
     metas["meta_risco"] = st.session_state["meta_risco"]
 
 
-        with colB:
-            st.subheader("📊 Resumo da seleção atual")
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Novos", len(df_dia[df_dia["Classificação"] == "Novo"]))
-            c2.metric("Promissores", len(df_dia[df_dia["Classificação"] == "Promissor"]))
-            c3.metric("Leais/Campeões", len(df_dia[df_dia["Classificação"].isin(["Leal", "Campeão"])]))
-            c4.metric("Em risco", len(df_dia[df_dia["Classificação"] == "Em risco"]))
+with colB:
+    st.subheader("📊 Resumo da Seleção Atual")
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Novos", len(df_dia[df_dia["Classificação"] == "Novo"]))
+    c2.metric("Promissores", len(df_dia[df_dia["Classificação"] == "Promissor"]))
+    c3.metric("Leais/Campeões", len(df_dia[df_dia["Classificação"].isin(["Leal","Campeão"])]))
+    c4.metric("Em risco", len(df_dia[df_dia["Classificação"] == "Em risco"]))
 
         st.markdown("---")
 
