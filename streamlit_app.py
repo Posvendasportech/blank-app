@@ -440,78 +440,60 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas):
 # - O que aparece em cada aba
 
 # =========================================================
-# 📅 ABA 1 — TAREFAS DO DIA (VERSÃO COMPLETA, ORGANIZADA)
+# 📅 ABA 1 — TAREFAS DO DIA (FOCO EM META x SELEÇÃO)
 # =========================================================
 def render_aba1(aba, df_dia, metas):
+    """
+    Aba 1: Tarefas do Dia
 
+    - Mostra metas configuradas (vindas da sidebar)
+    - Mostra quantos contatos foram selecionados em df_dia
+    - Permite alternar entre:
+        • Clientes para Check-in (cards)
+        • Agendamentos Ativos (tabela)
+    """
     with aba:
         st.header("📅 Tarefas do dia")
 
         # =========================================================
-        # 🎯 BLOCO 1 — METAS DO DIA (Configuráveis)
+        # 🎯 BLOCO 1 — METAS x SELEÇÃO DO DIA
+        #   -> metas = quantos EU quero falar hoje (sidebar)
+        #   -> df_dia = quantos FORAM carregados seguindo essas metas
         # =========================================================
         colA, colB = st.columns([2, 2])
 
+        # ----- LADO ESQUERDO: Metas configuradas -----
         with colA:
-            st.subheader("🎯 Seleção de Contatos do Dia")
-
-            # Inicializa metas no session_state se não existir
-            if "meta_novos" not in st.session_state:
-                st.session_state["meta_novos"] = metas["meta_novos"]
-                st.session_state["meta_prom"] = metas["meta_prom"]
-                st.session_state["meta_leais"] = metas["meta_leais"]
-                st.session_state["meta_risco"] = metas["meta_risco"]
-
-            c1, c2 = st.columns(2)
-            c3, c4 = st.columns(2)
-
-            st.session_state["meta_novos"] = c1.number_input(
-                "Novos do dia",
-                value=st.session_state["meta_novos"],
-                min_value=0,
-                step=1,
-            )
-
-            st.session_state["meta_prom"] = c2.number_input(
-                "Promissores do dia",
-                value=st.session_state["meta_prom"],
-                min_value=0,
-                step=1,
-            )
-
-            st.session_state["meta_leais"] = c3.number_input(
-                "Leais/Campeões do dia",
-                value=st.session_state["meta_leais"],
-                min_value=0,
-                step=1,
-            )
-
-            st.session_state["meta_risco"] = c4.number_input(
-                "Em risco do dia",
-                value=st.session_state["meta_risco"],
-                min_value=0,
-                step=1,
-            )
-
-            # Atualiza o dicionário metas
-            metas["meta_novos"] = st.session_state["meta_novos"]
-            metas["meta_prom"] = st.session_state["meta_prom"]
-            metas["meta_leais"] = st.session_state["meta_leais"]
-            metas["meta_risco"] = st.session_state["meta_risco"]
-
-        with colB:
-            st.subheader("📊 Resumo da Seleção Atual")
+            st.subheader("🎯 Metas do Dia (configuradas na sidebar)")
 
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Novos", len(df_dia[df_dia["Classificação"] == "Novo"]))
-            c2.metric("Promissores", len(df_dia[df_dia["Classificação"] == "Promissor"]))
-            c3.metric("Leais/Campeões", len(df_dia[df_dia["Classificação"].isin(["Leal", "Campeão"])]))
-            c4.metric("Em risco", len(df_dia[df_dia["Classificação"] == "Em risco"]))
+            c1.metric("Meta Novos", metas["meta_novos"])
+            c2.metric("Meta Promissores", metas["meta_prom"])
+            c3.metric("Meta Leais/Camp.", metas["meta_leais"])
+            c4.metric("Meta Em risco", metas["meta_risco"])
+
+        # ----- LADO DIREITO: O que foi selecionado em df_dia -----
+        with colB:
+            st.subheader("📊 Seleção atual (após filtros + metas)")
+
+            count_novos = len(df_dia[df_dia["Classificação"] == "Novo"])
+            count_prom = len(df_dia[df_dia["Classificação"] == "Promissor"])
+            count_leais = len(df_dia[df_dia["Classificação"].isin(["Leal", "Campeão"])])
+            count_risco = len(df_dia[df_dia["Classificação"] == "Em risco"])
+            total_tarefas = len(df_dia)
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Novos", count_novos, f"de {metas['meta_novos']}")
+            c2.metric("Promissores", count_prom, f"de {metas['meta_prom']}")
+            c3.metric("Leais/Camp.", count_leais, f"de {metas['meta_leais']}")
+            c4.metric("Em risco", count_risco, f"de {metas['meta_risco']}")
+
+            st.metric("Total de tarefas do dia", total_tarefas)
 
         st.markdown("---")
 
         # =========================================================
-        # 🟣 BLOCO 2 — ESCOLHER MODO DE ATENDIMENTO
+        # 🟣 BLOCO 2 — ESCOLHA DO MODO DE VISUALIZAÇÃO
         # =========================================================
         modo_filtro = st.selectbox(
             "Modo de atendimento",
@@ -522,27 +504,28 @@ def render_aba1(aba, df_dia, metas):
         st.markdown("---")
 
         # =========================================================
-        # 🟦 BLOCO 3 — MODO CHECK-IN
+        # 🟦 BLOCO 3 — MODO CHECK-IN (CARDS)
         # =========================================================
         if modo_filtro == "Clientes para Check-in (Base de Leitura)":
 
+            # Filtro adicional só para visualização na lista do dia
             class_filter = st.radio(
-                "Filtrar por classificação:",
+                "Filtrar por classificação na lista de hoje:",
                 ["Todos", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"],
                 horizontal=True,
             )
 
             df_checkin = df_dia.copy()
-
             if class_filter != "Todos":
                 df_checkin = df_checkin[df_checkin["Classificação"] == class_filter]
 
             if df_checkin.empty:
-                st.success("🎉 Nenhum cliente pendente com esses filtros.")
+                st.success("🎉 Nenhum cliente pendente dentro dos filtros atuais.")
                 return
 
             st.subheader("📌 Atendimentos do dia (Check-in)")
 
+            # Download CSV da lista do dia
             csv = df_checkin.drop(columns=["Telefone_limpo"], errors="ignore").to_csv(index=False).encode("utf-8-sig")
             st.download_button(
                 "📥 Baixar lista do dia (CSV)",
@@ -553,14 +536,12 @@ def render_aba1(aba, df_dia, metas):
 
             st.markdown("---")
 
-            # ========================
-            # 🟦 BLOCO 3.1 — RENDERIZAÇÃO DOS CARDS
-            # ========================
+            # ------- Renderização dos cards, 2 por linha -------
             for i in range(0, len(df_checkin), 2):
 
                 col1, col2 = st.columns(2)
 
-                # ----- CARD 1 -----
+                # CARD 1
                 row1 = df_checkin.iloc[i]
                 with col1:
                     acao, mot, res, prox, vend = card_component(row1["ID"], row1)
@@ -568,20 +549,21 @@ def render_aba1(aba, df_dia, metas):
                     if acao == "concluir":
                         if mot.strip():
                             registrar_agendamento(
-                                row1, res, mot,
+                                row1,
+                                res,
+                                mot,
                                 prox.strftime("%d/%m/%Y") if prox else "",
                                 vend,
                             )
                             remover_card(row1["Telefone"], concluido=True)
                             st.rerun()
                         else:
-                            st.warning("⚠️ Preencha o motivo.", icon="🚨")
-
+                            st.warning("⚠️ Preencha o motivo do contato antes de concluir.", icon="🚨")
                     elif acao == "pular":
                         remover_card(row1["Telefone"], concluido=False)
                         st.rerun()
 
-                # ----- CARD 2 -----
+                # CARD 2 (se existir)
                 if i + 1 < len(df_checkin):
                     row2 = df_checkin.iloc[i + 1]
                     with col2:
@@ -590,21 +572,22 @@ def render_aba1(aba, df_dia, metas):
                         if acao2 == "concluir":
                             if mot2.strip():
                                 registrar_agendamento(
-                                    row2, res2, mot2,
+                                    row2,
+                                    res2,
+                                    mot2,
                                     prox2.strftime("%d/%m/%Y") if prox2 else "",
                                     vend2,
                                 )
                                 remover_card(row2["Telefone"], concluido=True)
                                 st.rerun()
                             else:
-                                st.warning("⚠️ Preencha o motivo.", icon="🚨")
-
+                                st.warning("⚠️ Preencha o motivo do contato antes de concluir.", icon="🚨")
                         elif acao2 == "pular":
                             remover_card(row2["Telefone"], concluido=False)
                             st.rerun()
 
         # =========================================================
-        # 🟧 BLOCO 4 — MODO AGENDAMENTOS ATIVOS
+        # 🟧 BLOCO 4 — MODO AGENDAMENTOS ATIVOS (TABELA)
         # =========================================================
         else:
             st.subheader("📂 Clientes com próximos contatos agendados")
@@ -615,21 +598,27 @@ def render_aba1(aba, df_dia, metas):
                 st.success("🎉 Nenhum agendamento pendente!")
                 return
 
-            cols_show = ["Data de chamada", "Nome", "Telefone", "Follow up", "Data de contato", "Relato da conversa"]
+            cols_show = [
+                "Data de chamada",
+                "Nome",
+                "Telefone",
+                "Follow up",
+                "Data de contato",
+                "Relato da conversa",
+            ]
 
-            cols_exist = [c for c in cols_show if c in df_ag.columns]
+            existing_cols = [c for c in cols_show if c in df_ag.columns]
 
-            if not cols_exist:
-                st.error("Colunas esperadas não encontradas.")
+            if not existing_cols:
+                st.error("❌ A planilha AGENDAMENTOS_ATIVOS não contém as colunas esperadas.")
                 return
 
-            if "Data de chamada" in cols_exist:
+            if "Data de chamada" in existing_cols:
                 df_ag["Data de chamada"] = pd.to_datetime(df_ag["Data de chamada"], errors="ignore")
                 df_ag = df_ag.sort_values("Data de chamada")
 
-            st.dataframe(df_ag[cols_exist], use_container_width=True)
-            st.caption("🔄 Dados atualizados da planilha AGENDAMENTOS_ATIVOS.")
-
+            st.dataframe(df_ag[existing_cols], use_container_width=True)
+            st.caption("🔄 Lista carregada diretamente da planilha AGENDAMENTOS_ATIVOS.")
 
 
 # ----------- ABA 2 -----------
