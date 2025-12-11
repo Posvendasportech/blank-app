@@ -470,6 +470,47 @@ def render_aba1(aba, df_dia, metas):
 
         st.markdown("## 🎯 Panorama Geral do Dia")
 
+        # =========================================================
+        # 🟩 BARRA DE PROGRESSO DO DIA
+        # =========================================================
+
+        # Quantos contatos já foram concluídos hoje
+        concluidos_hoje = len(st.session_state["concluidos"])
+
+        # Evita divisão por zero
+        if total_dia > 0:
+            progresso = concluidos_hoje / total_dia
+        else:
+            progresso = 0
+
+        # Layout da barra
+        st.markdown("### 📈 Progresso do Dia")
+
+        # Barra de progresso visual
+        st.progress(progresso)
+
+        # Texto explicativo abaixo da barra
+        st.write(
+            f"**{concluidos_hoje} de {total_dia} contatos concluídos** "
+            f"({progresso * 100:.1f}% do dia)"
+        )
+
+        # Mensagens motivacionais automáticas
+        if progresso == 0:
+            st.info("🚀 Começando agora! Vamos iniciar os atendimentos.")
+        elif progresso < 0.25:
+            st.info("🔥 Bom começo! Continue nesse ritmo.")
+        elif progresso < 0.50:
+            st.success("💪 Você já completou quase metade do dia!")
+        elif progresso < 0.75:
+            st.success("🟩 Ótimo! Mais da metade dos contatos concluídos!")
+        elif progresso < 1:
+            st.success("🏁 Quase lá! Falta pouco para finalizar o dia.")
+        else:
+            st.balloons()
+            st.success("🎉 Dia concluído com sucesso! Parabéns!")
+
+        
         colA, colB, colC = st.columns(3)
 
         # ---- TOTAL DO DIA ----
