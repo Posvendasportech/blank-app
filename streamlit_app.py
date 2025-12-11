@@ -511,7 +511,7 @@ def render_aba1(aba, df_dia, metas):
 
         # Filtrar somente agendamentos do dia da coluna "Data de contato"
         hoje = datetime.now().strftime("%Y/%m/%d")
-        df_ag_hoje = df_ag[df_ag["Data de contato"].astype(str).str.contains(hoje)] if not df_ag.empty else pd.DataFrame()
+        df_ag_hoje = df_ag[df_ag["Data de chamada"].astype(str).str.contains(hoje)] if not df_ag.empty else pd.DataFrame()
 
         qtd_checkin = len(df_dia)
         qtd_agendamentos = len(df_ag_hoje)
