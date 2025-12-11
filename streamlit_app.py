@@ -455,29 +455,48 @@ def render_aba1(aba, df_dia, metas):
     with aba:
         st.header("📅 Tarefas do dia")
 
-        # =========================================================
-        # 🎯 BLOCO 1 — METAS x SELEÇÃO DO DIA
-        #   -> metas = quantos EU quero falar hoje (sidebar)
-        #   -> df_dia = quantos FORAM carregados seguindo essas metas
-        # =========================================================
-        colA, colB = st.columns([2, 2])
+      # =========================================================
+# 🟦 RESUMO GERAL DO DIA (TOPO DA ABA 1)
+# =========================================================
+        # --- Quantidade selecionada para Check-in (df_dia) ---
+        qtd_checkin = len(df_dia)
 
-        # ----- LADO ESQUERDO: Metas configuradas -----
+        # --- Quantidade de agendamentos ativos ---
+        df_ag = load_df_agendamentos()
+        qtd_agendamentos = len(df_ag) if not df_ag.empty else 0
+
+        # --- Total do dia (Check-in + Agendamentos) ---
+        total_dia = qtd_checkin + qtd_agendamentos
+
+        st.markdown("## 🎯 Panorama Geral do Dia")
+
+        colA, colB, colC = st.columns(3)
+
+        # ---- TOTAL DO DIA ----
         with colA:
-            st.subheader("🎯 Metas do Dia (configuradas na sidebar)")
+            st.metric(
+                label="📅 Contatos Totais do Dia",
+                value=total_dia,
+                delta=f"{qtd_checkin} Check-in + {qtd_agendamentos} Agend."
+            )
 
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Meta Novos", metas["meta_novos"])
-            c2.metric("Meta Promissores", metas["meta_prom"])
-            c3.metric("Meta Leais/Camp.", metas["meta_leais"])
-            c4.metric("Meta Em risco", metas["meta_risco"])
-
-        # ----- LADO DIREITO: O que foi selecionado em df_dia -----
+        # ---- CHECK-IN (META + REAL) ----
         with colB:
-            
-            st.metric("Total de tarefas do dia", total_tarefas)
+            st.metric(
+                label="🟦 Check-in Programados (sidebar)",
+                value=qtd_checkin,
+                delta=f"Meta total: {metas['meta_novos'] + metas['meta_prom'] + metas['meta_leais'] + metas['meta_risco']}"
+            )
+
+        # ---- AGENDAMENTOS ----
+        with colC:
+            st.metric(
+                label="🟧 Agendamentos Ativos",
+                value=qtd_agendamentos
+            )
 
         st.markdown("---")
+
 
         # =========================================================
         # 🟣 BLOCO 2 — ESCOLHA DO MODO DE VISUALIZAÇÃO
