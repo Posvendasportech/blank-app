@@ -268,32 +268,105 @@ def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
 
 
 # =========================================================
-# (7) 🧱 SIDEBAR — FILTROS + METAS
+# (7) 🧱 SIDEBAR — FILTROS + METAS + CONTROLES DE SESSÃO
+# ---------------------------------------------------------
+# Função:
+# - Renderiza toda a barra lateral (filtros, controles, metas)
+# - Retorna dois dicionários:
+#     filtros = usados no build_daily_tasks_df()
+#     metas   = usadas na montagem das metas e seleção de clientes
+#
+# ONDE ALTERAR:
+# - Quer mudar filtros? -> mexa na parte "BLOCO 1 — FILTROS"
+# - Quer mudar os botões de controle? -> "BLOCO 2 — CONTROLES"
+# - Quer mudar metas padrão? -> "BLOCO 3 — METAS DO DIA"
 # =========================================================
-# Onde modificar:
-# - Filtros permitidos (dias, valor…)
-# - Campos de metas diárias
-
 def render_sidebar():
     with st.sidebar:
-        st.header("⚙️ Filtros avançados")
 
-        min_dias = st.number_input("Min dias desde compra", min_value=0, value=0)
-        max_dias = st.number_input("Max dias desde compra", min_value=0, value=365)
+        # ===========================
+        # BLOCO 1 — FILTROS AVANÇADOS
+        # ===========================
+        st.markdown(
+            """
+            <div style="font-size:18px; font-weight:700; margin-bottom:4px;">
+                ⚙️ Filtros avançados
+            </div>
+            <p style="font-size:12px; color:#bbbbbb; margin-top:0;">
+                Ajuste quem aparece na lista de tarefas do dia.
+            </p>
+            """,
+            unsafe_allow_html=True
+        )
 
-        min_val = st.number_input("Valor mínimo (R$)", value=0.0)
-        max_val = st.number_input("Valor máximo (R$)", value=1000.0)
+        # 👉 FILTRO POR DIAS DESDE A COMPRA
+        min_dias = st.number_input("Mínimo de dias desde a última compra", min_value=0, value=0)
+        max_dias = st.number_input("Máximo de dias desde a última compra", min_value=0, value=365)
 
-        telefone = st.text_input("Buscar telefone")
+        # 👉 FILTRO POR VALOR
+        min_val = st.number_input("Valor mínimo (R$)", value=0.0, min_value=0.0, step=10.0)
+        max_val = st.number_input("Valor máximo (R$)", value=1000.0, min_value=0.0, step=10.0)
 
-        st.markdown("---")
-        st.subheader("🎯 Metas do dia")
+        # 👉 BUSCA POR TELEFONE
+        telefone = st.text_input("Buscar por telefone (qualquer parte)").strip()
 
-        meta_novos = st.number_input("Meta novos", value=10)
-        meta_prom = st.number_input("Meta promissores", value=20)
-        meta_leais = st.number_input("Meta leais/campeões", value=10)
-        meta_risco = st.number_input("Meta em risco", value=10)
+        st.markdown("<hr>", unsafe_allow_html=True)
 
+        # ===========================
+        # BLOCO 2 — CONTROLES DA SESSÃO
+        # ===========================
+        st.markdown(
+            """
+            <div style="font-size:16px; font-weight:600; margin-bottom:4px;">
+                🔁 Controles da sessão
+            </div>
+            <p style="font-size:12px; color:#bbbbbb; margin-top:0;">
+                Use estes botões para desfazer o último atendimento ou reiniciar a lista.
+            </p>
+            """,
+            unsafe_allow_html=True
+        )
+
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            if st.button("↩ Voltar último cliente"):
+                if st.session_state["historico_stack"]:
+                    ultimo = st.session_state["historico_stack"].pop()
+                    st.session_state["concluidos"].discard(ultimo)
+                    st.session_state["pulados"].discard(ultimo)
+                st.rerun()
+
+        with col_s2:
+            if st.button("🧹 Resetar sessão"):
+                st.session_state["concluidos"] = set()
+                st.session_state["pulados"] = set()
+                st.session_state["historico_stack"] = []
+                st.rerun()
+
+        st.markdown("<hr>", unsafe_allow_html=True)
+
+        # ===========================
+        # BLOCO 3 — METAS DO DIA
+        # ===========================
+        st.markdown(
+            """
+            <div style="font-size:16px; font-weight:600; margin-bottom:4px;">
+                🎯 Metas do dia
+            </div>
+            <p style="font-size:12px; color:#bbbbbb; margin-top:0;">
+                Defina quantos contatos de cada grupo você quer trabalhar hoje.
+            </p>
+            """,
+            unsafe_allow_html=True
+        )
+
+        # 👉 AQUI VOCÊ AJUSTA AS METAS PADRÃO
+        meta_novos = st.number_input("Meta: Novos", value=10, min_value=0, step=1)
+        meta_prom = st.number_input("Meta: Promissores", value=20, min_value=0, step=1)
+        meta_leais = st.number_input("Meta: Leais/Campeões", value=10, min_value=0, step=1)
+        meta_risco = st.number_input("Meta: Em risco", value=10, min_value=0, step=1)
+
+    # 🔙 dicionário de filtros que será usado no build_daily_tasks_df()
     filtros = {
         "min_dias": min_dias,
         "max_dias": max_dias,
@@ -302,6 +375,7 @@ def render_sidebar():
         "telefone": telefone,
     }
 
+    # 🎯 dicionário de metas usado no cálculo das tarefas
     metas = {
         "meta_novos": meta_novos,
         "meta_prom": meta_prom,
@@ -310,6 +384,7 @@ def render_sidebar():
     }
 
     return filtros, metas
+
 
 
 
