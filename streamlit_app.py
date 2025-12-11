@@ -70,7 +70,7 @@ st.markdown("""
     margin-top: 12px;
     width: 100%;
     background-color: #0A40B0;
-    color: white;
+    color: blue;
     padding: 10px;
     border-radius: 8px;
     text-align: center;
