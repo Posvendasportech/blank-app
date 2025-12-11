@@ -434,33 +434,43 @@ with colB_resumo:
 
 
 # =========================================================
-# 🟦 ABA 1 — TAREFAS DO DIA
-# =========================================================
-# =========================================================
-# 📅 ABA 1 — TAREFAS DO DIA (ORGANIZADA E CORRIGIDA)
+# 📅 ABA 1 — TAREFAS DO DIA (VERSÃO FINAL OTIMIZADA)
 # =========================================================
 with aba1:
+
     st.header("📅 Tarefas do dia")
 
-    # ==========================
-    # 🎯 Metas do dia + Filtro principal
-    # ==========================
-    st.markdown("## 🎯 Configurações & Metas do Dia")
-
-    colA, colB_resumo = st.columns([2, 2])
+    # =========================================================
+    # VISÃO GERAL + RESUMO DAS METAS
+    # =========================================================
+    colA, colB = st.columns([2, 2])
 
     with colA:
+        st.subheader("🎯 Metas configuradas")
         c1, c2, c3, c4 = st.columns(4)
-        meta_novos = c1.number_input("Novos", value=10, min_value=0)
-        meta_prom = c2.number_input("Promissores", value=20, min_value=0)
-        meta_leais = c3.number_input("Leais/Campeões", value=10, min_value=0)
-        meta_risco = c4.number_input("Em risco", value=10, min_value=0)
+        c1.metric("Novos", meta_novos)
+        c2.metric("Promissores", meta_prom)
+        c3.metric("Leais", meta_leais)
+        c4.metric("Em risco", meta_risco)
 
-        modo_filtro = st.selectbox(
-            "Filtro de Tarefas",
-            ["Clientes para Check-in (Base de Leitura)", "Agendamentos Ativos"],
-            key="modo_filtro_aba1"
-        )
+    with colB:
+        st.subheader("📊 Resumo da seleção atual")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Novos", len(df_dia[df_dia["Classificação"] == "Novo"]))
+        c2.metric("Promissores", len(df_dia[df_dia["Classificação"] == "Promissor"]))
+        c3.metric("Leais/Campeões", len(df_dia[df_dia["Classificação"].isin(["Leal", "Campeão"])]))
+        c4.metric("Em risco", len(df_dia[df_dia["Classificação"] == "Em risco"]))
+
+    st.markdown("---")
+
+    # =========================================================
+    # SELETOR PRINCIPAL DE MODO
+    # =========================================================
+    modo_filtro = st.selectbox(
+        "Modo de atendimento",
+        ["Clientes para Check-in (Base de Leitura)", "Agendamentos Ativos"],
+        key="modo_filtro_aba1"
+    )
 
     st.markdown("---")
 
@@ -469,7 +479,7 @@ with aba1:
     # ########################################################################
     if modo_filtro == "Clientes para Check-in (Base de Leitura)":
 
-        # Filtro de Classificação
+        # ------ Filtro por categoria ------
         class_filter = st.radio(
             "Filtrar por classificação:",
             ["Todos", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"],
@@ -481,37 +491,35 @@ with aba1:
         if class_filter != "Todos":
             df_checkin = df_checkin[df_checkin["Classificação"] == class_filter]
 
-        df_tarefas_para_renderizar = df_checkin
+        if df_checkin.empty:
+            st.success("🎉 Tudo certo! Nenhum cliente pendente dentro dos filtros definidos.")
+            st.stop()
 
-        # Mensagens de progresso
-        if len(df_tarefas_para_renderizar) == 0:
-            st.success("🎉 Você está em dia! Nenhum Check-in pendente dentro dos filtros atuais.")
-        elif len(df_tarefas_para_renderizar) < 10:
-            st.info(f"🔔 Você tem **{len(df_tarefas_para_renderizar)}** contatos para Check-in.")
+        st.subheader("📌 Atendimentos do dia (Check-in)")
 
-        # Título do bloco
-        st.markdown("## 📌 Atendimentos do dia (Check-in)")
+        # ------ Botão de download ------
+        csv = df_checkin.drop(columns=["Telefone_limpo"], errors="ignore").to_csv(index=False).encode("utf-8-sig")
 
-        # Botão para baixar CSV
-        if not df_tarefas_para_renderizar.empty:
-            csv = df_tarefas_para_renderizar.drop(columns=["Telefone_limpo"], errors="ignore") \
-                                             .to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            "📥 Baixar lista do dia (CSV)",
+            data=csv,
+            file_name="tarefas_checkin_dia.csv",
+            mime="text/csv"
+        )
 
-            st.download_button(
-                "📥 Baixar lista do dia (CSV)",
-                data=csv,
-                file_name="tarefas_checkin_dia.csv",
-                mime="text/csv"
-            )
+        st.markdown("---")
 
-        # =====================================================================
-        # 🟩 EXIBIÇÃO DOS CARDS – 2 por linha
-        # =====================================================================
-        for i in range(0, len(df_tarefas_para_renderizar), 2):
+        # =========================================================
+        # RENDERIZAÇÃO DOS CARDS – 2 por linha
+        # =========================================================
+        for i in range(0, len(df_checkin), 2):
+
             col1, col2 = st.columns(2)
 
+            # -----------------------------------------------
             # CARD 1
-            row1 = df_tarefas_para_renderizar.iloc[i]
+            # -----------------------------------------------
+            row1 = df_checkin.iloc[i]
             id1 = row1["ID"]
 
             with col1:
@@ -530,9 +538,12 @@ with aba1:
                     remover_card(row1["Telefone"], concluido=False)
                     st.rerun()
 
+            # -----------------------------------------------
             # CARD 2 (se existir)
-            if i + 1 < len(df_tarefas_para_renderizar):
-                row2 = df_tarefas_para_renderizar.iloc[i + 1]
+            # -----------------------------------------------
+            if i + 1 < len(df_checkin):
+
+                row2 = df_checkin.iloc[i + 1]
                 id2 = row2["ID"]
 
                 with col2:
@@ -551,50 +562,42 @@ with aba1:
                         remover_card(row2["Telefone"], concluido=False)
                         st.rerun()
 
+
     # ########################################################################
     # 🟧 MODO 2 — AGENDAMENTOS ATIVOS
     # ########################################################################
     else:
-        st.subheader("📂 Clientes com Próximo Contato Agendado")
+        st.subheader("📂 Clientes com próximos contatos agendados")
 
-        df_agendamentos = load_df_agendamentos()
+        df_ag = load_df_agendamentos()
 
-        if df_agendamentos.empty:
-            st.success("🎉 Não há agendamentos ativos pendentes.")
-        else:
+        if df_ag.empty:
+            st.success("🎉 Nenhum agendamento pendente!")
+            st.stop()
 
-            # Converte a coluna de data (se existir)
-            if "Data de chamada" in df_agendamentos.columns:
-                try:
-                    df_agendamentos["Data de chamada"] = pd.to_datetime(
-                        df_agendamentos["Data de chamada"],
-                        errors="ignore"
-                    )
-                except Exception:
-                    st.warning("⚠️ Data de chamada não está em um formato válido para ordenação.")
+        # Colunas esperadas
+        cols_show = [
+            "Data de chamada",
+            "Nome",
+            "Telefone",
+            "Follow up",
+            "Data de contato",
+            "Relato da conversa"
+        ]
 
-            # Colunas esperadas
-            cols_show = [
-                "Data de chamada",
-                "Nome",
-                "Telefone",
-                "Follow up",
-                "Data de contato",
-                "Relato da conversa"
-            ]
+        existing_cols = [c for c in cols_show if c in df_ag.columns]
 
-            existing_cols = [c for c in cols_show if c in df_agendamentos.columns]
+        if not existing_cols:
+            st.error("❌ A planilha AGENDAMENTOS_ATIVOS não contém as colunas esperadas.")
+            st.stop()
 
-            if not existing_cols:
-                st.warning("❌ As colunas esperadas não foram encontradas na planilha AGENDAMENTOS_ATIVOS.")
-            else:
-                sort_col = "Data de chamada" if "Data de chamada" in existing_cols else existing_cols[0]
+        # Ordenação opcional
+        if "Data de chamada" in existing_cols:
+            df_ag["Data de chamada"] = pd.to_datetime(df_ag["Data de chamada"], errors="ignore")
+            df_ag = df_ag.sort_values("Data de chamada", ascending=True)
 
-                df_display = df_agendamentos[existing_cols].sort_values(by=sort_col, ascending=True)
-
-                st.dataframe(df_display, use_container_width=True)
-                st.caption("🔄 Lista carregada diretamente da planilha AGENDAMENTOS_ATIVOS.")
-
+        st.dataframe(df_ag[existing_cols], use_container_width=True)
+        st.caption("🔄 Lista carregada diretamente da planilha AGENDAMENTOS_ATIVOS.")
 
 
 # =========================================================
