@@ -216,9 +216,6 @@ def card_component(id_fix, row):
 
     return acao, motivo, resumo, proxima, vendedor
 
-# =========================================================
-# 🎨 CARD PARA AGENDAMENTOS ATIVOS
-# =========================================================
 def agendamento_card(id_fix, row):
     """Card completo para agendamentos ativos, com dados da base principal."""
 
@@ -270,22 +267,6 @@ def agendamento_card(id_fix, row):
             "Próxima data",
             key=f"prox_ag_{id_fix}"
         )
-
-        colA, colB = st.columns(2)
-        acao = None
-
-        with colA:
-            if st.button("📩 Registrar conversa", key=f"ok_ag_{id_fix}"):
-                acao = "concluir"
-
-        with colB:
-            if st.button("⏭ Pular", key=f"skip_ag_{id_fix}"):
-                acao = "pular"
-
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    return acao, novo_motivo, resumo, proxima, vendedor
-
 
         colA, colB = st.columns(2)
         acao = None
