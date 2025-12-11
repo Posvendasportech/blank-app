@@ -484,7 +484,7 @@ def render_aba1(aba, df_dia, metas):
             progresso = 0
 
         # Layout da barra
-        st.markdown("### 📈 Progresso do Dia")
+        st.markdown("###")
 
         # Barra de progresso visual
         st.progress(progresso)
