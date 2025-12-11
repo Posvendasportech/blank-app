@@ -201,6 +201,18 @@ def remover_card(telefone, concluido=True):
 # =========================================================
 st.title("📅 CRM Sportech – Tarefas do Dia")
 
+# =========================================================
+# 📌 ABAS PRINCIPAIS DO SISTEMA
+# =========================================================
+
+aba1, aba2, aba3 = st.tabs([
+    "📅 Tarefas do dia",
+    "📊 Indicadores",
+    "🔎 Pesquisa de histórico"
+])
+
+with aba1:
+    # === todo o código de tarefas do dia fica aqui ===
 class_filter = st.radio(
     "Filtrar por classificação:",
     ["Todos", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"],
