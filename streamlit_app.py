@@ -70,7 +70,7 @@ st.markdown("""
     margin-top: 12px;
     width: 100%;
     background-color: #0A40B0;
-    color: blue;
+    color: white;
     padding: 10px;
     border-radius: 8px;
     text-align: center;
@@ -225,13 +225,34 @@ def card_component(id_fix, row):
 # 💾 4. CARREGAMENTO E PREPARAÇÃO DOS DADOS
 # =========================================================
 @st.cache_data(ttl=60)
+
 def load_sheet(sheet_id, sheet_name):
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={quote(sheet_name)}"
     return pd.read_csv(url)
 
+
+
 SHEET_ID = "1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc"
 SHEET_NAME = "Total"
 df = load_sheet(SHEET_ID, SHEET_NAME)
+
+# [No seu código, adicione esta função na Seção de Carregamento e Preparação de Dados (abaixo do load_sheet)]
+
+@st.cache_data(ttl=60)
+def load_agendamentos_ativos():
+    """Carrega os telefones dos clientes que já estão sendo trabalhados."""
+    try:
+        client = get_gsheet_client()
+        sh = client.open("Agendamentos")
+        ws_ag = sh.worksheet("AGENDAMENTOS_ATIVOS")
+        # Lê apenas a coluna de Telefone (assumindo que seja a coluna 'E' ou o índice 4)
+        # O gspread retorna listas de listas. Pegamos a coluna 5 (índice 4)
+        telefones = ws_ag.col_values(5)[1:] # [1:] para pular o cabeçalho
+        return set(telefones)
+    except Exception as e:
+        # Se der erro na conexão, retorna um set vazio para não quebrar o app
+        st.warning(f"Não foi possível carregar agendamentos ativos: {e}", icon="⚠️")
+        return set()
 
 # Mapeamento de colunas (mantido por índice, como estava no original)
 col_data = df.iloc[:, 0]
@@ -256,6 +277,9 @@ base = pd.DataFrame({
 })
 
 base["Valor_num"] = base["Valor"].apply(valor_num)
+
+# Carregar lista de clientes que JÁ estão em agendamentos ativos
+telefones_agendados = load_agendamentos_ativos() # 👈 NOVO: Carrega a lista de telefones
 
 # =========================================================
 # 5. ESTADO DA SESSÃO
@@ -322,17 +346,24 @@ with colA:
 #    ESTE BLOCO É CRÍTICO E DEVE FICAR ANTES DAS ABAS!
 # =========================================================
 
-# Seleção das tarefas por meta (RFM)
-novos = base[(base["Classificação"] == "Novo") & (base["Dias_num"].fillna(0) >= 15)].copy()
+# =========================================================
+# 7. FILTRAGEM E CÁLCULO DE TAREFAS (Definem df_dia, total_tarefas, etc.)
+# =========================================================
+
+# 🛑 NOVO: Filtra a base para remover clientes que já estão agendados
+base_para_checkin = base[~base["Telefone"].isin(telefones_agendados)].copy()
+
+# Seleção das tarefas por meta (RFM) - Agora usa 'base_para_checkin'
+novos = base_para_checkin[(base_para_checkin["Classificação"] == "Novo") & (base_para_checkin["Dias_num"].fillna(0) >= 15)].copy()
 novos = novos.sort_values("Dias_num", ascending=True).head(meta_novos)
 
-prom = base[base["Classificação"] == "Promissor"].copy()
+prom = base_para_checkin[base_para_checkin["Classificação"] == "Promissor"].copy()
 prom = prom.sort_values("Dias_num", ascending=False).head(meta_prom)
 
-leal_camp = base[base["Classificação"].isin(["Leal", "Campeão"])].copy()
+leal_camp = base_para_checkin[base_para_checkin["Classificação"].isin(["Leal", "Campeão"])].copy()
 leal_camp = leal_camp.sort_values("Dias_num", ascending=False).head(meta_leais)
 
-risco = base[base["Classificação"] == "Em risco"].copy()
+risco = base_para_checkin[base_para_checkin["Classificação"] == "Em risco"].copy()
 risco = risco.sort_values("Dias_num", ascending=True).head(meta_risco)
 
 frames = []
@@ -399,86 +430,124 @@ with colB_resumo:
 with aba1:
     st.header("📅 Tarefas do dia")
 
-    class_filter = st.radio(
-        "Filtrar por classificação:",
-        ["Todos", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"],
-        horizontal=True
+    # 🛑 NOVO: Filtro principal para alternar entre modos
+    modo_filtro = st.selectbox(
+        "Filtro de Tarefas",
+        ["Clientes para Check-in (Base de Leitura)", "Agendamentos Ativos"],
+        key="modo_filtro_aba1"
     )
+
+    df_tarefas_para_renderizar = pd.DataFrame()
     
-    # Aplica filtro de rádio (precisa ser feito aqui dentro para afetar a exibição)
-    df_aba1 = df_dia.copy()
-    if class_filter != "Todos":
-        df_aba1 = df_aba1[df_aba1["Classificação"] == class_filter]
-
-
     st.markdown("---")
-
-    # Notificação geral
-    if total_tarefas == 0:
-        st.success("🎉 Você está em dia! Nenhum atendimento pendente dentro dos filtros atuais.")
-    elif total_tarefas < 10:
-        st.info(f"🔔 Hoje você tem **{total_tarefas}** contatos para trabalhar.")
-
-
-    st.markdown("## 📌 Atendimentos do dia")
-
-    # Download CSV
-    if not df_aba1.empty:
-        csv = df_aba1.to_csv(index=False).encode("utf-8-sig")
-        st.download_button(
-            "📥 Baixar lista do dia (CSV)",
-            data=csv,
-            file_name="tarefas_dia.csv",
-            mime="text/csv"
-        )
     
-    # Loop de renderização dos Cards (com lógica de ação)
-    for i in range(0, len(df_aba1), 2):
-        col1, col2 = st.columns(2)
+    # Lógica de seleção do DataFrame com base no modo
+    if modo_filtro == "Clientes para Check-in (Base de Leitura)":
+        
+        # 1. Filtro de Classificação (Radio) para a lista de Check-in
+        class_filter = st.radio(
+            "Filtrar por classificação:",
+            ["Todos", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"],
+            horizontal=True
+        )
+        
+        df_checkin = df_dia.copy()
+        
+        # Aplica filtro de rádio
+        if class_filter != "Todos":
+            df_checkin = df_checkin[df_checkin["Classificação"] == class_filter]
 
-        # CARD 1
-        row1 = df_aba1.iloc[i]
-        id1 = row1["ID"]
+        df_tarefas_para_renderizar = df_checkin
 
-        with col1:
-            acao, motivo, resumo, proxima, vendedor = card_component(id1, row1)
+        # Notificação
+        if len(df_tarefas_para_renderizar) == 0:
+            st.success("🎉 Você está em dia! Nenhum Check-in pendente dentro dos filtros atuais.")
+        elif len(df_tarefas_para_renderizar) < 10:
+            st.info(f"🔔 Você tem **{len(df_tarefas_para_renderizar)}** contatos para Check-in.")
 
-            if acao == "concluir":
-                if motivo.strip():
-                    registrar_agendamento(row1, resumo, motivo, str(proxima), vendedor)
-                    remover_card(row1["Telefone"], concluido=True)
-                    st.rerun()
-                else:
-                    st.warning("⚠️ **Preencha o Motivo do contato** para registrar a conclusão.", icon="🚨")
+        st.markdown("## 📌 Atendimentos do dia (Check-in)")
 
-            elif acao == "pular":
-                remover_card(row1["Telefone"], concluido=False)
-                st.rerun()
+        # Download CSV
+        if not df_tarefas_para_renderizar.empty:
+            csv = df_tarefas_para_renderizar.to_csv(index=False).encode("utf-8-sig")
+            st.download_button(
+                "📥 Baixar lista do dia (CSV)",
+                data=csv,
+                file_name="tarefas_checkin_dia.csv",
+                mime="text/csv"
+            )
 
-        # CARD 2 (se existir)
-        if i + 1 < len(df_aba1):
-            row2 = df_aba1.iloc[i + 1]
-            id2 = row2["ID"]
+        # 2. Loop de renderização dos Cards (Apenas para Check-in)
+        for i in range(0, len(df_tarefas_para_renderizar), 2):
+            col1, col2 = st.columns(2)
 
-            with col2:
-                acao2, motivo2, resumo2, proxima2, vendedor2 = card_component(id2, row2)
+            # CARD 1
+            row1 = df_tarefas_para_renderizar.iloc[i]
+            id1 = row1["ID"]
 
-                if acao2 == "concluir":
-                    if motivo2.strip():
-                        registrar_agendamento(row2, resumo2, motivo2, str(proxima2), vendedor2)
-                        remover_card(row2["Telefone"], concluido=True)
+            with col1:
+                acao, motivo, resumo, proxima, vendedor = card_component(id1, row1)
+
+                if acao == "concluir":
+                    if motivo.strip():
+                        registrar_agendamento(row1, resumo, motivo, str(proxima), vendedor)
+                        remover_card(row1["Telefone"], concluido=True)
                         st.rerun()
                     else:
                         st.warning("⚠️ **Preencha o Motivo do contato** para registrar a conclusão.", icon="🚨")
 
-                elif acao2 == "pular":
-                    remover_card(row2["Telefone"], concluido=False)
+                elif acao == "pular":
+                    remover_card(row1["Telefone"], concluido=False)
                     st.rerun()
 
-    # Caso vazio (após filtros)
-    if df_aba1.empty:
-        st.info("🎉 Não há tarefas pendentes para hoje dentro dos filtros selecionados.")
+            # CARD 2 (se existir)
+            if i + 1 < len(df_tarefas_para_renderizar):
+                row2 = df_tarefas_para_renderizar.iloc[i + 1]
+                id2 = row2["ID"]
 
+                with col2:
+                    acao2, motivo2, resumo2, proxima2, vendedor2 = card_component(id2, row2)
+
+                    if acao2 == "concluir":
+                        if motivo2.strip():
+                            registrar_agendamento(row2, resumo2, motivo2, str(proxima2), vendedor2)
+                            remover_card(row2["Telefone"], concluido=True)
+                            st.rerun()
+                        else:
+                            st.warning("⚠️ **Preencha o Motivo do contato** para registrar a conclusão.", icon="🚨")
+
+                    elif acao2 == "pular":
+                        remover_card(row2["Telefone"], concluido=False)
+                        st.rerun()
+
+    else: # modo_filtro == "Agendamentos Ativos"
+        
+        # 3. Exibição da Lista de Agendamentos Ativos
+        st.subheader("Clientes com Próximo Contato Agendado")
+        
+        df_agendamentos = load_df_agendamentos()
+        
+        if df_agendamentos.empty:
+            st.success("🎉 Não há agendamentos ativos pendentes.")
+        else:
+            # Formata a data (se necessário) e ordena
+            try:
+                # Tenta converter a coluna "Data de chamada" que é crucial
+                df_agendamentos['Data de chamada'] = pd.to_datetime(df_agendamentos['Data de chamada'], errors='coerce', format="%Y-%m-%d")
+            except:
+                st.warning("A coluna 'Data de chamada' não está no formato esperado (YYYY-MM-DD). Exibindo sem ordenação por data.")
+            
+            # Colunas a serem exibidas (ajuste conforme o cabeçalho da sua planilha AGENDAMENTOS_ATIVOS)
+            cols_show = ['Data de chamada', 'Nome', 'Telefone', 'Follow up', 'Data de contato', 'Relato da conversa']
+            
+            df_display = df_agendamentos[cols_show].sort_values('Data de chamada', ascending=True)
+
+            st.dataframe(
+                df_display,
+                use_container_width=True
+            )
+            
+            st.caption("Esta lista é atualizada a partir da planilha AGENDAMENTOS_ATIVOS.")
 
 # =========================================================
 # 📊 ABA 2 — INDICADORES
