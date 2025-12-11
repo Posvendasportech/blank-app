@@ -4,6 +4,7 @@ from urllib.parse import quote
 from google.oauth2.service_account import Credentials
 import gspread
 from datetime import datetime
+import time
 
 # =========================================================
 # ⚙️ 1. CONFIGURAÇÃO INICIAL E CSS
@@ -94,17 +95,17 @@ st.markdown("""
 # 🔑 2. FUNÇÕES DE CONEXÃO E CONVERSÃO
 # =========================================================
 def get_gsheet_client():
-    credentials = Credentials.from_service_account_info(  # <--- Limpe a indentação desta linha e da próxima
-        st.secrets["gcp_service_account"],
-        scopes=[
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-    )
-    return gspread.authorize(credentials)
-# [Trecho problemático]
+    credentials = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=[
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+    )
+    return gspread.authorize(credentials)
+
 def converte_dias(v):
-    try:  # <--- Linha 106 (provavelmente com o caractere U+00A0 no início)
+    try:
         return int(round(float(str(v).replace(",", "."))))
     except:
         return None
@@ -142,6 +143,9 @@ def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
     ws_ag = sh.worksheet("AGENDAMENTOS_ATIVOS")
     ws_hist = sh.worksheet("HISTORICO")
 
+    # Usando sleep para evitar erros de limite de escrita na API
+    time.sleep(0.5)
+
     agora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
     # HISTORICO (A → I)
@@ -156,6 +160,8 @@ def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
         proxima_data,
         vendedor
     ], value_input_option="USER_ENTERED")
+    
+    time.sleep(0.5)
 
     # AGENDAMENTOS_ATIVOS (A → I)
     if proxima_data:
@@ -170,6 +176,10 @@ def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
             proxima_data,
             vendedor
         ], value_input_option="USER_ENTERED")
+    
+    # Invalida o cache para forçar a leitura atualizada na próxima execução
+    st.cache_data.clear() # Limpa todos os caches
+    
 
 
 # =========================================================
@@ -413,7 +423,7 @@ total_tarefas = len(df_dia) # Variável total_tarefas definida!
 
 
 # =========================================================
-# 8. ABAS PRINCIPAIS DO SISTEMA (Com Correção da Aba 1)
+# 8. ABAS PRINCIPAIS DO SISTEMA
 # =========================================================
 aba1, aba2, aba3 = st.tabs([
     "📅 Tarefas do dia",
@@ -531,7 +541,7 @@ with aba1:
         
         st.subheader("Clientes com Próximo Contato Agendado")
         
-        df_agendamentos = load_df_agendamentos() # 👈 CORREÇÃO: Função chamada globalmente!
+        df_agendamentos = load_df_agendamentos() # Chamada correta da função global
         
         if df_agendamentos.empty:
             st.success("🎉 Não há agendamentos ativos pendentes.")
@@ -545,22 +555,22 @@ with aba1:
             # Colunas a serem exibidas (ajuste conforme o cabeçalho da sua planilha AGENDAMENTOS_ATIVOS)
             cols_show = ['Data de chamada', 'Nome', 'Telefone', 'Follow up', 'Data de contato', 'Relato da conversa']
             
-            existing_cols = [col for col in cols_show if col in df_agendamentos.columns]
-            
-            if not existing_cols:
-                st.warning("As colunas esperadas para exibição (Data de chamada, Nome, Telefone, etc.) não foram encontradas na planilha de Agendamentos.")
-            else:
-                df_display = df_agendamentos[existing_cols].sort_values(
-                    by=['Data de chamada'] if 'Data de chamada' in existing_cols else existing_cols[0], 
-                    ascending=True
-                )
+            existing_cols = [col for col in cols_show if col in df_agendamentos.columns]
+            
+            if not existing_cols:
+                st.warning("As colunas esperadas para exibição (Data de chamada, Nome, Telefone, etc.) não foram encontradas na planilha de Agendamentos.")
+            else:
+                df_display = df_agendamentos[existing_cols].sort_values(
+                    by=['Data de chamada'] if 'Data de chamada' in existing_cols else existing_cols[0], 
+                    ascending=True
+                )
 
-                st.dataframe(
-                    df_display,
-                    use_container_width=True
-                )
-            
-                st.caption("Esta lista é atualizada a partir da planilha AGENDAMENTOS_ATIVOS.")
+                st.dataframe(
+                    df_display,
+                    use_container_width=True
+                )
+            
+                st.caption("Esta lista é atualizada a partir da planilha AGENDAMENTOS_ATIVOS.")
 
 # =========================================================
 # 📊 ABA 2 — INDICADORES
@@ -608,6 +618,7 @@ def load_historico():
         data = ws_hist.get_all_records()
         df_hist = pd.DataFrame(data)
         # Ajusta nome da coluna (Importante para não quebrar a busca)
+        # Renomeando espaços para underline: 'Data de contato' -> 'Data_de_contato'
         df_hist.columns = [col.replace(' ', '_') for col in df_hist.columns] 
         return df_hist
     except Exception as e:
@@ -623,20 +634,20 @@ with aba3:
     termo_busca = st.text_input("Buscar por Telefone ou Nome no Histórico")
 
     if not df_hist.empty and termo_busca:
-        # Renomeia colunas para busca segura
-        col_nome_hist = 'Cliente' # Coluna 2 no histórico
-        col_telefone_hist = 'Telefone' # Coluna 5 no histórico (A-E)
+        # Colunas para busca (Ajustadas para underline)
+        col_nome_hist = 'Cliente' 
+        col_telefone_hist = 'Telefone' 
         
         # Busca no histórico pelo termo no nome ou telefone
         df_filtrado = df_hist[
-            df_hist[col_telefone_hist].astype(str).str.contains(termo_busca, case=False, na=False) |
-            df_hist[col_nome_hist].astype(str).str.contains(termo_busca, case=False, na=False)
+            (col_telefone_hist in df_hist.columns and df_hist[col_telefone_hist].astype(str).str.contains(termo_busca, case=False, na=False)) |
+            (col_nome_hist in df_hist.columns and df_hist[col_nome_hist].astype(str).str.contains(termo_busca, case=False, na=False))
         ]
 
         if not df_filtrado.empty:
             st.subheader(f"Histórico para '{termo_busca}'")
             st.dataframe(
-                df_filtrado.sort_values("Data_de_contato", ascending=False),
+                df_filtrado.sort_values("Data_de_contato", ascending=False) if 'Data_de_contato' in df_filtrado.columns else df_filtrado,
                 use_container_width=True
             )
         else:
