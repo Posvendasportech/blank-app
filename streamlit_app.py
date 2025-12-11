@@ -111,9 +111,11 @@ def load_sheet(sheet_id, sheet_name):
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={quote(sheet_name)}"
     return pd.read_csv(url)
 
-SHEET_ID = "1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc"
+SHEET_ID = st.secrets["nome"]   # <-- PEGANDO DO SECRETS
 SHEET_NAME = "Total"
+
 df = load_sheet(SHEET_ID, SHEET_NAME)
+
 
 
 # =========================================================
