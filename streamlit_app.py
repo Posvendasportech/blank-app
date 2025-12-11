@@ -223,7 +223,93 @@ with aba1:
         horizontal=True
     )
 
-    # TODO: continue colando aqui o resto do seu conteúdo de tarefas do dia...
+    # =========================================================
+# Seleção das tarefas
+# =========================================================
+novos = base[(base["Classificação"] == "Novo") & (base["Dias_num"].fillna(0) >= 15)].copy()
+novos = novos.sort_values("Dias_num", ascending=True).head(meta_novos)
+
+prom = base[base["Classificação"] == "Promissor"].copy()
+prom = prom.sort_values("Dias_num", ascending=False).head(meta_prom)
+
+leal_camp = base[base["Classificação"].isin(["Leal", "Campeão"])].copy()
+leal_camp = leal_camp.sort_values("Dias_num", ascending=False).head(meta_leais)
+
+# 🔥 Agora Em risco respeita meta
+risco = base[base["Classificação"] == "Em risco"].copy()
+risco = risco.sort_values("Dias_num", ascending=True).head(meta_risco)
+
+frames = []
+if not novos.empty:
+    novos["Grupo"] = "Novo"; frames.append(novos)
+if not prom.empty:
+    prom["Grupo"] = "Promissor"; frames.append(prom)
+if not leal_camp.empty:
+    leal_camp["Grupo"] = "Leal/Campeão"; frames.append(leal_camp)
+if not risco.empty:
+    risco["Grupo"] = "Em risco"; frames.append(risco)
+
+df_dia = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+# Remover concluidos e pulados
+todos_ocultos = st.session_state["concluidos"].union(st.session_state["pulados"])
+df_dia = df_dia[~df_dia["Telefone"].isin(todos_ocultos)]
+
+# Filtro por classificação (radio principal)
+if class_filter != "Todos":
+    df_dia = df_dia[df_dia["Classificação"] == class_filter]
+
+# Aplicar filtros avançados
+df_dia = df_dia[
+    df_dia["Dias_num"].fillna(0).between(min_dias, max_dias)
+]
+
+df_dia = df_dia[
+    df_dia["Valor_num"].fillna(0).between(min_valor, max_valor)
+]
+
+# Busca por telefone
+if telefone_busca:
+    df_dia = df_dia[df_dia["Telefone"].str.contains(telefone_busca)]
+
+
+# =========================================================
+# Contadores & resumo
+# =========================================================
+count_novos = len(df_dia[df_dia["Classificação"] == "Novo"])
+count_prom = len(df_dia[df_dia["Classificação"] == "Promissor"])
+count_leais = len(df_dia[df_dia["Classificação"].isin(["Leal", "Campeão"])])
+count_risco = len(df_dia[df_dia["Classificação"] == "Em risco"])
+total_tarefas = len(df_dia)
+
+with colB:
+    st.markdown("### 📊 Resumo")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Novos", count_novos)
+    c2.metric("Promissores", count_prom)
+    c3.metric("Leais/Campeões", count_leais)
+    c4.metric("Em risco", count_risco)
+
+st.markdown("---")
+
+# Notificação geral
+if total_tarefas == 0:
+    st.success("🎉 Você está em dia! Nenhum atendimento pendente dentro dos filtros atuais.")
+elif total_tarefas < 10:
+    st.info(f"🔔 Hoje você tem **{total_tarefas}** contatos para trabalhar.")
+
+
+
+def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
+
+    client = get_gsheet_client()
+    sh = client.open("Agendamentos")
+
+    ws_ag = sh.worksheet("AGENDAMENTOS_ATIVOS")
+    ws_hist = sh.worksheet("HISTORICO")
+
+    agora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
 # =========================================================
 # 📊 ABA 2 — INDICADORES
@@ -243,12 +329,16 @@ with aba2:
         len(concluidos_hoje),
         delta=f"Total: {len(st.session_state['concluidos'])}"
     )
+   # ...
+with aba2:
+    # ...
+    # Aqui, o Python precisa saber o valor de total_tarefas
     col_ind2.metric(
         "Clientes Pulados (Sessão)",
         len(st.session_state["pulados"]),
-        delta=f"Restantes: {total_tarefas}"
+        delta=f"Restantes: {total_tarefas}" # 👈 ERRO AQUI!
     )
-
+    # ...
     st.markdown("---")
     
     # 2. Distribuição da Base
@@ -350,93 +440,7 @@ with colA:
 
 
 
-# =========================================================
-# Seleção das tarefas
-# =========================================================
-novos = base[(base["Classificação"] == "Novo") & (base["Dias_num"].fillna(0) >= 15)].copy()
-novos = novos.sort_values("Dias_num", ascending=True).head(meta_novos)
 
-prom = base[base["Classificação"] == "Promissor"].copy()
-prom = prom.sort_values("Dias_num", ascending=False).head(meta_prom)
-
-leal_camp = base[base["Classificação"].isin(["Leal", "Campeão"])].copy()
-leal_camp = leal_camp.sort_values("Dias_num", ascending=False).head(meta_leais)
-
-# 🔥 Agora Em risco respeita meta
-risco = base[base["Classificação"] == "Em risco"].copy()
-risco = risco.sort_values("Dias_num", ascending=True).head(meta_risco)
-
-frames = []
-if not novos.empty:
-    novos["Grupo"] = "Novo"; frames.append(novos)
-if not prom.empty:
-    prom["Grupo"] = "Promissor"; frames.append(prom)
-if not leal_camp.empty:
-    leal_camp["Grupo"] = "Leal/Campeão"; frames.append(leal_camp)
-if not risco.empty:
-    risco["Grupo"] = "Em risco"; frames.append(risco)
-
-df_dia = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-
-
-# Remover concluidos e pulados
-todos_ocultos = st.session_state["concluidos"].union(st.session_state["pulados"])
-df_dia = df_dia[~df_dia["Telefone"].isin(todos_ocultos)]
-
-# Filtro por classificação (radio principal)
-if class_filter != "Todos":
-    df_dia = df_dia[df_dia["Classificação"] == class_filter]
-
-# Aplicar filtros avançados
-df_dia = df_dia[
-    df_dia["Dias_num"].fillna(0).between(min_dias, max_dias)
-]
-
-df_dia = df_dia[
-    df_dia["Valor_num"].fillna(0).between(min_valor, max_valor)
-]
-
-# Busca por telefone
-if telefone_busca:
-    df_dia = df_dia[df_dia["Telefone"].str.contains(telefone_busca)]
-
-
-# =========================================================
-# Contadores & resumo
-# =========================================================
-count_novos = len(df_dia[df_dia["Classificação"] == "Novo"])
-count_prom = len(df_dia[df_dia["Classificação"] == "Promissor"])
-count_leais = len(df_dia[df_dia["Classificação"].isin(["Leal", "Campeão"])])
-count_risco = len(df_dia[df_dia["Classificação"] == "Em risco"])
-total_tarefas = len(df_dia)
-
-with colB:
-    st.markdown("### 📊 Resumo")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Novos", count_novos)
-    c2.metric("Promissores", count_prom)
-    c3.metric("Leais/Campeões", count_leais)
-    c4.metric("Em risco", count_risco)
-
-st.markdown("---")
-
-# Notificação geral
-if total_tarefas == 0:
-    st.success("🎉 Você está em dia! Nenhum atendimento pendente dentro dos filtros atuais.")
-elif total_tarefas < 10:
-    st.info(f"🔔 Hoje você tem **{total_tarefas}** contatos para trabalhar.")
-
-
-
-def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
-
-    client = get_gsheet_client()
-    sh = client.open("Agendamentos")
-
-    ws_ag = sh.worksheet("AGENDAMENTOS_ATIVOS")
-    ws_hist = sh.worksheet("HISTORICO")
-
-    agora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
     # ============================================================
     # HISTORICO  (A → I)
