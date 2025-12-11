@@ -108,12 +108,19 @@ st.markdown("""
 # =========================================================
 @st.cache_data(ttl=60)
 def load_sheet(sheet_id, sheet_name):
-    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={quote(sheet_name)}"
+    url = (
+        f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?"
+        f"tqx=out:csv&sheet={quote(sheet_name)}"
+    )
     return pd.read_csv(url)
 
-SHEET_ID = "1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc"
+# Pegando o ID da planilha TOTAL do secrets
+SHEET_ID = st.secrets["nome"]       # <- AGORA BUSCA DO SECRETS
 SHEET_NAME = "Total"
+
+# Carrega a base
 df = load_sheet(SHEET_ID, SHEET_NAME)
+
 
 
 # =========================================================
