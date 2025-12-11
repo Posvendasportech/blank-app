@@ -331,48 +331,6 @@ if "historico_stack" not in st.session_state:
 # =========================================================
 # 6. HEADER E SIDEBAR (DEFINIÇÃO DE VARIÁVEIS DE FILTRO)
 # =========================================================
-st.title("📅 CRM Sportech – Tarefas do Dia")
-
-# Sidebar – Filtros avançados & busca
-with st.sidebar:
-    st.header("⚙️ Filtros avançados")
-
-    min_dias = st.number_input("Mínimo de dias desde a última compra", min_value=0, value=0)
-    max_dias = st.number_input("Máximo de dias desde a última compra", min_value=0, value=365)
-
-    min_valor = st.number_input("Valor mínimo (R$)", min_value=0.0, value=0.0, step=10.0)
-    max_valor = st.number_input("Valor máximo (R$)", min_value=0.0, value=1000.0, step=10.0)
-
-    telefone_busca = st.text_input("Buscar por telefone (qualquer parte)")
-
-    st.markdown("---")
-    st.markdown("### 🔁 Controles da sessão")
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        if st.button("↩ Voltar último cliente"):
-            if st.session_state["historico_stack"]:
-                ultimo = st.session_state["historico_stack"].pop()
-                st.session_state["concluidos"].discard(ultimo)
-                st.session_state["pulados"].discard(ultimo)
-            st.rerun()
-    with col_s2:
-        if st.button("🧹 Resetar sessão"):
-            st.session_state["concluidos"] = set()
-            st.session_state["pulados"] = set()
-            st.session_state["historico_stack"] = []
-            st.rerun()
-
-
-# Configurações & metas do dia
-st.markdown("## 🎯 Configurações & Metas do Dia")
-
-colA, colB_resumo = st.columns([2, 2])
-with colA:
-    c1, c2, c3, c4 = st.columns(4)
-    meta_novos = c1.number_input("Novos", value=10, min_value=0)
-    meta_prom = c2.number_input("Promissores", value=20, min_value=0)
-    meta_leais = c3.number_input("Leais/Campeões", value=10, min_value=0)
-    meta_risco = c4.number_input("Em risco", value=10, min_value=0)
 
 
 # =========================================================
@@ -478,6 +436,50 @@ with colB_resumo:
 with aba1:
     st.header("📅 Tarefas do dia")
 
+st.title("📅 CRM Sportech – Tarefas do Dia")
+
+# Sidebar – Filtros avançados & busca
+with st.sidebar:
+    st.header("⚙️ Filtros avançados")
+
+    min_dias = st.number_input("Mínimo de dias desde a última compra", min_value=0, value=0)
+    max_dias = st.number_input("Máximo de dias desde a última compra", min_value=0, value=365)
+
+    min_valor = st.number_input("Valor mínimo (R$)", min_value=0.0, value=0.0, step=10.0)
+    max_valor = st.number_input("Valor máximo (R$)", min_value=0.0, value=1000.0, step=10.0)
+
+    telefone_busca = st.text_input("Buscar por telefone (qualquer parte)")
+
+    st.markdown("---")
+    st.markdown("### 🔁 Controles da sessão")
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        if st.button("↩ Voltar último cliente"):
+            if st.session_state["historico_stack"]:
+                ultimo = st.session_state["historico_stack"].pop()
+                st.session_state["concluidos"].discard(ultimo)
+                st.session_state["pulados"].discard(ultimo)
+            st.rerun()
+    with col_s2:
+        if st.button("🧹 Resetar sessão"):
+            st.session_state["concluidos"] = set()
+            st.session_state["pulados"] = set()
+            st.session_state["historico_stack"] = []
+            st.rerun()
+
+
+# Configurações & metas do dia
+st.markdown("## 🎯 Configurações & Metas do Dia")
+
+colA, colB_resumo = st.columns([2, 2])
+with colA:
+    c1, c2, c3, c4 = st.columns(4)
+    meta_novos = c1.number_input("Novos", value=10, min_value=0)
+    meta_prom = c2.number_input("Promissores", value=20, min_value=0)
+    meta_leais = c3.number_input("Leais/Campeões", value=10, min_value=0)
+    meta_risco = c4.number_input("Em risco", value=10, min_value=0)
+
+    
     modo_filtro = st.selectbox(
         "Filtro de Tarefas",
         ["Clientes para Check-in (Base de Leitura)", "Agendamentos Ativos"],
