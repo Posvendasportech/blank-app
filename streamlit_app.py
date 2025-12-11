@@ -332,10 +332,8 @@ elif total_tarefas < 10:
 
 
 
-# =========================================================
-# Função de gravação no Google Sheets
-# =========================================================
 def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
+
     client = get_gsheet_client()
     sh = client.open("Agendamentos")
 
@@ -344,31 +342,36 @@ def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
 
     agora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    # Histórico (com vendedor)
+    # ============================================================
+    # HISTORICO  (A → I)
+    # ============================================================
     ws_hist.append_row([
-        agora,
-        row["Cliente"],
-        row["Telefone"],
-        row["Classificação"],
-        safe_valor(row["Valor"]),
-        comentario,
-        motivo,
-        proxima_data,
-        vendedor
+        agora,                        # A - Data de contato
+        row["Cliente"],               # B - Nome
+        row["Classificação"],         # C - Classificação
+        safe_valor(row["Valor"]),     # D - Pedido
+        row["Telefone"],              # E - Telefone
+        comentario,                   # F - Relato da conversa
+        motivo,                       # G - Follow up
+        proxima_data,                 # H - Data de chamada
+        vendedor                      # I - Observação
     ], value_input_option="USER_ENTERED")
 
-    # Agendamento futuro (se houver data)
+    # ============================================================
+    # AGENDAMENTOS_ATIVOS  (A → I)
+    # ============================================================
     if proxima_data:
         ws_ag.append_row([
-            row["Cliente"],
-            row["Telefone"],
-            row["Classificação"],
-            comentario,
-            motivo,
-            proxima_data,
-            vendedor
+            agora,                    # A - Data de contato
+            row["Cliente"],           # B - Nome
+            row["Classificação"],     # C - Classificação
+            safe_valor(row["Valor"]), # D - Pedido
+            row["Telefone"],          # E - Telefone
+            comentario,               # F - Relato da conversa
+            motivo,                   # G - Follow up
+            proxima_data,             # H - Data de chamada
+            vendedor                  # I - Observação
         ], value_input_option="USER_ENTERED")
-
 
 
 
