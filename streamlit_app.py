@@ -220,7 +220,12 @@ def card_component(id_fix, row):
 # 🎨 CARD PARA AGENDAMENTOS ATIVOS
 # =========================================================
 def agendamento_card(id_fix, row):
-    """Card especial para clientes que já estavam agendados."""
+    """Card completo para agendamentos ativos, com dados da base principal."""
+
+    ultima_compra = row.get("Data", "—")
+    valor_gasto = safe_valor(row.get("Valor", "—"))
+    num_compras = row.get("Compras", "—")
+    dias_ult_contato = row.get("Dias_desde_contato", "—")
 
     with st.container():
         st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -229,9 +234,16 @@ def agendamento_card(id_fix, row):
             f"""
             <div class="card-header">
                 <b>{row['Nome']}</b><br>
-                📱 {row['Telefone']}<br>
-                📌 Direcionamento anterior: <b>{row.get('Follow up','—')}</b><br>
-                🗓 Agendado para: {row.get('Data de contato','—')}
+                📱 {row['Telefone']}<br><br>
+
+                🕓 <b>Último contato:</b> {row.get('Data de contato', '—')}<br>
+                ⏳ <b>Dias desde último contato:</b> {dias_ult_contato}<br><br>
+
+                🛒 <b>Data última compra:</b> {ultima_compra}<br>
+                💵 <b>Valor gasto:</b> {valor_gasto}<br>
+                📦 <b>Nº de compras:</b> {num_compras}<br><br>
+
+                📝 <b>Direcionamento anterior:</b> {row.get('Follow up','—')}
             </div>
             """,
             unsafe_allow_html=True
@@ -250,14 +262,30 @@ def agendamento_card(id_fix, row):
         )
 
         novo_motivo = st.text_input(
-            "Novo direcionamento / observação",
+            "Novo direcionamento",
             key=f"mot_ag_{id_fix}"
         )
 
         proxima = st.date_input(
-            "Próxima data de contato",
+            "Próxima data",
             key=f"prox_ag_{id_fix}"
         )
+
+        colA, colB = st.columns(2)
+        acao = None
+
+        with colA:
+            if st.button("📩 Registrar conversa", key=f"ok_ag_{id_fix}"):
+                acao = "concluir"
+
+        with colB:
+            if st.button("⏭ Pular", key=f"skip_ag_{id_fix}"):
+                acao = "pular"
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    return acao, novo_motivo, resumo, proxima, vendedor
+
 
         colA, colB = st.columns(2)
         acao = None
