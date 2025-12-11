@@ -453,7 +453,7 @@ def render_aba1(aba, df_dia, metas):
         • Agendamentos Ativos (tabela)
     """
     with aba:
-        st.header("📅 Tarefas do dia")
+        st.header("🎯 Tarefas do dia")
 
       # =========================================================
 # 🟦 RESUMO GERAL DO DIA (TOPO DA ABA 1)
@@ -468,7 +468,7 @@ def render_aba1(aba, df_dia, metas):
         # --- Total do dia (Check-in + Agendamentos) ---
         total_dia = qtd_checkin + qtd_agendamentos
 
-        st.markdown("## 🎯 Panorama Geral do Dia")
+        st.markdown("##")
 
         # =========================================================
         # 🟩 BARRA DE PROGRESSO DO DIA
