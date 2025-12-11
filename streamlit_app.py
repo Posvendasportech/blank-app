@@ -102,8 +102,9 @@ def get_gsheet_client():
         ]
     )
     return gspread.authorize(credentials)
+# [Trecho problemático]
 def converte_dias(v):
-    try:
+    try:  # <--- Linha 106 (provavelmente com o caractere U+00A0 no início)
         return int(round(float(str(v).replace(",", "."))))
     except:
         return None
