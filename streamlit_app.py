@@ -483,7 +483,7 @@ def render_aba1(aba, df_dia, metas):
         # ---- CHECK-IN (META + REAL) ----
         with colB:
             st.metric(
-                label="🟦 Check-in Programados (sidebar)",
+                label="🟦 Check-in Programados",
                 value=qtd_checkin,
                 delta=f"Meta total: {metas['meta_novos'] + metas['meta_prom'] + metas['meta_leais'] + metas['meta_risco']}"
             )
