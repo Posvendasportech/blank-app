@@ -225,6 +225,84 @@ with aba1:
 
     # TODO: continue colando aqui o resto do seu conteúdo de tarefas do dia...
 
+# =========================================================
+# 📊 ABA 2 — INDICADORES
+# =========================================================
+with aba2:
+    st.header("📊 Indicadores de Performance")
+
+    # 1. Indicadores de Meta
+    st.subheader("Metas de Contato (Hoje)")
+    
+    # Exemplo: Calcula o que foi concluído hoje (apenas a sessão)
+    concluidos_hoje = base[base["Telefone"].isin(st.session_state["concluidos"])]
+
+    col_ind1, col_ind2 = st.columns(2)
+    col_ind1.metric(
+        "Tarefas Concluídas (Sessão)",
+        len(concluidos_hoje),
+        delta=f"Total: {len(st.session_state['concluidos'])}"
+    )
+    col_ind2.metric(
+        "Clientes Pulados (Sessão)",
+        len(st.session_state["pulados"]),
+        delta=f"Restantes: {total_tarefas}"
+    )
+
+    st.markdown("---")
+    
+    # 2. Distribuição da Base
+    st.subheader("Distribuição da Base por Classificação")
+    df_count = base["Classificação"].value_counts().reset_index()
+    df_count.columns = ["Classificação", "Quantidade"]
+    
+    # Exibe em formato de gráfico de pizza/barra (Streamlit vai escolher)
+    st.bar_chart(df_count.set_index("Classificação")) 
+    
+    #
+
+# =========================================================
+# 🔎 ABA 3 — PESQUISA DE HISTÓRICO
+# =========================================================
+@st.cache_data(ttl=60)
+def load_historico():
+    try:
+        client = get_gsheet_client()
+        sh = client.open("Agendamentos")
+        ws_hist = sh.worksheet("HISTORICO")
+        data = ws_hist.get_all_records()
+        df_hist = pd.DataFrame(data)
+        return df_hist
+    except Exception as e:
+        st.error(f"Erro ao carregar histórico: {e}")
+        return pd.DataFrame()
+
+
+with aba3:
+    st.header("🔎 Pesquisa de Histórico de Contato")
+
+    df_hist = load_historico()
+
+    termo_busca = st.text_input("Buscar por Telefone ou Nome no Histórico")
+
+    if not df_hist.empty and termo_busca:
+        # Busca no histórico pelo termo no nome ou telefone
+        df_filtrado = df_hist[
+            df_hist["Telefone"].astype(str).str.contains(termo_busca, case=False, na=False) |
+            df_hist["Nome"].astype(str).str.contains(termo_busca, case=False, na=False)
+        ]
+
+        if not df_filtrado.empty:
+            st.subheader(f"Histórico para '{termo_busca}'")
+            # Mostrar histórico em ordem de data de contato (coluna A)
+            st.dataframe(
+                df_filtrado.sort_values("Data de contato", ascending=False),
+                use_container_width=True
+            )
+        else:
+            st.info("Nenhum registro encontrado no histórico.")
+    elif not df_hist.empty:
+        st.info("Digite um Nome ou Telefone para pesquisar no histórico de contatos.")
 
 # =========================================================
 # Sidebar – Filtros avançados & busca
@@ -516,17 +594,25 @@ for i in range(0, len(df_dia), 2):
     row1 = df_dia.iloc[i]
     id1 = row1["ID"]
 
-    with col1:
-        acao, motivo, resumo, proxima, vendedor = card_component(id1, row1)
+   # Dentro do loop de renderização dos cards (o final do código):
 
-        if acao == "concluir" and motivo:
+# ...
+with col1:
+    acao, motivo, resumo, proxima, vendedor = card_component(id1, row1)
+
+    if acao == "concluir":
+        if motivo.strip(): # ✅ Verificar se o motivo NÃO está vazio
             registrar_agendamento(row1, resumo, motivo, str(proxima), vendedor)
             remover_card(row1["Telefone"], concluido=True)
             st.rerun()
+        else:
+            st.warning("⚠️ **Preencha o Motivo do contato** para registrar a conclusão.") # Alerta de erro
+            # Não faz o rerun para permitir que o usuário preencha
 
-        elif acao == "pular":
-            remover_card(row1["Telefone"], concluido=False)
-            st.rerun()
+    elif acao == "pular":
+        remover_card(row1["Telefone"], concluido=False)
+        st.rerun()
+# ... (Repetir a mesma lógica para o Card 2)
 
     # CARD 2 (se existir)
     if i + 1 < len(df_dia):
