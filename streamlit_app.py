@@ -487,13 +487,56 @@ def render_aba1(aba, df_dia, metas):
         # Visão geral das metas & contagem atual
         colA, colB = st.columns([2, 2])
 
-        with colA:
-            st.subheader("🎯 Metas configuradas")
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Novos", metas["meta_novos"])
-            c2.metric("Promissores", metas["meta_prom"])
-            c3.metric("Leais", metas["meta_leais"])
-            c4.metric("Em risco", metas["meta_risco"])
+      # =========================================================
+# 🎯 METAS DO DIA (AJUSTÁVEIS NA ABA 1)
+# =========================================================
+with colA:
+    st.subheader("🎯 Seleção de Contatos do Dia")
+
+    # Inicializa caso não exista
+    if "meta_novos" not in st.session_state:
+        st.session_state["meta_novos"] = metas["meta_novos"]
+        st.session_state["meta_prom"] = metas["meta_prom"]
+        st.session_state["meta_leais"] = metas["meta_leais"]
+        st.session_state["meta_risco"] = metas["meta_risco"]
+
+    c1, c2 = st.columns(2)
+    c3, c4 = st.columns(2)
+
+    st.session_state["meta_novos"] = c1.number_input(
+        "Novos do dia",
+        value=st.session_state["meta_novos"],
+        min_value=0,
+        step=1
+    )
+
+    st.session_state["meta_prom"] = c2.number_input(
+        "Promissores do dia",
+        value=st.session_state["meta_prom"],
+        min_value=0,
+        step=1
+    )
+
+    st.session_state["meta_leais"] = c3.number_input(
+        "Leais/Campeões do dia",
+        value=st.session_state["meta_leais"],
+        min_value=0,
+        step=1
+    )
+
+    st.session_state["meta_risco"] = c4.number_input(
+        "Em risco do dia",
+        value=st.session_state["meta_risco"],
+        min_value=0,
+        step=1
+    )
+
+    # Atualiza dicionário metas automaticamente
+    metas["meta_novos"] = st.session_state["meta_novos"]
+    metas["meta_prom"] = st.session_state["meta_prom"]
+    metas["meta_leais"] = st.session_state["meta_leais"]
+    metas["meta_risco"] = st.session_state["meta_risco"]
+
 
         with colB:
             st.subheader("📊 Resumo da seleção atual")
