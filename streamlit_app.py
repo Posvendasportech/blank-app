@@ -204,20 +204,26 @@ st.title("📅 CRM Sportech – Tarefas do Dia")
 # =========================================================
 # 📌 ABAS PRINCIPAIS DO SISTEMA
 # =========================================================
-
 aba1, aba2, aba3 = st.tabs([
     "📅 Tarefas do dia",
     "📊 Indicadores",
     "🔎 Pesquisa de histórico"
 ])
 
+# =========================================================
+# 🟦 ABA 1 — TAREFAS DO DIA
+# =========================================================
 with aba1:
-    # === todo o código de tarefas do dia fica aqui ===
-class_filter = st.radio(
-    "Filtrar por classificação:",
-    ["Todos", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"],
-    horizontal=True
-)
+    st.header("📅 Tarefas do dia")
+
+    # ⬇️ Aqui começa todo o conteúdo da aba 1
+    class_filter = st.radio(
+        "Filtrar por classificação:",
+        ["Todos", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"],
+        horizontal=True
+    )
+
+    # TODO: continue colando aqui o resto do seu conteúdo de tarefas do dia...
 
 
 # =========================================================
