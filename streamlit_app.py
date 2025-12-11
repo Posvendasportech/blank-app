@@ -474,20 +474,7 @@ def render_aba1(aba, df_dia, metas):
 
         # ----- LADO DIREITO: O que foi selecionado em df_dia -----
         with colB:
-            st.subheader("📊 Seleção atual (após filtros + metas)")
-
-            count_novos = len(df_dia[df_dia["Classificação"] == "Novo"])
-            count_prom = len(df_dia[df_dia["Classificação"] == "Promissor"])
-            count_leais = len(df_dia[df_dia["Classificação"].isin(["Leal", "Campeão"])])
-            count_risco = len(df_dia[df_dia["Classificação"] == "Em risco"])
-            total_tarefas = len(df_dia)
-
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Novos", count_novos, f"de {metas['meta_novos']}")
-            c2.metric("Promissores", count_prom, f"de {metas['meta_prom']}")
-            c3.metric("Leais/Camp.", count_leais, f"de {metas['meta_leais']}")
-            c4.metric("Em risco", count_risco, f"de {metas['meta_risco']}")
-
+            
             st.metric("Total de tarefas do dia", total_tarefas)
 
         st.markdown("---")
