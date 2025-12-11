@@ -418,10 +418,10 @@ def render_sidebar():
         )
 
         # 👉 AQUI VOCÊ AJUSTA AS METAS PADRÃO
-        meta_novos = st.number_input("Meta: Novos", value=10, min_value=0, step=1)
-        meta_prom = st.number_input("Meta: Promissores", value=20, min_value=0, step=1)
-        meta_leais = st.number_input("Meta: Leais/Campeões", value=10, min_value=0, step=1)
-        meta_risco = st.number_input("Meta: Em risco", value=10, min_value=0, step=1)
+        meta_novos = st.number_input("Meta: Novos", value=0, min_value=0, step=1)
+        meta_prom = st.number_input("Meta: Promissores", value=0, min_value=0, step=1)
+        meta_leais = st.number_input("Meta: Leais/Campeões", value=0, min_value=0, step=1)
+        meta_risco = st.number_input("Meta: Em risco", value=0, min_value=0, step=1)
 
     # 🔙 dicionário de filtros que será usado no build_daily_tasks_df()
     filtros = {
