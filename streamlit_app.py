@@ -219,33 +219,48 @@ def card_component(id_fix, row):
 def agendamento_card(id_fix, row):
     """Card completo para agendamentos ativos, com dados da base principal."""
 
+    # Correções de busca segura
+    nome = row.get("Nome", "—")
+    telefone = row.get("Telefone", "—")
+
     ultima_compra = row.get("Data", "—")
     valor_gasto = safe_valor(row.get("Valor", "—"))
     num_compras = row.get("Compras", "—")
+
+    ultimo_contato = row.get("Data de contato", "—")
     dias_ult_contato = row.get("Dias_desde_contato", "—")
+
+    followup = row.get("Follow up", "—")
 
     with st.container():
         st.markdown('<div class="card">', unsafe_allow_html=True)
 
+        # ==========================
+        #     CABEÇALHO DO CARD
+        # ==========================
         st.markdown(
             f"""
             <div class="card-header">
-                <b>{row['Nome']}</b><br>
-                📱 {row['Telefone']}<br><br>
 
-                🕓 <b>Último contato:</b> {row.get('Data de contato', '—')}<br>
-                ⏳ <b>Dias desde último contato:</b> {dias_ult_contato}<br><br>
+                <b>{nome}</b><br>
+                📱 {telefone}<br><br>
 
-                🛒 <b>Data última compra:</b> {ultima_compra}<br>
+                🕓 <b>Último contato:</b> {ultimo_contato}<br>
+                ⏳ <b>Dias desde o último contato:</b> {dias_ult_contato}<br><br>
+
+                🛒 <b>Data da última compra:</b> {ultima_compra}<br>
                 💵 <b>Valor gasto:</b> {valor_gasto}<br>
                 📦 <b>Nº de compras:</b> {num_compras}<br><br>
 
-                📝 <b>Direcionamento anterior:</b> {row.get('Follow up','—')}
+                📝 <b>Direcionamento anterior:</b> {followup}
             </div>
             """,
             unsafe_allow_html=True
         )
 
+        # ==========================
+        #     INPUTS DO CARD
+        # ==========================
         vendedor = st.selectbox(
             "Responsável",
             ["João", "Maria", "Patrick", "Outro"],
@@ -268,6 +283,9 @@ def agendamento_card(id_fix, row):
             key=f"prox_ag_{id_fix}"
         )
 
+        # ==========================
+        #      AÇÕES DO CARD
+        # ==========================
         colA, colB = st.columns(2)
         acao = None
 
@@ -282,7 +300,6 @@ def agendamento_card(id_fix, row):
         st.markdown("</div>", unsafe_allow_html=True)
 
     return acao, novo_motivo, resumo, proxima, vendedor
-
 
 # =========================================================
 # (6) 🧾 AÇÕES — SALVAR, REMOVER, REGISTRAR
