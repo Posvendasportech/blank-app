@@ -94,6 +94,9 @@ st.markdown("""
 # =========================================================
 # 🔑 2. FUNÇÕES DE CONEXÃO E CONVERSÃO
 # =========================================================
+
+# Cache de recurso: evita re-autenticar o tempo todo
+@st.cache_resource
 def get_gsheet_client():
     credentials = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
@@ -147,34 +150,22 @@ def remover_card(telefone, concluido=True):
 
 
 def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
-    client = get_gsheet_client()
-    sh = client.open("Agendamentos")
-    ws_ag = sh.worksheet("AGENDAMENTOS_ATIVOS")
-    ws_hist = sh.worksheet("HISTORICO")
+    """
+    Registra contato no HISTORICO e, se tiver próxima_data, em AGENDAMENTOS_ATIVOS.
+    Inclui tratamento de erro e limpeza de cache específica.
+    """
+    try:
+        client = get_gsheet_client()
+        sh = client.open("Agendamentos")
+        ws_ag = sh.worksheet("AGENDAMENTOS_ATIVOS")
+        ws_hist = sh.worksheet("HISTORICO")
 
-    # Usando sleep para evitar erros de limite de escrita na API
-    time.sleep(0.5)
+        time.sleep(0.5)
 
-    agora = datetime.now().strftime("%d/%m/%Y %H:%M")
+        agora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    # HISTORICO (A → I)
-    ws_hist.append_row([
-        agora,
-        row["Cliente"],
-        row["Classificação"],
-        safe_valor(row["Valor"]),
-        row["Telefone"],
-        comentario,
-        motivo,
-        proxima_data,
-        vendedor
-    ], value_input_option="USER_ENTERED")
-
-    time.sleep(0.5)
-
-    # AGENDAMENTOS_ATIVOS (A → I)
-    if proxima_data:
-        ws_ag.append_row([
+        # HISTORICO (A → I)
+        ws_hist.append_row([
             agora,
             row["Cliente"],
             row["Classificação"],
@@ -186,9 +177,35 @@ def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
             vendedor
         ], value_input_option="USER_ENTERED")
 
-    # Invalida o cache para forçar a leitura atualizada na próxima execução
-    # (Sim, isso é mais agressivo, mas garante consistência)
-    st.cache_data.clear()
+        time.sleep(0.5)
+
+        # AGENDAMENTOS_ATIVOS (A → I)
+        if proxima_data:
+            ws_ag.append_row([
+                agora,
+                row["Cliente"],
+                row["Classificação"],
+                safe_valor(row["Valor"]),
+                row["Telefone"],
+                comentario,
+                motivo,
+                proxima_data,
+                vendedor
+            ], value_input_option="USER_ENTERED")
+
+        # Limpa apenas caches relacionados a agendamentos/histórico
+        try:
+            load_agendamentos_ativos.clear()
+            load_df_agendamentos.clear()
+            load_historico.clear()
+        except Exception:
+            # fallback se versão do streamlit não suportar .clear em cache_data
+            st.cache_data.clear()
+
+        st.success("✅ Agendamento registrado com sucesso!")
+
+    except Exception as e:
+        st.error(f"❌ Erro ao registrar agendamento: {e}")
 
 
 # =========================================================
@@ -252,7 +269,6 @@ def load_sheet(sheet_id, sheet_name):
     return pd.read_csv(url)
 
 
-# 🛑 FUNÇÃO 1 (GLOBAL): Carrega Telefones de Clientes JÁ Agendados
 @st.cache_data(ttl=60)
 def load_agendamentos_ativos():
     """Carrega os telefones dos clientes que já estão sendo trabalhados."""
@@ -267,7 +283,6 @@ def load_agendamentos_ativos():
         return set()
 
 
-# 🛑 FUNÇÃO 2 (GLOBAL): Carrega o DataFrame COMPLETO de Agendamentos Ativos
 @st.cache_data(ttl=5)  # Cache mais curto para ver a lista de tarefas ativas
 def load_df_agendamentos():
     """Carrega o DataFrame completo dos Agendamentos Ativos para exibição na Aba 1."""
@@ -331,16 +346,53 @@ if "historico_stack" not in st.session_state:
 # =========================================================
 # 6. HEADER E SIDEBAR (DEFINIÇÃO DE VARIÁVEIS DE FILTRO)
 # =========================================================
+st.title("📅 CRM Sportech – Tarefas do Dia")
+
+with st.sidebar:
+    st.header("⚙️ Filtros avançados")
+
+    min_dias = st.number_input("Mínimo de dias desde a última compra", min_value=0, value=0)
+    max_dias = st.number_input("Máximo de dias desde a última compra", min_value=0, value=365)
+
+    min_valor = st.number_input("Valor mínimo (R$)", min_value=0.0, value=0.0, step=10.0)
+    max_valor = st.number_input("Valor máximo (R$)", min_value=0.0, value=1000.0, step=10.0)
+
+    telefone_busca = st.text_input("Buscar por telefone (qualquer parte)").strip()
+
+    st.markdown("---")
+    st.markdown("### 🔁 Controles da sessão")
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        if st.button("↩ Voltar último cliente"):
+            if st.session_state["historico_stack"]:
+                ultimo = st.session_state["historico_stack"].pop()
+                st.session_state["concluidos"].discard(ultimo)
+                st.session_state["pulados"].discard(ultimo)
+            st.rerun()
+    with col_s2:
+        if st.button("🧹 Resetar sessão"):
+            st.session_state["concluidos"] = set()
+            st.session_state["pulados"] = set()
+            st.session_state["historico_stack"] = []
+            st.rerun()
+
+
+st.markdown("## 🎯 Configurações & Metas do Dia")
+
+colA, colB_resumo = st.columns([2, 2])
+with colA:
+    c1, c2, c3, c4 = st.columns(4)
+    meta_novos = c1.number_input("Novos", value=10, min_value=0)
+    meta_prom = c2.number_input("Promissores", value=20, min_value=0)
+    meta_leais = c3.number_input("Leais/Campeões", value=10, min_value=0)
+    meta_risco = c4.number_input("Em risco", value=10, min_value=0)
 
 
 # =========================================================
 # 7. FILTRAGEM E CÁLCULO DE TAREFAS (CRÍTICO)
 # =========================================================
-
-# Filtra a base para remover clientes que já estão agendados
 base_para_checkin = base[~base["Telefone"].isin(telefones_agendados)].copy()
 
-# Seleção das tarefas por meta (RFM)
 novos = base_para_checkin[
     (base_para_checkin["Classificação"] == "Novo") &
     (base_para_checkin["Dias_num"].fillna(0) >= 15)
@@ -375,14 +427,11 @@ if not risco.empty:
 if frames:
     df_dia = pd.concat(frames, ignore_index=True)
 else:
-    # DataFrame vazio, mas com as mesmas colunas de base_para_checkin
     df_dia = base_para_checkin.head(0).copy()
     df_dia["Grupo"] = pd.Series(dtype=str)
 
-# Cria ID único
 df_dia["ID"] = df_dia["Telefone"].astype(str)
 
-# Aplicar filtros da sessão e do sidebar
 todos_ocultos = st.session_state["concluidos"].union(st.session_state["pulados"])
 df_dia = df_dia[~df_dia["Telefone"].isin(todos_ocultos)]
 
@@ -394,7 +443,6 @@ df_dia = df_dia[
     df_dia["Valor_num"].fillna(0).between(min_valor, max_valor)
 ]
 
-# Filtro por telefone (com limpeza de caracteres não numéricos)
 df_dia["Telefone_limpo"] = df_dia["Telefone"].astype(str).apply(limpar_telefone)
 if telefone_busca:
     tel_busca_limpo = limpar_telefone(telefone_busca)
@@ -403,7 +451,6 @@ if telefone_busca:
     else:
         df_dia = df_dia[df_dia["Telefone"].str.contains(telefone_busca, na=False)]
 
-# Contadores & resumo
 count_novos = len(df_dia[df_dia["Classificação"] == "Novo"])
 count_prom = len(df_dia[df_dia["Classificação"] == "Promissor"])
 count_leais = len(df_dia[df_dia["Classificação"].isin(["Leal", "Campeão"])])
@@ -420,7 +467,6 @@ aba1, aba2, aba3 = st.tabs([
     "🔎 Pesquisa de histórico"
 ])
 
-# Resumo ao lado das metas
 with colB_resumo:
     st.markdown("### 📊 Resumo")
     c1, c2, c3, c4 = st.columns(4)
@@ -436,50 +482,6 @@ with colB_resumo:
 with aba1:
     st.header("📅 Tarefas do dia")
 
-st.title("📅 CRM Sportech – Tarefas do Dia")
-
-# Sidebar – Filtros avançados & busca
-with st.sidebar:
-    st.header("⚙️ Filtros avançados")
-
-    min_dias = st.number_input("Mínimo de dias desde a última compra", min_value=0, value=0)
-    max_dias = st.number_input("Máximo de dias desde a última compra", min_value=0, value=365)
-
-    min_valor = st.number_input("Valor mínimo (R$)", min_value=0.0, value=0.0, step=10.0)
-    max_valor = st.number_input("Valor máximo (R$)", min_value=0.0, value=1000.0, step=10.0)
-
-    telefone_busca = st.text_input("Buscar por telefone (qualquer parte)")
-
-    st.markdown("---")
-    st.markdown("### 🔁 Controles da sessão")
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        if st.button("↩ Voltar último cliente"):
-            if st.session_state["historico_stack"]:
-                ultimo = st.session_state["historico_stack"].pop()
-                st.session_state["concluidos"].discard(ultimo)
-                st.session_state["pulados"].discard(ultimo)
-            st.rerun()
-    with col_s2:
-        if st.button("🧹 Resetar sessão"):
-            st.session_state["concluidos"] = set()
-            st.session_state["pulados"] = set()
-            st.session_state["historico_stack"] = []
-            st.rerun()
-
-
-# Configurações & metas do dia
-st.markdown("## 🎯 Configurações & Metas do Dia")
-
-colA, colB_resumo = st.columns([2, 2])
-with colA:
-    c1, c2, c3, c4 = st.columns(4)
-    meta_novos = c1.number_input("Novos", value=10, min_value=0)
-    meta_prom = c2.number_input("Promissores", value=20, min_value=0)
-    meta_leais = c3.number_input("Leais/Campeões", value=10, min_value=0)
-    meta_risco = c4.number_input("Em risco", value=10, min_value=0)
-
-    
     modo_filtro = st.selectbox(
         "Filtro de Tarefas",
         ["Clientes para Check-in (Base de Leitura)", "Agendamentos Ativos"],
@@ -513,8 +515,12 @@ with colA:
         st.markdown("## 📌 Atendimentos do dia (Check-in)")
 
         if not df_tarefas_para_renderizar.empty:
-            csv = df_tarefas_para_renderizar.drop(columns=["Telefone_limpo"], errors="ignore") \
-                                             .to_csv(index=False).encode("utf-8-sig")
+            csv = (
+                df_tarefas_para_renderizar
+                .drop(columns=["Telefone_limpo"], errors="ignore")
+                .to_csv(index=False)
+                .encode("utf-8-sig")
+            )
             st.download_button(
                 "📥 Baixar lista do dia (CSV)",
                 data=csv,
@@ -522,11 +528,9 @@ with colA:
                 mime="text/csv"
             )
 
-        # Loop de renderização dos Cards
         for i in range(0, len(df_tarefas_para_renderizar), 2):
             col1, col2 = st.columns(2)
 
-            # CARD 1
             row1 = df_tarefas_para_renderizar.iloc[i]
             id1 = row1["ID"]
 
@@ -546,7 +550,6 @@ with colA:
                     remover_card(row1["Telefone"], concluido=False)
                     st.rerun()
 
-            # CARD 2 (se existir)
             if i + 1 < len(df_tarefas_para_renderizar):
                 row2 = df_tarefas_para_renderizar.iloc[i + 1]
                 id2 = row2["ID"]
@@ -567,8 +570,7 @@ with colA:
                         remover_card(row2["Telefone"], concluido=False)
                         st.rerun()
 
-    else:  # modo_filtro == "Agendamentos Ativos"
-
+    else:
         st.subheader("Clientes com Próximo Contato Agendado")
 
         df_agendamentos = load_df_agendamentos()
@@ -576,7 +578,6 @@ with colA:
         if df_agendamentos.empty:
             st.success("🎉 Não há agendamentos ativos pendentes.")
         else:
-            # Tentativa de converter data
             if "Data de chamada" in df_agendamentos.columns:
                 try:
                     df_agendamentos["Data de chamada"] = pd.to_datetime(
@@ -625,7 +626,6 @@ with colA:
 with aba2:
     st.header("📊 Indicadores de Performance")
 
-    # 1. Indicadores de Meta
     st.subheader("Progresso da Sessão Atual")
 
     concluidos_hoje = base[base["Telefone"].isin(st.session_state["concluidos"])]
@@ -644,7 +644,6 @@ with aba2:
 
     st.markdown("---")
 
-    # 2. Distribuição da Base
     st.subheader("Distribuição da Base Total por Classificação")
     df_count = base["Classificação"].value_counts().reset_index()
     df_count.columns = ["Classificação", "Quantidade"]
@@ -663,7 +662,6 @@ def load_historico():
         ws_hist = sh.worksheet("HISTORICO")
         data = ws_hist.get_all_records()
         df_hist_local = pd.DataFrame(data)
-        # Renomeia espaços por underline (ex: 'Data de contato' -> 'Data_de_contato')
         df_hist_local.columns = [col.replace(" ", "_") for col in df_hist_local.columns]
         return df_hist_local
     except Exception as e:
