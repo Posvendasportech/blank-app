@@ -94,15 +94,14 @@ st.markdown("""
 # 🔑 2. FUNÇÕES DE CONEXÃO E CONVERSÃO
 # =========================================================
 def get_gsheet_client():
-    credentials = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
-        scopes=[
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-    )
-    return gspread.authorize(credentials)
-
+    credentials = Credentials.from_service_account_info(  # <--- Limpe a indentação desta linha e da próxima
+        st.secrets["gcp_service_account"],
+        scopes=[
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+    )
+    return gspread.authorize(credentials)
 def converte_dias(v):
     try:
         return int(round(float(str(v).replace(",", "."))))
