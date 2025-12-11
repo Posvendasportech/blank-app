@@ -95,8 +95,9 @@ st.markdown("""
 # 🔑 2. FUNÇÕES DE CONEXÃO E CONVERSÃO
 # =========================================================
 def get_gsheet_client():
-    credentials = Credentials.from_service_account_info(
+    credentials = Credentials.from_service_account_info( # <--- AQUI (Linha 98 no seu código)
         st.secrets["gcp_service_account"],
+# ... restante da função
         scopes=[
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive"
