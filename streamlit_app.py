@@ -216,6 +216,63 @@ def card_component(id_fix, row):
 
     return acao, motivo, resumo, proxima, vendedor
 
+# =========================================================
+# 🎨 CARD PARA AGENDAMENTOS ATIVOS
+# =========================================================
+def agendamento_card(id_fix, row):
+    """Card especial para clientes que já estavam agendados."""
+
+    with st.container():
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+
+        st.markdown(
+            f"""
+            <div class="card-header">
+                <b>{row['Nome']}</b><br>
+                📱 {row['Telefone']}<br>
+                📌 Direcionamento anterior: <b>{row.get('Follow up','—')}</b><br>
+                🗓 Agendado para: {row.get('Data de contato','—')}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        vendedor = st.selectbox(
+            "Responsável",
+            ["João", "Maria", "Patrick", "Outro"],
+            key=f"vend_ag_{id_fix}"
+        )
+
+        resumo = st.text_area(
+            "Resumo da conversa",
+            key=f"res_ag_{id_fix}",
+            height=80
+        )
+
+        novo_motivo = st.text_input(
+            "Novo direcionamento / observação",
+            key=f"mot_ag_{id_fix}"
+        )
+
+        proxima = st.date_input(
+            "Próxima data de contato",
+            key=f"prox_ag_{id_fix}"
+        )
+
+        colA, colB = st.columns(2)
+        acao = None
+
+        with colA:
+            if st.button("📩 Registrar conversa", key=f"ok_ag_{id_fix}"):
+                acao = "concluir"
+
+        with colB:
+            if st.button("⏭ Pular", key=f"skip_ag_{id_fix}"):
+                acao = "pular"
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    return acao, novo_motivo, resumo, proxima, vendedor
 
 
 # =========================================================
@@ -440,109 +497,71 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas):
 # - O que aparece em cada aba
 
 # =========================================================
-# 📅 ABA 1 — TAREFAS DO DIA (FOCO EM META x SELEÇÃO)
+# 📅 ABA 1 — TAREFAS DO DIA (COM CHECK-IN + AGENDADOS EM CARD)
 # =========================================================
 def render_aba1(aba, df_dia, metas):
-    """
-    Aba 1: Tarefas do Dia
 
-    - Mostra metas configuradas (vindas da sidebar)
-    - Mostra quantos contatos foram selecionados em df_dia
-    - Permite alternar entre:
-        • Clientes para Check-in (cards)
-        • Agendamentos Ativos (tabela)
-    """
     with aba:
         st.header("🎯 Tarefas do dia")
 
-      # =========================================================
-# 🟦 RESUMO GERAL DO DIA (TOPO DA ABA 1)
-# =========================================================
-        # --- Quantidade selecionada para Check-in (df_dia) ---
-        qtd_checkin = len(df_dia)
-
-        # --- Quantidade de agendamentos ativos ---
+        # =========================================================
+        # 🔍 Resumo geral: Check-in + Agendamentos ativos
+        # =========================================================
         df_ag = load_df_agendamentos()
-        qtd_agendamentos = len(df_ag) if not df_ag.empty else 0
 
-        # --- Total do dia (Check-in + Agendamentos) ---
+        # Filtrar somente agendamentos do dia da coluna "Data de contato"
+        hoje = datetime.now().strftime("%Y/%m/%d")
+        df_ag_hoje = df_ag[df_ag["Data de contato"].astype(str).str.contains(hoje)] if not df_ag.empty else pd.DataFrame()
+
+        qtd_checkin = len(df_dia)
+        qtd_agendamentos = len(df_ag_hoje)
         total_dia = qtd_checkin + qtd_agendamentos
 
-        st.markdown("##")
-
-        # =========================================================
-        # 🟩 BARRA DE PROGRESSO DO DIA
-        # =========================================================
-
-        # Quantos contatos já foram concluídos hoje
         concluidos_hoje = len(st.session_state["concluidos"])
+        progresso = (concluidos_hoje / total_dia) if total_dia > 0 else 0
 
-        # Evita divisão por zero
-        if total_dia > 0:
-            progresso = concluidos_hoje / total_dia
-        else:
-            progresso = 0
-
-        # Layout da barra
-        st.markdown("###")
-
-        # Barra de progresso visual
+        # ---------------------------------------------------------
+        # Barra de progresso
+        # ---------------------------------------------------------
+        st.markdown("### Progresso do Dia")
         st.progress(progresso)
+        st.write(f"**{concluidos_hoje} de {total_dia} contatos concluídos** ({progresso*100:.1f}%)")
 
-        # Texto explicativo abaixo da barra
-        st.write(
-            f"**{concluidos_hoje} de {total_dia} contatos concluídos** "
-            f"({progresso * 100:.1f}% do dia)"
-        )
-
-        # Mensagens motivacionais automáticas
         if progresso == 0:
             st.info("🚀 Começando agora! Vamos iniciar os atendimentos.")
         elif progresso < 0.25:
             st.info("🔥 Bom começo! Continue nesse ritmo.")
         elif progresso < 0.50:
-            st.success("💪 Você já completou quase metade do dia!")
+            st.success("💪 Rumo à metade!")
         elif progresso < 0.75:
-            st.success("🟩 Ótimo! Mais da metade dos contatos concluídos!")
+            st.success("🟩 Ótimo! Mais da metade concluída!")
         elif progresso < 1:
-            st.success("🏁 Quase lá! Falta pouco para finalizar o dia.")
+            st.success("🏁 Quase lá!")
         else:
             st.balloons()
-            st.success("🎉 Dia concluído com sucesso! Parabéns!")
+            st.success("🎉 Dia concluído!")
 
-        
         colA, colB, colC = st.columns(3)
 
-        # ---- TOTAL DO DIA ----
         with colA:
-            st.metric(
-                label="📅 Contatos Totais do Dia",
-                value=total_dia,
-                delta=f"{qtd_checkin} Check-in + {qtd_agendamentos} Agend."
-            )
+            st.metric("📅 Total do Dia", total_dia, f"{qtd_checkin} Check-in + {qtd_agendamentos} Agend.")
 
-        # ---- CHECK-IN (META + REAL) ----
         with colB:
             st.metric(
-                label="🟦 Check-in Programados",
-                value=qtd_checkin,
-                delta=f"Meta total: {metas['meta_novos'] + metas['meta_prom'] + metas['meta_leais'] + metas['meta_risco']}"
+                "🟦 Check-in Programados",
+                qtd_checkin,
+                f"Meta: {metas['meta_novos'] + metas['meta_prom'] + metas['meta_leais'] + metas['meta_risco']}"
             )
 
-        # ---- AGENDAMENTOS ----
         with colC:
-            st.metric(
-                label="🟧 Agendamentos Ativos",
-                value=qtd_agendamentos
-            )
+            st.metric("🟧 Agendamentos de Hoje", qtd_agendamentos)
 
         st.markdown("---")
 
-
         # =========================================================
-        # 🟣 BLOCO 2 — ESCOLHA DO MODO DE VISUALIZAÇÃO
+        # 🟣 SELETOR DE MODO
         # =========================================================
-        modo_filtro = st.selectbox(
+        modo = st.selectbox(
             "Modo de atendimento",
             ["Clientes para Check-in (Base de Leitura)", "Agendamentos Ativos"],
             key="modo_filtro_aba1"
@@ -551,13 +570,12 @@ def render_aba1(aba, df_dia, metas):
         st.markdown("---")
 
         # =========================================================
-        # 🟦 BLOCO 3 — MODO CHECK-IN (CARDS)
+        # 🟦 MODO CHECK-IN — EXIBE CARDS
         # =========================================================
-        if modo_filtro == "Clientes para Check-in (Base de Leitura)":
+        if modo == "Clientes para Check-in (Base de Leitura)":
 
-            # Filtro adicional só para visualização na lista do dia
             class_filter = st.radio(
-                "Filtrar por classificação na lista de hoje:",
+                "Filtrar por classificação:",
                 ["Todos", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"],
                 horizontal=True,
             )
@@ -567,106 +585,87 @@ def render_aba1(aba, df_dia, metas):
                 df_checkin = df_checkin[df_checkin["Classificação"] == class_filter]
 
             if df_checkin.empty:
-                st.success("🎉 Nenhum cliente pendente dentro dos filtros atuais.")
+                st.success("🎉 Sem clientes pendentes dentro dos filtros.")
                 return
 
             st.subheader("📌 Atendimentos do dia (Check-in)")
 
-            # Download CSV da lista do dia
+            # CSV
             csv = df_checkin.drop(columns=["Telefone_limpo"], errors="ignore").to_csv(index=False).encode("utf-8-sig")
-            st.download_button(
-                "📥 Baixar lista do dia (CSV)",
-                data=csv,
-                file_name="tarefas_checkin_dia.csv",
-                mime="text/csv",
-            )
+            st.download_button("📥 Baixar lista (CSV)", csv, "checkin_dia.csv")
 
             st.markdown("---")
 
-            # ------- Renderização dos cards, 2 por linha -------
+            # Cards (2 por linha)
             for i in range(0, len(df_checkin), 2):
-
                 col1, col2 = st.columns(2)
 
                 # CARD 1
                 row1 = df_checkin.iloc[i]
                 with col1:
-                    acao, mot, res, prox, vend = card_component(row1["ID"], row1)
+                    ac, mot, res, prox, vend = card_component(row1["ID"], row1)
 
-                    if acao == "concluir":
+                    if ac == "concluir":
                         if mot.strip():
-                            registrar_agendamento(
-                                row1,
-                                res,
-                                mot,
-                                prox.strftime("%d/%m/%Y") if prox else "",
-                                vend,
-                            )
-                            remover_card(row1["Telefone"], concluido=True)
+                            registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
+                            remover_card(row1["Telefone"], True)
                             st.rerun()
                         else:
-                            st.warning("⚠️ Preencha o motivo do contato antes de concluir.", icon="🚨")
-                    elif acao == "pular":
-                        remover_card(row1["Telefone"], concluido=False)
+                            st.warning("⚠️ Descreva o motivo do contato.")
+                    elif ac == "pular":
+                        remover_card(row1["Telefone"], False)
                         st.rerun()
 
-                # CARD 2 (se existir)
+                # CARD 2
                 if i + 1 < len(df_checkin):
                     row2 = df_checkin.iloc[i + 1]
                     with col2:
-                        acao2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2)
+                        ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2)
 
-                        if acao2 == "concluir":
+                        if ac2 == "concluir":
                             if mot2.strip():
-                                registrar_agendamento(
-                                    row2,
-                                    res2,
-                                    mot2,
-                                    prox2.strftime("%d/%m/%Y") if prox2 else "",
-                                    vend2,
-                                )
-                                remover_card(row2["Telefone"], concluido=True)
+                                registrar_agendamento(row2, res2, mot2, prox2.strftime("%d/%m/%Y") if prox2 else "", vend2)
+                                remover_card(row2["Telefone"], True)
                                 st.rerun()
                             else:
-                                st.warning("⚠️ Preencha o motivo do contato antes de concluir.", icon="🚨")
-                        elif acao2 == "pular":
-                            remover_card(row2["Telefone"], concluido=False)
+                                st.warning("⚠️ Descreva o motivo do contato.")
+                        elif ac2 == "pular":
+                            remover_card(row2["Telefone"], False)
                             st.rerun()
 
+
         # =========================================================
-        # 🟧 BLOCO 4 — MODO AGENDAMENTOS ATIVOS (TABELA)
+        # 🟧 MODO AGENDAMENTOS ATIVOS — EM CARD
         # =========================================================
         else:
-            st.subheader("📂 Clientes com próximos contatos agendados")
 
-            df_ag = load_df_agendamentos()
+            st.subheader("📂 Agendamentos Ativos (Hoje)")
 
-            if df_ag.empty:
-                st.success("🎉 Nenhum agendamento pendente!")
+            if df_ag_hoje.empty:
+                st.info("📭 Nenhum agendamento agendado para hoje.")
                 return
 
-            cols_show = [
-                "Data de chamada",
-                "Nome",
-                "Telefone",
-                "Follow up",
-                "Data de contato",
-                "Relato da conversa",
-            ]
+            # Renderizar cada agendamento como card
+            for i in range(len(df_ag_hoje)):
+                row = df_ag_hoje.iloc[i]
+                id_card = str(row["Telefone"])
 
-            existing_cols = [c for c in cols_show if c in df_ag.columns]
+                ac, motivo, resumo, proxima, vendedor = agendamento_card(id_card, row)
 
-            if not existing_cols:
-                st.error("❌ A planilha AGENDAMENTOS_ATIVOS não contém as colunas esperadas.")
-                return
+                if ac == "concluir":
+                    registrar_agendamento(
+                        row=row,
+                        comentario=resumo,
+                        motivo=motivo,
+                        proxima_data=proxima.strftime("%d/%m/%Y") if proxima else "",
+                        vendedor=vendedor
+                    )
+                    remover_card(row["Telefone"], True)
+                    st.rerun()
 
-            if "Data de chamada" in existing_cols:
-                df_ag["Data de chamada"] = pd.to_datetime(df_ag["Data de chamada"], errors="ignore")
-                df_ag = df_ag.sort_values("Data de chamada")
-
-            st.dataframe(df_ag[existing_cols], use_container_width=True)
-            st.caption("🔄 Lista carregada diretamente da planilha AGENDAMENTOS_ATIVOS.")
-
+                elif ac == "pular":
+                    remover_card(row["Telefone"], False)
+                    st.rerun()
 
 # ----------- ABA 2 -----------
 def render_aba2(aba, base, total):
