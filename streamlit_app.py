@@ -733,7 +733,7 @@ def render_sidebar():
             
             st.markdown("**Cache Status:**")
             col_d1, col_d2 = st.columns(2)
-            col_d1.write(f"TTL Cache: {Config.CACHE_TTL}s")
+            col_d1.write(f"TTL Base: {Config.CACHE_BASE_TTL}s / Volátil: {Config.CACHE_VOLATILE_TTL}s")
             col_d2.write(f"Sheets ID: {Config.SHEET_ID[:20]}...")
             
             if st.button("🗑️ Limpar TODOS os caches"):
