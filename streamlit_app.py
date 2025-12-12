@@ -696,7 +696,7 @@ def render_sidebar():
         max_val = st.number_input("Valor máximo (R$)", value=1000.0, min_value=0.0, step=10.0)
         telefone = st.text_input("Buscar por telefone (qualquer parte)").strip()
 
-                st.markdown("<hr>", unsafe_allow_html=True)
+        st.markdown("<hr>", unsafe_allow_html=True)
         
         # ===========================
         # BLOCO ATUALIZAÇÃO MANUAL
