@@ -1238,15 +1238,23 @@ def main():
     st.title("📅 CRM Sportech – Tarefas do Dia")
 
     init_session_state()
+    
+    # ✅ NOVO: Obter usuário ANTES de tudo
+    usuario_atual = obter_usuario_atual()
+    
+    if not usuario_atual or usuario_atual.strip() == "":
+        st.warning("⚠️ **Por favor, identifique-se na barra lateral antes de continuar**")
+        st.info("👈 Digite seu nome no campo 'Seu nome' na sidebar")
+        st.stop()
 
-    df = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
-
-    telefones_ag = load_agendamentos_ativos()
+    # ✅ Carregar dados (nomes corretos das variáveis)
+    base = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)  # ✅ Mudou de 'df' para 'base'
+    telefones_agendados = load_agendamentos_ativos()       # ✅ Mudou de 'telefones_ag' para 'telefones_agendados'
 
     filtros, metas = render_sidebar()
 
-    df_dia = build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atual)  # ✅ Passar usuário
-
+    # ✅ Agora as variáveis correspondem aos parâmetros esperados
+    df_dia = build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atual)
 
     aba1, aba2, aba3 = st.tabs([
         "📅 Tarefas do dia",
@@ -1255,7 +1263,7 @@ def main():
     ])
 
     render_aba1(aba1, df_dia, metas)
-    render_aba2(aba2, df, len(df_dia))
+    render_aba2(aba2, base, len(df_dia))  # ✅ Mudou de 'df' para 'base'
     render_aba3(aba3)
 
     # ✅ CONTROLE DE RERUN OTIMIZADO
