@@ -784,7 +784,7 @@ def render_sidebar():
 # =========================================================
 
 def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atual):
-        # ✅ NOVO: Carregar locks ativos para filtrar clientes em atendimento
+    # ✅ PRIMEIRO: Carregar locks
     df_locks = load_em_atendimento()
     telefones_bloqueados = set()
     
@@ -792,15 +792,15 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atua
         # Bloquear clientes que estão sendo atendidos por OUTROS usuários
         df_locks_outros = df_locks[df_locks["Usuario"] != usuario_atual]
         telefones_bloqueados = set(df_locks_outros["Telefone"].astype(str))
-        
         logger.info(f"🔒 {len(telefones_bloqueados)} clientes bloqueados (em atendimento por outros)")
-
-        base_ck = base[
+    
+    # ✅ SEGUNDO: Definir base_ck (ESTA LINHA É ESSENCIAL)
+    base_ck = base[
         (~base["Telefone"].isin(telefones_agendados)) &
-        (~base["Telefone"].isin(telefones_bloqueados))  # ✅ NOVO: Filtrar bloqueados
+        (~base["Telefone"].isin(telefones_bloqueados))
     ].copy()
 
-
+    # ✅ TERCEIRO: Resto do código (filtrar por classificação)
     novos = base_ck[
         (base_ck["Classificação"] == "Novo") &
         (base_ck["Dias_num"].fillna(0) >= Config.DIAS_MINIMO_NOVOS)
@@ -837,8 +837,7 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atua
         clean = limpar_telefone(filtros["telefone"])
         df_dia = df_dia[df_dia["Telefone_limpo"].str.contains(clean, na=False)]
 
-    logger.info(f"Tarefas do dia geradas: {len(df_dia)} clientes")
-        # ✅ NOVO: Mostrar indicador visual de quem está atendendo
+    # ✅ NOVO: Indicador visual na sidebar
     if not df_locks.empty and len(df_locks) > 0:
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 👥 Em atendimento agora:")
@@ -848,7 +847,9 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atua
             minutos_ago = int((datetime.now() - tempo_lock).total_seconds() / 60)
             st.sidebar.write(f"{emoji} **{lock['Usuario']}**: {lock['Cliente']} ({minutos_ago}min atrás)")
 
+    logger.info(f"Tarefas do dia geradas: {len(df_dia)} clientes")
     return df_dia
+
 
 # =========================================================
 # (9) 🖥️ UI — ABAS PRINCIPAIS
