@@ -608,7 +608,12 @@ def render_aba1(aba, df_dia, metas):
         total_dia = qtd_checkin + qtd_agendamentos
 
         concluidos_hoje = len(st.session_state["concluidos"])
-        progresso = (concluidos_hoje / total_dia) if total_dia > 0 else 0
+
+        # ✅ CORREÇÃO: Garantir progresso entre 0.0 e 1.0
+        if total_dia > 0:
+            progresso = min(concluidos_hoje / total_dia, 1.0)
+        else:
+            progresso = 0.0
 
         st.markdown("### Progresso do Dia")
         st.progress(progresso)
