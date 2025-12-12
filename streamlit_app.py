@@ -132,7 +132,7 @@ def load_agendamentos_ativos():
     except:
         return set()
 
-@st.cache_data(ttl=5)
+@st.cache_data(ttl=60)
 def load_df_agendamentos():
     try:
         client = get_gsheet_client()
@@ -219,7 +219,7 @@ def card_component(id_fix, row):
 def agendamento_card(id_fix, row):
     """Card completo para agendamentos ativos, com dados da base principal."""
 
-    nome = row.get("Nome", "—")
+    nome = row.get("Cliente") or row.get("Nome", "—")
     telefone = row.get("Telefone", "—")
     ultima_compra = row.get("Data", "—")
     valor_gasto = safe_valor(row.get("Valor", "—"))
@@ -532,8 +532,8 @@ def render_aba1(aba, df_dia, metas):
         df_ag = load_df_agendamentos()
 
         # Filtrar somente agendamentos do dia da coluna "Data de contato"
-        hoje = datetime.now().strftime("%Y/%m/%d")
-        df_ag_hoje = df_ag[df_ag["Data de chamada"].astype(str).str.contains(hoje)] if not df_ag.empty else pd.DataFrame()
+        hoje = datetime.now().strftime("%d/%m/%Y")
+        df_ag_hoje = df_ag[df_ag["Data de chamada"].astype(str).str.startswith(hoje)] if not df_ag.empty else pd.DataFrame()
 
         qtd_checkin = len(df_dia)
         qtd_agendamentos = len(df_ag_hoje)
