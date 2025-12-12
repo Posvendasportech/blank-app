@@ -868,7 +868,7 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atua
 # =========================================================
 def render_aba1(aba, df_dia, metas):
     with aba:
-                # ✅ NOVO: Obter e validar usuário atual
+        # ✅ NOVO: Obter e validar usuário atual
         usuario_atual = obter_usuario_atual()
         
         if not usuario_atual or usuario_atual.strip() == "":
@@ -881,52 +881,26 @@ def render_aba1(aba, df_dia, metas):
         # =========================================================
         # 🔍 Carregar agendamentos e fazer JOIN com base principal
         # =========================================================
-         # ✅ NOVO: Usar função otimizada que já filtra por hoje
+        # ✅ NOVO: Usar função otimizada que já filtra por hoje
         df_ag_hoje = load_agendamentos_hoje()
         
         # Carregar base completa para join
         df_base_completa = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
         
-        df_ag_hoje = pd.DataFrame()
-        
-        if not df_ag.empty:
-            # Tentar múltiplas colunas de data
-            colunas_data = ["Data de chamada", "Data de contato", "Próxima data", "Data"]
+        # ✅ FAZER JOIN COM BASE PRINCIPAL PARA PEGAR DADOS COMPLETOS
+        if not df_ag_hoje.empty and not df_base_completa.empty:
+            # Limpar telefones para join
+            df_ag_hoje["Telefone_limpo"] = df_ag_hoje["Telefone"].apply(limpar_telefone)
             
-            for col in colunas_data:
-                if col in df_ag.columns:
-                    # Tentar diferentes formatos de data
-                    mask = (
-                        df_ag[col].astype(str).str.startswith(hoje_br) |
-                        df_ag[col].astype(str).str.startswith(hoje_iso) |
-                        df_ag[col].astype(str).str.startswith(hoje_iso_dash) |
-                        df_ag[col].astype(str).str.contains(hoje_br) |
-                        df_ag[col].astype(str).str.contains(hoje_iso)
-                    )
-                    
-                    df_ag_hoje = df_ag[mask].copy()
-                    
-                    if not df_ag_hoje.empty:
-                        logger.info(f"✅ {len(df_ag_hoje)} agendamentos encontrados na coluna '{col}'")
-                        break
+            # Fazer merge com base principal
+            df_ag_hoje = df_ag_hoje.merge(
+                df_base_completa[["Telefone_limpo", "Dias_num", "Compras", "Data"]],
+                on="Telefone_limpo",
+                how="left",
+                suffixes=("", "_base")
+            )
             
-            # ✅ FAZER JOIN COM BASE PRINCIPAL PARA PEGAR DADOS COMPLETOS
-            if not df_ag_hoje.empty and not df_base_completa.empty:
-                # Limpar telefones para join
-                df_ag_hoje["Telefone_limpo"] = df_ag_hoje["Telefone"].apply(limpar_telefone)
-                
-                # Fazer merge com base principal
-                df_ag_hoje = df_ag_hoje.merge(
-                    df_base_completa[["Telefone_limpo", "Dias_num", "Compras", "Data"]],
-                    on="Telefone_limpo",
-                    how="left",
-                    suffixes=("", "_base")
-                )
-                
-                logger.info(f"✅ Join realizado: {len(df_ag_hoje)} agendamentos com dados da base")
-        
-        if df_ag_hoje.empty and not df_ag.empty:
-            logger.warning(f"⚠️ Nenhum agendamento para hoje ({hoje_br}). Total na base: {len(df_ag)}")
+            logger.info(f"✅ Join realizado: {len(df_ag_hoje)} agendamentos com dados da base")
 
         qtd_checkin = len(df_dia)
         qtd_agendamentos = len(df_ag_hoje)
@@ -1041,14 +1015,14 @@ def render_aba1(aba, df_dia, metas):
 
             st.markdown("---")
 
-                     # Cards (2 por linha)
+            # Cards (2 por linha)
             for i in range(0, len(df_checkin), 2):
                 col1, col2 = st.columns(2)
 
                 # CARD 1
                 row1 = df_checkin.iloc[i]
                 with col1:
-                    ac, mot, res, prox, vend = card_component(row1["ID"], row1, usuario_atual)  # ✅ Corrigido: row1 + usuario_atual
+                    ac, mot, res, prox, vend = card_component(row1["ID"], row1, usuario_atual)
 
                     if ac == "concluir":
                         registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
@@ -1062,7 +1036,7 @@ def render_aba1(aba, df_dia, metas):
                 if i + 1 < len(df_checkin):
                     row2 = df_checkin.iloc[i + 1]
                     with col2:
-                        ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2, usuario_atual)  # ✅ Adicionado usuario_atual
+                        ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2, usuario_atual)
 
                         if ac2 == "concluir":
                             registrar_agendamento(row2, res2, mot2, prox2.strftime("%d/%m/%Y") if prox2 else "", vend2)
@@ -1080,32 +1054,20 @@ def render_aba1(aba, df_dia, metas):
             st.subheader("📂 Agendamentos Ativos (Hoje)")
 
             # Debug expandido
-            with st.expander("🔍 Debug: Ver todos os agendamentos", expanded=False):
-                st.write(f"**Total de agendamentos na base:** {len(df_ag)}")
+            with st.expander("🔍 Debug: Ver agendamentos de hoje", expanded=False):
                 st.write(f"**Agendamentos para hoje:** {len(df_ag_hoje)}")
-                st.write(f"**Data de hoje (BR):** {hoje_br}")
-                st.write(f"**Data de hoje (ISO):** {hoje_iso}")
                 
-                if not df_ag.empty:
-                    st.write(f"**Colunas disponíveis:** {', '.join(df_ag.columns.tolist())}")
+                if not df_ag_hoje.empty:
+                    st.write(f"**Colunas disponíveis:** {', '.join(df_ag_hoje.columns.tolist())}")
                     st.write("**Primeiros 10 registros:**")
-                    st.dataframe(df_ag.head(10))
+                    st.dataframe(df_ag_hoje.head(10))
 
             if df_ag_hoje.empty:
                 st.warning("📭 Nenhum agendamento encontrado para hoje.")
-                st.write(f"💡 **Buscamos por:** {hoje_br}, {hoje_iso}, {hoje_iso_dash}")
-                
-                if not df_ag.empty:
-                    st.write("---")
-                    st.write("📋 **Últimos 5 agendamentos criados:**")
-                    st.dataframe(df_ag.tail(5))
-                    
-                    st.write("---")
-                    st.info("💡 **Possíveis soluções:**")
-                    st.write("1. Verifique se a 'Data de chamada' está no formato correto")
-                    st.write("2. Os agendamentos podem estar programados para outra data")
-                    st.write("3. Crie novos agendamentos na aba 'Check-in'")
-                
+                st.info("💡 **Possíveis razões:**")
+                st.write("1. Não há agendamentos programados para hoje")
+                st.write("2. Verifique se a 'Próxima data' nos agendamentos está correta")
+                st.write("3. Crie novos agendamentos na aba 'Check-in'")
                 return
 
             # ✅ NORMALIZAR para formato igual ao check-in
@@ -1131,10 +1093,10 @@ def render_aba1(aba, df_dia, metas):
             # Criar ID
             df_ag_normalizado["ID"] = df_ag_normalizado["Telefone"].astype(str).apply(limpar_telefone)
             
-                       # Reset índices
+            # Reset índices
             df_ag_normalizado = df_ag_normalizado.reset_index(drop=True)
             
-            # ✅ AJUSTE 1: Filtrar concluídos/pulados usando telefone limpo
+            # ✅ Filtrar concluídos/pulados usando telefone limpo
             ocultos = st.session_state["concluidos"].union(st.session_state["pulados"])
 
             # Filtrar por Telefone normal E por Telefone_limpo
@@ -1168,8 +1130,7 @@ def render_aba1(aba, df_dia, metas):
                     # Badge
                     st.markdown("🔔 **AGENDAMENTO ATIVO**")
                     
-                    ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2)
-
+                    ac, mot, res, prox, vend = card_component(row1["ID"], row1, usuario_atual)
 
                     if ac == "concluir":
                         registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
@@ -1186,7 +1147,7 @@ def render_aba1(aba, df_dia, metas):
                         # Badge
                         st.markdown("🔔 **AGENDAMENTO ATIVO**")
                         
-                        ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2)
+                        ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2, usuario_atual)
 
                         if ac2 == "concluir":
                             registrar_agendamento(row2, res2, mot2, prox2.strftime("%d/%m/%Y") if prox2 else "", vend2)
