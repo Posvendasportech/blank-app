@@ -108,11 +108,41 @@ def safe_valor(v):
     try:
         if pd.isna(v):
             return "—"
-        v = str(v).replace("R$", "").replace(".", "").replace(",", ".").strip()
-        return f"R$ {float(v):.2f}"
+        
+        # Converter para string e limpar
+        v_str = str(v).replace("R$", "").strip()
+        
+        # ✅ CORREÇÃO: Detectar formato brasileiro vs americano
+        # Formato BR: 1.234,56 → 1234.56
+        # Formato US: 1,234.56 → 1234.56
+        
+        if "," in v_str and "." in v_str:
+            # Tem ambos: determinar qual é decimal
+            if v_str.rindex(",") > v_str.rindex("."):
+                # Vírgula depois do ponto = formato BR
+                v_str = v_str.replace(".", "").replace(",", ".")
+            else:
+                # Ponto depois da vírgula = formato US
+                v_str = v_str.replace(",", "")
+        elif "," in v_str:
+            # Só vírgula: assumir que é decimal BR
+            v_str = v_str.replace(",", ".")
+        elif "." in v_str:
+            # Só ponto: verificar posição
+            partes = v_str.split(".")
+            if len(partes[-1]) == 2:
+                # Tem 2 dígitos após o ponto = decimal
+                pass  # Já está correto
+            else:
+                # Mais de 2 dígitos = separador de milhar
+                v_str = v_str.replace(".", "")
+        
+        return f"R$ {float(v_str):.2f}"
+        
     except (ValueError, TypeError, AttributeError) as e:
         logger.warning(f"Erro ao converter valor '{v}': {e}")
         return "—"
+
 
 def valor_num(v):
     try:
@@ -239,17 +269,31 @@ def card_component(id_fix, row):
     with st.container():
         st.markdown('<div class="card">', unsafe_allow_html=True)
 
-        dias_txt = f"{row['Dias_num']} dias desde compra" if pd.notna(row["Dias_num"]) else "Sem informação"
-
-        st.markdown(f"""
+        dias_txt = f"{row['Dias_num']} dias desde compra" if pd.notna(row.get("Dias_num")) else "Sem informação"
+        
+        # ✅ AJUSTE 3: Pegar motivo/follow-up do agendamento
+        motivo_anterior = row.get("Follow up", row.get("Motivo", row.get("Relato da conversa", "")))
+        
+        # Montar HTML do cabeçalho
+        header_html = f"""
             <div class="card-header">
-                <b>{row['Cliente']}</b><br>
-                📱 {row['Telefone']}<br>
-                🏷 {row['Classificação']}<br>
-                💰 {safe_valor(row['Valor'])}<br>
+                <b>{row.get('Cliente', '—')}</b><br>
+                📱 {row.get('Telefone', '—')}<br>
+                🏷 {row.get('Classificação', '—')}<br>
+                💰 {safe_valor(row.get('Valor', '—'))}<br>
                 ⏳ {dias_txt}
-            </div>
-        """, unsafe_allow_html=True)
+        """
+        
+        # ✅ Adicionar motivo anterior se existir
+        if motivo_anterior and str(motivo_anterior).strip() and str(motivo_anterior) != "—":
+            header_html += f"""<br><br>
+                📋 <b>Direcionamento anterior:</b><br>
+                <i style="color:#a0d8ff;">{motivo_anterior}</i>
+            """
+        
+        header_html += "</div>"
+        
+        st.markdown(header_html, unsafe_allow_html=True)
 
         vendedor = st.selectbox("Responsável", Config.VENDEDORES, key=f"vend_{id_fix}")
         motivo = st.text_input("Motivo do contato", key=f"mot_{id_fix}")
@@ -279,6 +323,7 @@ def card_component(id_fix, row):
         st.markdown("</div>", unsafe_allow_html=True)
 
     return acao, motivo, resumo, proxima, vendedor
+
 
 def agendamento_card(id_fix, row):
     """Card completo para agendamentos ativos"""
@@ -893,9 +938,20 @@ def render_aba1(aba, df_dia, metas):
             # Reset índices
             df_ag_normalizado = df_ag_normalizado.reset_index(drop=True)
             
-            # Filtrar já concluídos/pulados
-            ocultos = st.session_state["concluidos"].union(st.session_state["pulados"])
-            df_ag_normalizado = df_ag_normalizado[~df_ag_normalizado["Telefone"].isin(ocultos)]
+           # ✅ AJUSTE 1: Filtrar concluídos/pulados usando telefone limpo
+ocultos = st.session_state["concluidos"].union(st.session_state["pulados"])
+
+# Filtrar por Telefone normal E por Telefone_limpo
+if "Telefone_limpo" in df_ag_normalizado.columns:
+    df_ag_normalizado = df_ag_normalizado[
+        (~df_ag_normalizado["Telefone"].isin(ocultos)) &
+        (~df_ag_normalizado["Telefone_limpo"].isin(ocultos))
+    ]
+else:
+    df_ag_normalizado = df_ag_normalizado[~df_ag_normalizado["Telefone"].isin(ocultos)]
+
+logger.info(f"Agendamentos após filtrar ocultos: {len(df_ag_normalizado)}")
+
 
             if df_ag_normalizado.empty:
                 st.success("🎉 Todos os agendamentos de hoje foram concluídos!")
