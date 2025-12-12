@@ -310,16 +310,26 @@ def load_sheet(sheet_id, sheet_name):
         st.stop()
 
 @st.cache_data(ttl=Config.CACHE_BASE_TTL)
+@st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)  # ✅ Mudou para 10 segundos (antes era 300)
 def load_agendamentos_ativos():
+    """Carrega TODOS os telefones que já têm agendamento (independente da data)"""
     try:
         client = get_gsheet_client()
         ws = client.open(Config.SHEET_AGENDAMENTOS).worksheet("AGENDAMENTOS_ATIVOS")
-        telefones = set(ws.col_values(5)[1:])
-        logger.info(f"✅ Agendamentos ativos carregados: {len(telefones)}")
+        
+        # Pegar TODOS os telefones da coluna 5 (Telefone)
+        telefones = set(ws.col_values(5)[1:])  # [1:] pula o cabeçalho
+        
+        # Limpar telefones vazios
+        telefones = {t for t in telefones if t and str(t).strip()}
+        
+        logger.info(f"✅ Total de telefones com agendamento ativo: {len(telefones)}")
         return telefones
+        
     except Exception as e:
-        logger.error(f"Erro ao carregar agendamentos ativos: {e}", exc_info=True)
+        logger.error(f"❌ Erro ao carregar agendamentos ativos: {e}", exc_info=True)
         return set()
+
 
 @st.cache_data(ttl=Config.CACHE_BASE_TTL)
 def load_df_agendamentos():
@@ -809,6 +819,27 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atua
         (~base["Telefone"].isin(telefones_bloqueados))
     ].copy()
     logger.info(f"🔍 DEBUG - base_ck criado com {len(base_ck)} registros")
+    # ✅ SEGUNDO: Definir base_ck
+    logger.info(f"🔍 DEBUG - Criando base_ck...")
+    logger.info(f"🔍 Base original: {len(base)} clientes")
+    logger.info(f"🔍 Telefones agendados: {len(telefones_agendados)}")
+    logger.info(f"🔍 Telefones bloqueados (em atendimento): {len(telefones_bloqueados)}")
+    
+       # ✅ Normalizar telefones para comparação correta
+    # Converter telefones_agendados para formato limpo
+    telefones_agendados_limpo = {limpar_telefone(t) for t in telefones_agendados}
+    
+    # Filtrar usando telefone limpo E telefone normal
+    base_ck = base[
+        (~base["Telefone"].isin(telefones_agendados)) &
+        (~base["Telefone_limpo"].isin(telefones_agendados_limpo)) &
+        (~base["Telefone"].isin(telefones_bloqueados))
+    ].copy()
+    
+    logger.info(f"✅ base_ck após filtrar: {len(base_ck)} clientes disponíveis para checkin")
+
+    
+    logger.info(f"✅ base_ck após filtrar: {len(base_ck)} clientes disponíveis para checkin")
 
     # ✅ TERCEIRO: Filtrar por classificação
     novos = base_ck[
@@ -1223,7 +1254,13 @@ def main():
 
     # ✅ Carregar dados (nomes corretos das variáveis)
     base = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)  # ✅ Mudou de 'df' para 'base'
-    telefones_agendados = load_agendamentos_ativos()       # ✅ Mudou de 'telefones_ag' para 'telefones_agendados'
+        telefones_agendados = load_agendamentos_ativos()
+    
+    # ✅ NOVO: Garantir que todos telefones sejam strings para comparação correta
+    telefones_agendados = {str(t).strip() for t in telefones_agendados}
+    
+    logger.info(f"✅ Telefones com agendamento ativo: {len(telefones_agendados)}")
+       # ✅ Mudou de 'telefones_ag' para 'telefones_agendados'
 
     filtros, metas = render_sidebar()
 
