@@ -593,39 +593,63 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas):
 # =========================================================
 # (9) 🖥️ UI — ABAS PRINCIPAIS
 # =========================================================
-# =========================================================
-# Aba 1 - Tarefas do dia
-# =========================================================
-
 def render_aba1(aba, df_dia, metas):
     with aba:
         st.header("🎯 Tarefas do dia")
 
         # =========================================================
-        # 🔍 Resumo geral: Check-in + Agendamentos ativos
+        # 🔍 Carregar agendamentos e fazer JOIN com base principal
         # =========================================================
         df_ag = load_df_agendamentos()
+        
+        # Carregar base principal para fazer join
+        df_base_completa = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
 
-        # Verificar qual coluna tem a data
-        hoje = datetime.now().strftime("%d/%m/%Y")
+        # ✅ CORREÇÃO: Tentar múltiplos formatos de data
+        hoje_br = datetime.now().strftime("%d/%m/%Y")  # 12/12/2025
+        hoje_iso = datetime.now().strftime("%Y/%m/%d")  # 2025/12/12
+        hoje_iso_dash = datetime.now().strftime("%Y-%m-%d")  # 2025-12-12
+        
+        df_ag_hoje = pd.DataFrame()
         
         if not df_ag.empty:
             # Tentar múltiplas colunas de data
             colunas_data = ["Data de chamada", "Data de contato", "Próxima data", "Data"]
-            df_ag_hoje = pd.DataFrame()
             
             for col in colunas_data:
                 if col in df_ag.columns:
-                    df_ag_hoje = df_ag[df_ag[col].astype(str).str.startswith(hoje)]
+                    # Tentar diferentes formatos de data
+                    mask = (
+                        df_ag[col].astype(str).str.startswith(hoje_br) |
+                        df_ag[col].astype(str).str.startswith(hoje_iso) |
+                        df_ag[col].astype(str).str.startswith(hoje_iso_dash) |
+                        df_ag[col].astype(str).str.contains(hoje_br) |
+                        df_ag[col].astype(str).str.contains(hoje_iso)
+                    )
+                    
+                    df_ag_hoje = df_ag[mask].copy()
+                    
                     if not df_ag_hoje.empty:
-                        logger.info(f"Agendamentos encontrados na coluna '{col}': {len(df_ag_hoje)}")
+                        logger.info(f"✅ {len(df_ag_hoje)} agendamentos encontrados na coluna '{col}'")
                         break
             
-            if df_ag_hoje.empty:
-                logger.warning(f"Nenhum agendamento encontrado para {hoje}")
-        else:
-            df_ag_hoje = pd.DataFrame()
-            logger.warning("DataFrame de agendamentos está vazio")
+            # ✅ FAZER JOIN COM BASE PRINCIPAL PARA PEGAR DADOS COMPLETOS
+            if not df_ag_hoje.empty and not df_base_completa.empty:
+                # Limpar telefones para join
+                df_ag_hoje["Telefone_limpo"] = df_ag_hoje["Telefone"].apply(limpar_telefone)
+                
+                # Fazer merge com base principal
+                df_ag_hoje = df_ag_hoje.merge(
+                    df_base_completa[["Telefone_limpo", "Dias_num", "Compras", "Data"]],
+                    on="Telefone_limpo",
+                    how="left",
+                    suffixes=("", "_base")
+                )
+                
+                logger.info(f"✅ Join realizado: {len(df_ag_hoje)} agendamentos com dados da base")
+        
+        if df_ag_hoje.empty and not df_ag.empty:
+            logger.warning(f"⚠️ Nenhum agendamento para hoje ({hoje_br}). Total na base: {len(df_ag)}")
 
         qtd_checkin = len(df_dia)
         qtd_agendamentos = len(df_ag_hoje)
@@ -638,7 +662,6 @@ def render_aba1(aba, df_dia, metas):
         if not df_ag_hoje.empty:
             telefones_do_dia.update(df_ag_hoje["Telefone"].astype(str).tolist())
         
-        # Contar apenas concluídos que fazem parte das tarefas do dia
         concluidos_hoje = len(st.session_state["concluidos"].intersection(telefones_do_dia))
 
         # Garantir progresso entre 0.0 e 1.0
@@ -780,73 +803,84 @@ def render_aba1(aba, df_dia, metas):
 
             st.subheader("📂 Agendamentos Ativos (Hoje)")
 
-            # Debug para ver quais agendamentos existem
-            if not df_ag.empty:
-                with st.expander("🔍 Debug: Ver todos os agendamentos", expanded=False):
-                    st.write(f"**Total de agendamentos na base:** {len(df_ag)}")
+            # Debug expandido
+            with st.expander("🔍 Debug: Ver todos os agendamentos", expanded=False):
+                st.write(f"**Total de agendamentos na base:** {len(df_ag)}")
+                st.write(f"**Agendamentos para hoje:** {len(df_ag_hoje)}")
+                st.write(f"**Data de hoje (BR):** {hoje_br}")
+                st.write(f"**Data de hoje (ISO):** {hoje_iso}")
+                
+                if not df_ag.empty:
                     st.write(f"**Colunas disponíveis:** {', '.join(df_ag.columns.tolist())}")
-                    st.write(f"**Buscando agendamentos para:** {hoje}")
+                    st.write("**Primeiros 10 registros:**")
                     st.dataframe(df_ag.head(10))
 
             if df_ag_hoje.empty:
-                st.info("📭 Nenhum agendamento encontrado para hoje.")
-                st.write(f"💡 **Data de hoje:** {hoje}")
-                st.write("💡 **Possíveis causas:**")
-                st.write("- Os agendamentos foram criados com data diferente")
-                st.write("- A coluna de data na planilha tem formato diferente")
-                st.write("- Configure novos agendamentos na aba 'Check-in'")
+                st.warning("📭 Nenhum agendamento encontrado para hoje.")
+                st.write(f"💡 **Buscamos por:** {hoje_br}, {hoje_iso}, {hoje_iso_dash}")
                 
                 if not df_ag.empty:
                     st.write("---")
                     st.write("📋 **Últimos 5 agendamentos criados:**")
                     st.dataframe(df_ag.tail(5))
+                    
+                    st.write("---")
+                    st.info("💡 **Possíveis soluções:**")
+                    st.write("1. Verifique se a 'Data de chamada' está no formato correto")
+                    st.write("2. Os agendamentos podem estar programados para outra data")
+                    st.write("3. Crie novos agendamentos na aba 'Check-in'")
                 
                 return
 
-            # ✅ NOVO: Normalizar DataFrame de agendamentos para o formato do check-in
-            df_ag_hoje_normalizado = df_ag_hoje.copy()
+            # ✅ NORMALIZAR para formato igual ao check-in
+            df_ag_normalizado = df_ag_hoje.copy()
             
-            # Mapear colunas para o formato esperado por card_component
-            mapeamento_colunas = {
-                "Nome": "Cliente",
-                "Data de contato": "Data",
-                "Follow up": "Observações"
+            # Mapear colunas
+            if "Nome" in df_ag_normalizado.columns and "Cliente" not in df_ag_normalizado.columns:
+                df_ag_normalizado["Cliente"] = df_ag_normalizado["Nome"]
+            
+            # Garantir colunas necessárias
+            colunas_obrigatorias = {
+                "Cliente": "—",
+                "Telefone": "—",
+                "Classificação": "—",
+                "Valor": "—",
+                "Dias_num": None
             }
             
-            for col_original, col_nova in mapeamento_colunas.items():
-                if col_original in df_ag_hoje_normalizado.columns and col_nova not in df_ag_hoje_normalizado.columns:
-                    df_ag_hoje_normalizado[col_nova] = df_ag_hoje_normalizado[col_original]
+            for col, default in colunas_obrigatorias.items():
+                if col not in df_ag_normalizado.columns:
+                    df_ag_normalizado[col] = default
             
-            # Garantir que todas as colunas necessárias existem
-            colunas_necessarias = ["Cliente", "Telefone", "Classificação", "Valor", "Dias_num"]
-            for col in colunas_necessarias:
-                if col not in df_ag_hoje_normalizado.columns:
-                    df_ag_hoje_normalizado[col] = "—"
+            # Criar ID
+            df_ag_normalizado["ID"] = df_ag_normalizado["Telefone"].astype(str).apply(limpar_telefone)
             
-            # Adicionar ID baseado no telefone
-            if "Telefone" in df_ag_hoje_normalizado.columns:
-                df_ag_hoje_normalizado["ID"] = df_ag_hoje_normalizado["Telefone"].astype(str)
-            else:
-                df_ag_hoje_normalizado["ID"] = [f"ag_{i}" for i in range(len(df_ag_hoje_normalizado))]
+            # Reset índices
+            df_ag_normalizado = df_ag_normalizado.reset_index(drop=True)
+            
+            # Filtrar já concluídos/pulados
+            ocultos = st.session_state["concluidos"].union(st.session_state["pulados"])
+            df_ag_normalizado = df_ag_normalizado[~df_ag_normalizado["Telefone"].isin(ocultos)]
 
-            # Reset de índices
-            df_ag_hoje_normalizado = df_ag_hoje_normalizado.reset_index(drop=True)
+            if df_ag_normalizado.empty:
+                st.success("🎉 Todos os agendamentos de hoje foram concluídos!")
+                return
 
             # CSV para download
-            csv_ag = df_ag_hoje_normalizado.drop(columns=["ID"], errors="ignore").to_csv(index=False).encode("utf-8-sig")
+            csv_ag = df_ag_normalizado.drop(columns=["ID", "Telefone_limpo"], errors="ignore").to_csv(index=False).encode("utf-8-sig")
             st.download_button("📥 Baixar agendamentos (CSV)", csv_ag, "agendamentos_hoje.csv")
 
             st.markdown("---")
 
-            # ✅ CARDS NO MESMO FORMATO DO CHECK-IN (2 por linha)
-            for i in range(0, len(df_ag_hoje_normalizado), 2):
+            # ✅ CARDS (2 por linha) - FORMATO IDÊNTICO AO CHECK-IN
+            for i in range(0, len(df_ag_normalizado), 2):
                 col1, col2 = st.columns(2)
 
                 # CARD 1
-                row1 = df_ag_hoje_normalizado.iloc[i]
+                row1 = df_ag_normalizado.iloc[i]
                 with col1:
-                    # Badge para indicar que é agendamento
-                    st.markdown("🔔 **AGENDAMENTO**", unsafe_allow_html=True)
+                    # Badge
+                    st.markdown("🔔 **AGENDAMENTO ATIVO**")
                     
                     ac, mot, res, prox, vend = card_component(row1["ID"], row1)
 
@@ -859,11 +893,11 @@ def render_aba1(aba, df_dia, metas):
                         st.session_state.rerun_necessario = True
 
                 # CARD 2
-                if i + 1 < len(df_ag_hoje_normalizado):
-                    row2 = df_ag_hoje_normalizado.iloc[i + 1]
+                if i + 1 < len(df_ag_normalizado):
+                    row2 = df_ag_normalizado.iloc[i + 1]
                     with col2:
-                        # Badge para indicar que é agendamento
-                        st.markdown("🔔 **AGENDAMENTO**", unsafe_allow_html=True)
+                        # Badge
+                        st.markdown("🔔 **AGENDAMENTO ATIVO**")
                         
                         ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2)
 
