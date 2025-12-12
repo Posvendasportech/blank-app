@@ -121,7 +121,23 @@ def limpar_telefone(v):
 @st.cache_data(ttl=60)
 def load_sheet(sheet_id, sheet_name):
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={quote(sheet_name)}"
-    return pd.read_csv(url)
+    df_raw = pd.read_csv(url)
+    
+    # Processar DENTRO do cache para não repetir a cada rerun
+    df = pd.DataFrame({
+        "Data": pd.to_datetime(df_raw.iloc[:,0], errors="coerce"),
+        "Cliente": df_raw.iloc[:,1],
+        "Email": df_raw.iloc[:,2],
+        "Valor": df_raw.iloc[:,3],
+        "Telefone": df_raw.iloc[:,4].astype(str),
+        "Compras": df_raw.iloc[:,5],
+        "Classificação": df_raw.iloc[:,6],
+        "Dias_num": df_raw.iloc[:,8].apply(converte_dias),
+    })
+    df["Valor_num"] = df["Valor"].apply(valor_num)
+    
+    return df
+
 
 @st.cache_data(ttl=60)
 def load_agendamentos_ativos():
@@ -207,7 +223,16 @@ def card_component(id_fix, row):
         acao = None
 
         if col1.button("✅ Registrar e concluir", key=f"ok_{id_fix}"):
-            acao = "concluir"
+    # Validar TODOS os campos obrigatórios
+    if not motivo.strip():
+        st.error("⚠️ O campo 'Motivo do contato' é obrigatório")
+        acao = None
+    elif not resumo.strip():
+        st.error("⚠️ O campo 'Resumo da conversa' é obrigatório")
+    elif not proxima:
+        st.error("⚠️ Selecione uma data para o próximo contato")
+    else:
+        acao = "concluir"
 
         if col2.button("⏭ Pular cliente", key=f"skip_{id_fix}"):
             acao = "pular"
@@ -631,12 +656,12 @@ def render_aba1(aba, df_dia, metas):
                         if mot.strip():
                             registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
                             remover_card(row1["Telefone"], True)
-                            st.rerun()
+                            st.session_state.rerun_necessario = True  # ✅ MARCA PARA RERUN
                         else:
                             st.warning("⚠️ Descreva o motivo do contato.")
                     elif ac == "pular":
                         remover_card(row1["Telefone"], False)
-                        st.rerun()
+                        st.session_state.rerun_necessario = True  # ✅ MARCA PARA RERUN
 
                 # CARD 2
                 if i + 1 < len(df_checkin):
@@ -648,12 +673,12 @@ def render_aba1(aba, df_dia, metas):
                             if mot2.strip():
                                 registrar_agendamento(row2, res2, mot2, prox2.strftime("%d/%m/%Y") if prox2 else "", vend2)
                                 remover_card(row2["Telefone"], True)
-                                st.rerun()
+                                st.session_state.rerun_necessario = True  # ✅ MARCA PARA RERUN
                             else:
                                 st.warning("⚠️ Descreva o motivo do contato.")
                         elif ac2 == "pular":
                             remover_card(row2["Telefone"], False)
-                            st.rerun()
+                            st.session_state.rerun_necessario = True  # ✅ MARCA PARA RERUN
 
 
         # =========================================================
@@ -683,11 +708,11 @@ def render_aba1(aba, df_dia, metas):
                         vendedor=vendedor
                     )
                     remover_card(row["Telefone"], True)
-                    st.rerun()
+                    st.session_state.rerun_necessario = True  # ✅ MARCA PARA RERUN
 
                 elif ac == "pular":
                     remover_card(row["Telefone"], False)
-                    st.rerun()
+                    st.session_state.rerun_necessario = True  # ✅ MARCA PARA RERUN
 
 # ----------- ABA 2 -----------
 def render_aba2(aba, base, total):
