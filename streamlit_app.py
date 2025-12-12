@@ -419,24 +419,23 @@ def init_session_state():
 # =========================================================
 
 def card_component(id_fix, row, usuario_atual):
-    with st.container():
-        telefone = str(row.get("Telefone", ""))  # ✅ Apenas 8 espaços (2 níveis)
-        
-        # ✅ NOVO: Criar lock ao exibir o card
-        lock_key = f"lock_criado_{id_fix}"
-        if lock_key not in st.session_state:
-            criar_lock(telefone, usuario_atual, row.get("Cliente", "—"))
-            st.session_state[lock_key] = True
-            logger.info(f"🔒 Card exibido e travado para {usuario_atual}: {telefone}")
+    """Card de atendimento com formulário (evita reruns ao digitar)"""
+    
+    telefone = str(row.get("Telefone", ""))
+    
+    # Criar lock ao exibir card
+    lock_key = f"lock_criado_{id_fix}"
+    if lock_key not in st.session_state:
+        criar_lock(telefone, usuario_atual, row.get("Cliente", "—"))
+        st.session_state[lock_key] = True
+        logger.info(f"🔒 Card exibido e travado para {usuario_atual}: {telefone}")
 
+    with st.container():
         st.markdown('<div class="card">', unsafe_allow_html=True)
 
         dias_txt = f"{row['Dias_num']} dias desde compra" if pd.notna(row.get("Dias_num")) else "Sem informação"
-        
-        # ✅ AJUSTE 3: Pegar motivo/follow-up do agendamento
         motivo_anterior = row.get("Follow up", row.get("Motivo", row.get("Relato da conversa", "")))
         
-        # Montar HTML do cabeçalho
         header_html = f"""
             <div class="card-header">
                 <b>{row.get('Cliente', '—')}</b><br>
@@ -446,7 +445,6 @@ def card_component(id_fix, row, usuario_atual):
                 ⏳ {dias_txt}
         """
         
-        # ✅ Adicionar motivo anterior se existir
         if motivo_anterior and str(motivo_anterior).strip() and str(motivo_anterior) != "—":
             header_html += f"""<br><br>
                 📋 <b>Direcionamento anterior:</b><br>
@@ -454,40 +452,42 @@ def card_component(id_fix, row, usuario_atual):
             """
         
         header_html += "</div>"
-        
         st.markdown(header_html, unsafe_allow_html=True)
 
-        vendedor = st.selectbox("Responsável", Config.VENDEDORES, key=f"vend_{id_fix}")
-        motivo = st.text_input("Motivo do contato", key=f"mot_{id_fix}")
-        resumo = st.text_area("Resumo da conversa", key=f"res_{id_fix}", height=80)
-        proxima = st.date_input("Próxima data", key=f"dt_{id_fix}")
+        # ✅ NOVO: Usar FORM para evitar reruns ao digitar
+        with st.form(key=f"form_{id_fix}", clear_on_submit=False):
+            vendedor = st.selectbox("Responsável", Config.VENDEDORES, key=f"vend_{id_fix}")
+            motivo = st.text_input("Motivo do contato", key=f"mot_{id_fix}")
+            resumo = st.text_area("Resumo da conversa", key=f"res_{id_fix}", height=80)
+            proxima = st.date_input("Próxima data", key=f"dt_{id_fix}")
 
-        col1, col2 = st.columns(2)
-        acao = None
-
-        if col1.button("✅ Registrar e concluir", key=f"ok_{id_fix}"):
-            # Validar TODOS os campos obrigatórios
-            if not motivo.strip():
-                st.error("⚠️ O campo 'Motivo do contato' é obrigatório")
-                acao = None
-            elif not resumo.strip():
-                st.error("⚠️ O campo 'Resumo da conversa' é obrigatório")
-                acao = None
-            elif not proxima:
-                st.error("⚠️ Selecione uma data para o próximo contato")
-                acao = None
-            else:
-                acao = "concluir"
-                remover_lock(telefone)  # ✅ NOVO: Liberar lock
-
-        if col2.button("⏭ Pular cliente", key=f"skip_{id_fix}"):
-            acao = "pular"
-            remover_lock(telefone)  # ✅ NOVO: Liberar lock
-
+            col1, col2 = st.columns(2)
+            
+            # ✅ Botões dentro do form - só processa ao clicar
+            concluir = col1.form_submit_button("✅ Registrar e concluir", use_container_width=True)
+            pular = col2.form_submit_button("⏭ Pular cliente", use_container_width=True)
+            
+            acao = None
+            
+            if concluir:
+                if not motivo.strip():
+                    st.error("⚠️ O campo 'Motivo do contato' é obrigatório")
+                elif not resumo.strip():
+                    st.error("⚠️ O campo 'Resumo da conversa' é obrigatório")
+                elif not proxima:
+                    st.error("⚠️ Selecione uma data para o próximo contato")
+                else:
+                    acao = "concluir"
+                    remover_lock(telefone)
+            
+            if pular:
+                acao = "pular"
+                remover_lock(telefone)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
     return acao, motivo, resumo, proxima, vendedor
+
 
 
 def agendamento_card(id_fix, row):
@@ -696,7 +696,28 @@ def render_sidebar():
         max_val = st.number_input("Valor máximo (R$)", value=1000.0, min_value=0.0, step=10.0)
         telefone = st.text_input("Buscar por telefone (qualquer parte)").strip()
 
-        st.markdown("<hr>", unsafe_allow_html=True)
+                st.markdown("<hr>", unsafe_allow_html=True)
+        
+        # ===========================
+        # BLOCO ATUALIZAÇÃO MANUAL
+        # ===========================
+        st.markdown("""
+            <div style="font-size:16px; font-weight:600; margin-bottom:4px;">
+                🔄 Atualizar Dados
+            </div>
+            <p style="font-size:12px; color:#bbbbbb; margin-top:0;">
+                Clique para sincronizar com mudanças de outros usuários.
+            </p>
+        """, unsafe_allow_html=True)
+        
+        if st.button("🔄 Atualizar agora", use_container_width=True):
+            # Limpar todos os caches voláteis
+            load_em_atendimento.clear()
+            load_agendamentos_hoje.clear()
+            load_agendamentos_ativos.clear()
+            st.success("✅ Dados atualizados!")
+            st.rerun()
+
 
         # ===========================
         # BLOCO 2 — CONTROLES DA SESSÃO
@@ -906,6 +927,18 @@ def render_aba1(aba, df_dia, metas):
             st.warning("⚠️ **Por favor, identifique-se na barra lateral antes de continuar**")
             st.info("👈 Digite seu nome no campo 'Seu nome' na sidebar")
             st.stop()
+        # ✅ NOVO: Auto-refresh suave a cada 30 segundos (só recarrega dados, não a página)
+        if 'last_refresh' not in st.session_state:
+            st.session_state.last_refresh = datetime.now()
+        
+        tempo_decorrido = (datetime.now() - st.session_state.last_refresh).total_seconds()
+        
+        if tempo_decorrido > 30:  # 30 segundos
+            # Limpar apenas caches voláteis (não perde o que está digitando)
+            load_em_atendimento.clear()
+            load_agendamentos_hoje.clear()
+            st.session_state.last_refresh = datetime.now()
+            logger.info("🔄 Auto-refresh de dados executado (30s)")
 
         st.header("🎯 Tarefas do dia")
 
@@ -1058,10 +1091,11 @@ def render_aba1(aba, df_dia, metas):
                     if ac == "concluir":
                         registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
                         remover_card(row1["Telefone"], True)
-                        st.session_state.rerun_necessario = True
+                        # ✅ Rerun direto (mais rápido que usar flag)
+                        st.rerun()
                     elif ac == "pular":
                         remover_card(row1["Telefone"], False)
-                        st.session_state.rerun_necessario = True
+                        st.rerun()
 
                 # CARD 2
                 if i + 1 < len(df_checkin):
@@ -1072,11 +1106,10 @@ def render_aba1(aba, df_dia, metas):
                         if ac2 == "concluir":
                             registrar_agendamento(row2, res2, mot2, prox2.strftime("%d/%m/%Y") if prox2 else "", vend2)
                             remover_card(row2["Telefone"], True)
-                            st.session_state.rerun_necessario = True
+                            st.rerun()
                         elif ac2 == "pular":
                             remover_card(row2["Telefone"], False)
-                            st.session_state.rerun_necessario = True
-
+                            st.rerun()
         # =========================================================
         # 🟧 MODO AGENDAMENTOS ATIVOS — MESMO FORMATO DO CHECK-IN
         # =========================================================
@@ -1166,10 +1199,10 @@ def render_aba1(aba, df_dia, metas):
                     if ac == "concluir":
                         registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
                         remover_card(row1["Telefone"], True)
-                        st.session_state.rerun_necessario = True
+                        st.rerun()
                     elif ac == "pular":
                         remover_card(row1["Telefone"], False)
-                        st.session_state.rerun_necessario = True
+                        st.rerun()
 
                 # CARD 2
                 if i + 1 < len(df_ag_normalizado):
@@ -1183,10 +1216,10 @@ def render_aba1(aba, df_dia, metas):
                         if ac2 == "concluir":
                             registrar_agendamento(row2, res2, mot2, prox2.strftime("%d/%m/%Y") if prox2 else "", vend2)
                             remover_card(row2["Telefone"], True)
-                            st.session_state.rerun_necessario = True
+                            st.rerun()
                         elif ac2 == "pular":
                             remover_card(row2["Telefone"], False)
-                            st.session_state.rerun_necessario = True
+                            st.rerun()
 
 
 
@@ -1276,11 +1309,6 @@ def main():
     render_aba2(aba2, base, len(df_dia))
     render_aba3(aba3)
 
-    # ✅ CONTROLE DE RERUN OTIMIZADO
-    if st.session_state.rerun_necessario:
-        st.session_state.rerun_necessario = False
-        logger.info("Rerun executado")
-        st.rerun()
 
 if __name__ == "__main__":
     main()
