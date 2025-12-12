@@ -219,20 +219,26 @@ def card_component(id_fix, row):
         resumo = st.text_area("Resumo da conversa", key=f"res_{id_fix}", height=80)
         proxima = st.date_input("Próxima data", key=f"dt_{id_fix}")
 
-        col1, col2 = st.columns(2)
-        acao = None
+col1, col2 = st.columns(2)
+acao = None
 
-        if col1.button("✅ Registrar e concluir", key=f"ok_{id_fix}"):
-    # Validar TODOS os campos obrigatórios
+if col1.button("✅ Registrar e concluir", key=f"ok_{id_fix}"):
+    # ✅ Validar TODOS os campos obrigatórios (INDENTADO!)
     if not motivo.strip():
         st.error("⚠️ O campo 'Motivo do contato' é obrigatório")
         acao = None
     elif not resumo.strip():
         st.error("⚠️ O campo 'Resumo da conversa' é obrigatório")
+        acao = None
     elif not proxima:
         st.error("⚠️ Selecione uma data para o próximo contato")
+        acao = None
     else:
         acao = "concluir"
+
+if col2.button("⏭ Pular cliente", key=f"skip_{id_fix}"):
+    acao = "pular"
+
 
         if col2.button("⏭ Pular cliente", key=f"skip_{id_fix}"):
             acao = "pular"
