@@ -410,7 +410,7 @@ def init_session_state():
 
 def card_component(id_fix, row, usuario_atual):
     with st.container():
-                telefone = str(row.get("Telefone", ""))
+        telefone = str(row.get("Telefone", ""))  # ✅ Apenas 8 espaços (2 níveis)
         
         # ✅ NOVO: Criar lock ao exibir o card
         lock_key = f"lock_criado_{id_fix}"
