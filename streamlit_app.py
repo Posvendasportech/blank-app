@@ -1028,15 +1028,14 @@ def render_aba1(aba, df_dia, metas):
 
             st.markdown("---")
 
-            # Cards (2 por linha)
+                     # Cards (2 por linha)
             for i in range(0, len(df_checkin), 2):
                 col1, col2 = st.columns(2)
 
                 # CARD 1
                 row1 = df_checkin.iloc[i]
                 with col1:
-                     ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2)
-
+                    ac, mot, res, prox, vend = card_component(row1["ID"], row1, usuario_atual)  # ✅ Corrigido: row1 + usuario_atual
 
                     if ac == "concluir":
                         registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
@@ -1050,7 +1049,7 @@ def render_aba1(aba, df_dia, metas):
                 if i + 1 < len(df_checkin):
                     row2 = df_checkin.iloc[i + 1]
                     with col2:
-                        ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2)
+                        ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2, usuario_atual)  # ✅ Adicionado usuario_atual
 
                         if ac2 == "concluir":
                             registrar_agendamento(row2, res2, mot2, prox2.strftime("%d/%m/%Y") if prox2 else "", vend2)
@@ -1059,7 +1058,6 @@ def render_aba1(aba, df_dia, metas):
                         elif ac2 == "pular":
                             remover_card(row2["Telefone"], False)
                             st.session_state.rerun_necessario = True
-
 
         # =========================================================
         # 🟧 MODO AGENDAMENTOS ATIVOS — MESMO FORMATO DO CHECK-IN
