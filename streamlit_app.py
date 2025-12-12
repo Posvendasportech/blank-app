@@ -367,22 +367,41 @@ def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
 
             agora = datetime.now().strftime("%d/%m/%Y %H:%M")
             
-            cliente = row.get("Cliente") or row.get("Nome", "—")
-            classificacao = row.get("Classificação", "—")
+            # ✅ CORREÇÃO: Converter TODOS os valores para tipos nativos do Python
+            cliente = str(row.get("Cliente", "—"))
+            classificacao = str(row.get("Classificação", "—"))
             valor = safe_valor(row.get("Valor", "—"))
-            telefone = row.get("Telefone", "—")
+            telefone = str(row.get("Telefone", "—"))
+            comentario_str = str(comentario) if comentario else ""
+            motivo_str = str(motivo) if motivo else ""
+            proxima_str = str(proxima_data) if proxima_data else ""
+            vendedor_str = str(vendedor) if vendedor else ""
 
             # Registrar no histórico
             ws_hist.append_row([
-                agora, cliente, classificacao, valor, telefone,
-                comentario, motivo, proxima_data, vendedor
+                agora,
+                cliente,
+                classificacao,
+                valor,
+                telefone,
+                comentario_str,
+                motivo_str,
+                proxima_str,
+                vendedor_str
             ], value_input_option="USER_ENTERED")
 
             # Registrar agendamento se houver próxima data
             if proxima_data:
                 ws_ag.append_row([
-                    agora, cliente, classificacao, valor, telefone,
-                    comentario, motivo, proxima_data, vendedor
+                    agora,
+                    cliente,
+                    classificacao,
+                    valor,
+                    telefone,
+                    comentario_str,
+                    motivo_str,
+                    proxima_str,
+                    vendedor_str
                 ], value_input_option="USER_ENTERED")
 
             # Limpar caches
@@ -397,7 +416,23 @@ def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
         except Exception as e:
             st.error(f"❌ Erro ao salvar: {e}")
             logger.error(f"❌ ERRO ao registrar: {e}", exc_info=True)
-            st.stop()
+            
+            # ✅ ADICIONAR: Mostrar detalhes do erro para debug
+            with st.expander("🔍 Detalhes do erro (para debug)", expanded=False):
+                st.write("**Tipo de erro:**", type(e).__name__)
+                st.write("**Mensagem:**", str(e))
+                st.write("**Dados que tentamos salvar:**")
+                st.json({
+                    "Cliente": cliente,
+                    "Classificação": classificacao,
+                    "Valor": valor,
+                    "Telefone": telefone,
+                    "Comentário": comentario_str[:50] + "..." if len(comentario_str) > 50 else comentario_str,
+                    "Motivo": motivo_str,
+                    "Próxima data": proxima_str,
+                    "Vendedor": vendedor_str
+                })
+
 
 def gerar_relatorio_diario():
     """Gera CSV com estatísticas da sessão atual"""
