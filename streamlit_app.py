@@ -784,23 +784,33 @@ def render_sidebar():
 # =========================================================
 
 def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atual):
+    # ✅ DEBUG - ADICIONAR TEMPORARIAMENTE
+    logger.info(f"🔍 DEBUG - Iniciando build_daily_tasks_df")
+    logger.info(f"🔍 DEBUG - Tipo de 'base': {type(base)}, Tamanho: {len(base) if base is not None else 'None'}")
+    logger.info(f"🔍 DEBUG - Colunas: {base.columns.tolist() if base is not None else 'None'}")
+    
+    if base is None or len(base) == 0:
+        logger.error("❌ ERRO: 'base' está vazio!")
+        return pd.DataFrame()
+    
     # ✅ PRIMEIRO: Carregar locks
     df_locks = load_em_atendimento()
     telefones_bloqueados = set()
     
     if not df_locks.empty:
-        # Bloquear clientes que estão sendo atendidos por OUTROS usuários
         df_locks_outros = df_locks[df_locks["Usuario"] != usuario_atual]
         telefones_bloqueados = set(df_locks_outros["Telefone"].astype(str))
-        logger.info(f"🔒 {len(telefones_bloqueados)} clientes bloqueados (em atendimento por outros)")
+        logger.info(f"🔒 {len(telefones_bloqueados)} clientes bloqueados")
     
-    # ✅ SEGUNDO: Definir base_ck (ESTA LINHA É ESSENCIAL)
+    # ✅ SEGUNDO: Definir base_ck
+    logger.info(f"🔍 DEBUG - Criando base_ck...")
     base_ck = base[
         (~base["Telefone"].isin(telefones_agendados)) &
         (~base["Telefone"].isin(telefones_bloqueados))
     ].copy()
+    logger.info(f"🔍 DEBUG - base_ck criado com {len(base_ck)} registros")
 
-    # ✅ TERCEIRO: Resto do código (filtrar por classificação)
+    # ✅ TERCEIRO: Filtrar por classificação
     novos = base_ck[
         (base_ck["Classificação"] == "Novo") &
         (base_ck["Dias_num"].fillna(0) >= Config.DIAS_MINIMO_NOVOS)
@@ -822,7 +832,8 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atua
     df_dia = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=base.columns)
 
     # Normalizar telefone para ID
-    df_dia["ID"] = df_dia["Telefone_limpo"]
+    if not df_dia.empty:
+        df_dia["ID"] = df_dia["Telefone_limpo"]
 
     # Filtrar concluídos/pulados
     ocultos = st.session_state["concluidos"].union(st.session_state["pulados"])
@@ -832,12 +843,12 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atua
     df_dia = df_dia[df_dia["Dias_num"].fillna(0).between(filtros["min_dias"], filtros["max_dias"])]
     df_dia = df_dia[df_dia["Valor_num"].fillna(0).between(filtros["min_valor"], filtros["max_valor"])]
 
-    # Filtro de telefone (normalizado)
+    # Filtro de telefone
     if filtros["telefone"]:
         clean = limpar_telefone(filtros["telefone"])
         df_dia = df_dia[df_dia["Telefone_limpo"].str.contains(clean, na=False)]
 
-    # ✅ NOVO: Indicador visual na sidebar
+    # Indicador visual na sidebar
     if not df_locks.empty and len(df_locks) > 0:
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 👥 Em atendimento agora:")
@@ -847,8 +858,9 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atua
             minutos_ago = int((datetime.now() - tempo_lock).total_seconds() / 60)
             st.sidebar.write(f"{emoji} **{lock['Usuario']}**: {lock['Cliente']} ({minutos_ago}min atrás)")
 
-    logger.info(f"Tarefas do dia geradas: {len(df_dia)} clientes")
+    logger.info(f"✅ Tarefas do dia geradas: {len(df_dia)} clientes")
     return df_dia
+
 
 
 # =========================================================
