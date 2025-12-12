@@ -1253,14 +1253,13 @@ def main():
         st.stop()
 
     # ✅ Carregar dados (nomes corretos das variáveis)
-    base = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)  # ✅ Mudou de 'df' para 'base'
-        telefones_agendados = load_agendamentos_ativos()
+    base = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
+    telefones_agendados = load_agendamentos_ativos()
     
     # ✅ NOVO: Garantir que todos telefones sejam strings para comparação correta
     telefones_agendados = {str(t).strip() for t in telefones_agendados}
     
     logger.info(f"✅ Telefones com agendamento ativo: {len(telefones_agendados)}")
-       # ✅ Mudou de 'telefones_ag' para 'telefones_agendados'
 
     filtros, metas = render_sidebar()
 
@@ -1274,7 +1273,7 @@ def main():
     ])
 
     render_aba1(aba1, df_dia, metas)
-    render_aba2(aba2, base, len(df_dia))  # ✅ Mudou de 'df' para 'base'
+    render_aba2(aba2, base, len(df_dia))
     render_aba3(aba3)
 
     # ✅ CONTROLE DE RERUN OTIMIZADO
