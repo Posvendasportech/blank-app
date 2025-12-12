@@ -598,26 +598,62 @@ def render_aba1(aba, df_dia, metas):
     with aba:
         st.header("🎯 Tarefas do dia")
 
+        # =========================================================
+        # 🔍 Resumo geral: Check-in + Agendamentos ativos
+        # =========================================================
         df_ag = load_df_agendamentos()
 
+        # ✅ CORREÇÃO 1: Verificar qual coluna tem a data
         hoje = datetime.now().strftime("%d/%m/%Y")
-        df_ag_hoje = df_ag[df_ag["Data de chamada"].astype(str).str.startswith(hoje)] if not df_ag.empty else pd.DataFrame()
+        
+        if not df_ag.empty:
+            # Tentar múltiplas colunas de data
+            colunas_data = ["Data de chamada", "Data de contato", "Próxima data", "Data"]
+            df_ag_hoje = pd.DataFrame()
+            
+            for col in colunas_data:
+                if col in df_ag.columns:
+                    df_ag_hoje = df_ag[df_ag[col].astype(str).str.startswith(hoje)]
+                    if not df_ag_hoje.empty:
+                        logger.info(f"Agendamentos encontrados na coluna '{col}': {len(df_ag_hoje)}")
+                        break
+            
+            if df_ag_hoje.empty:
+                logger.warning(f"Nenhum agendamento encontrado para {hoje}")
+        else:
+            df_ag_hoje = pd.DataFrame()
+            logger.warning("DataFrame de agendamentos está vazio")
 
         qtd_checkin = len(df_dia)
         qtd_agendamentos = len(df_ag_hoje)
         total_dia = qtd_checkin + qtd_agendamentos
 
-        concluidos_hoje = len(st.session_state["concluidos"])
+        # ✅ CORREÇÃO 2: Contar apenas concluídos que estão no total_dia
+        telefones_do_dia = set()
+        if not df_dia.empty:
+            telefones_do_dia.update(df_dia["Telefone"].astype(str).tolist())
+        if not df_ag_hoje.empty:
+            telefones_do_dia.update(df_ag_hoje["Telefone"].astype(str).tolist())
+        
+        # Contar apenas concluídos que fazem parte das tarefas do dia
+        concluidos_hoje = len(st.session_state["concluidos"].intersection(telefones_do_dia))
 
-        # ✅ CORREÇÃO: Garantir progresso entre 0.0 e 1.0
+        # Garantir progresso entre 0.0 e 1.0
         if total_dia > 0:
             progresso = min(concluidos_hoje / total_dia, 1.0)
         else:
             progresso = 0.0
 
+        # ---------------------------------------------------------
+        # Barra de progresso
+        # ---------------------------------------------------------
         st.markdown("### Progresso do Dia")
         st.progress(progresso)
         st.write(f"**{concluidos_hoje} de {total_dia} contatos concluídos** ({progresso*100:.1f}%)")
+
+        # ✅ CORREÇÃO 3: Balões aparecem apenas uma vez
+        if "baloes_mostrados" not in st.session_state:
+            st.session_state["baloes_mostrados"] = False
 
         if progresso == 0:
             st.info("🚀 Começando agora! Vamos iniciar os atendimentos.")
@@ -630,7 +666,10 @@ def render_aba1(aba, df_dia, metas):
         elif progresso < 1:
             st.success("🏁 Quase lá!")
         else:
-            st.balloons()
+            # Mostrar balões apenas uma vez quando atingir 100%
+            if not st.session_state["baloes_mostrados"]:
+                st.balloons()
+                st.session_state["baloes_mostrados"] = True
             st.success("🎉 Dia concluído!")
 
         colA, colB, colC = st.columns(3)
@@ -650,6 +689,9 @@ def render_aba1(aba, df_dia, metas):
 
         st.markdown("---")
 
+        # =========================================================
+        # 🟣 SELETOR DE MODO
+        # =========================================================
         modo = st.selectbox(
             "Modo de atendimento",
             ["Clientes para Check-in (Base de Leitura)", "Agendamentos Ativos"],
@@ -659,10 +701,10 @@ def render_aba1(aba, df_dia, metas):
         st.markdown("---")
 
         # =========================================================
-        # MODO CHECK-IN
+        # 🟦 MODO CHECK-IN — EXIBE CARDS
         # =========================================================
         if modo == "Clientes para Check-in (Base de Leitura)":
-            
+
             class_filter = st.radio(
                 "Filtrar por classificação:",
                 Config.CLASSIFICACOES,
@@ -685,12 +727,13 @@ def render_aba1(aba, df_dia, metas):
                 st.write("- Confira os indicadores na aba 'Indicadores'")
                 
                 col1, col2 = st.columns(2)
-                col1.metric("✅ Concluídos hoje", len(st.session_state["concluidos"]))
+                col1.metric("✅ Concluídos hoje", concluidos_hoje)
                 col2.metric("⏭ Pulados hoje", len(st.session_state["pulados"]))
                 return
 
             st.subheader("📌 Atendimentos do dia (Check-in)")
 
+            # CSV
             csv = df_checkin.drop(columns=["Telefone_limpo", "ID"], errors="ignore").to_csv(index=False).encode("utf-8-sig")
             st.download_button("📥 Baixar lista (CSV)", csv, "checkin_dia.csv")
 
@@ -727,20 +770,44 @@ def render_aba1(aba, df_dia, metas):
                             remover_card(row2["Telefone"], False)
                             st.session_state.rerun_necessario = True
 
+
         # =========================================================
-        # MODO AGENDAMENTOS ATIVOS
+        # 🟧 MODO AGENDAMENTOS ATIVOS — EM CARD
         # =========================================================
         else:
+
             st.subheader("📂 Agendamentos Ativos (Hoje)")
 
+            # ✅ CORREÇÃO 4: Debug para ver quais agendamentos existem
+            if not df_ag.empty:
+                with st.expander("🔍 Debug: Ver todos os agendamentos", expanded=False):
+                    st.write(f"**Total de agendamentos na base:** {len(df_ag)}")
+                    st.write(f"**Colunas disponíveis:** {', '.join(df_ag.columns.tolist())}")
+                    st.write(f"**Buscando agendamentos para:** {hoje}")
+                    
+                    # Mostrar primeiras linhas
+                    st.dataframe(df_ag.head(10))
+
             if df_ag_hoje.empty:
-                st.info("📭 Nenhum agendamento para hoje.")
-                st.write("💡 Configure novos agendamentos na aba 'Check-in'")
+                st.info("📭 Nenhum agendamento encontrado para hoje.")
+                st.write(f"💡 **Data de hoje:** {hoje}")
+                st.write("💡 **Possíveis causas:**")
+                st.write("- Os agendamentos foram criados com data diferente")
+                st.write("- A coluna de data na planilha tem formato diferente")
+                st.write("- Configure novos agendamentos na aba 'Check-in'")
+                
+                # Mostrar últimos agendamentos criados
+                if not df_ag.empty:
+                    st.write("---")
+                    st.write("📋 **Últimos 5 agendamentos criados:**")
+                    st.dataframe(df_ag.tail(5))
+                
                 return
 
             # Reset de índices
             df_ag_hoje = df_ag_hoje.reset_index(drop=True)
 
+            # Renderizar cada agendamento como card
             for i in range(len(df_ag_hoje)):
                 row = df_ag_hoje.iloc[i]
                 id_card = str(row.get("Telefone", f"ag_{i}"))
@@ -761,6 +828,7 @@ def render_aba1(aba, df_dia, metas):
                 elif ac == "pular":
                     remover_card(row.get("Telefone", ""), False)
                     st.session_state.rerun_necessario = True
+
 
 def render_aba2(aba, base, total):
     with aba:
