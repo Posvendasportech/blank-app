@@ -18,16 +18,19 @@ class Config:
     SHEET_ID = "1UD2_Q9oua4OCqYls-Is4zVKwTc9LjucLjPUgmVmyLBc"
     SHEET_NAME = "Total"
     SHEET_AGENDAMENTOS = "Agendamentos"
+    SHEET_EM_ATENDIMENTO = "EM_ATENDIMENTO"  # ✅ NOVO - Controla locks multi-usuário
     
     # Listas de opções
     VENDEDORES = ["João", "Maria", "Patrick", "Outro"]
     CLASSIFICACOES = ["Todos", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
     
     # Cache e Performance
-    CACHE_TTL = 60  # segundos
+    CACHE_BASE_TTL = 600  # ✅ ALTERADO: 60 → 300 (5 minutos para dados estáveis)
+    CACHE_VOLATILE_TTL = 10  # ✅ NOVO: 10 segundos para dados que mudam frequentemente
+    LOCK_TIMEOUT_MINUTES = 15  # ✅ NOVO: Timeout para locks de atendimento
     
     # Valores padrão
-    DIAS_MINIMO_NOVOS = 15  # Novos só aparecem após X dias
+    DIAS_MINIMO_NOVOS = 15
 
 # Configurar logging
 logging.basicConfig(
@@ -97,6 +100,105 @@ def get_gsheet_client():
     )
     return gspread.authorize(credentials)
 
+def obter_usuario_atual():
+    """Identifica o usuário atual para evitar conflitos de atendimento"""
+    if "usuario_nome" not in st.session_state:
+        # Exibir input na sidebar para o usuário se identificar
+        with st.sidebar:
+            st.markdown("---")
+            st.markdown("### 👤 Identificação")
+            nome = st.text_input(
+                "Seu nome:", 
+                key="nome_usuario_input",
+                help="Necessário para evitar atendimentos duplicados",
+                placeholder="Digite seu nome"
+            )
+            if nome:
+                st.session_state["usuario_nome"] = nome
+                st.success(f"✅ Logado como: {nome}")
+            else:
+                st.warning("⚠️ Identifique-se para continuar")
+    
+    return st.session_state.get("usuario_nome", "")
+@st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)
+def load_em_atendimento():
+    """Carrega lista de clientes que estão sendo atendidos agora"""
+    try:
+        client = get_gsheet_client()
+        sh = client.open_by_key(Config.SHEET_ID)
+        
+        # Tentar abrir a aba, criar se não existir
+        try:
+            ws = sh.worksheet("EM_ATENDIMENTO")
+        except gspread.exceptions.WorksheetNotFound:
+            ws = sh.add_worksheet("EM_ATENDIMENTO", rows=1000, cols=4)
+            ws.append_row(["Telefone", "Usuario", "Timestamp", "Cliente"])
+            logger.info("✅ Aba EM_ATENDIMENTO criada automaticamente")
+        
+        records = ws.get_all_records()
+        if not records:
+            return pd.DataFrame(columns=["Telefone", "Usuario", "Timestamp", "Cliente"])
+        
+        df = pd.DataFrame(records)
+        
+        # Limpar locks expirados (mais de 15 minutos)
+        df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
+        agora = datetime.now()
+        tempo_limite = agora - pd.Timedelta(minutes=Config.LOCK_TIMEOUT_MINUTES)
+        df = df[df["Timestamp"] > tempo_limite]
+        
+        logger.info(f"✅ Locks ativos carregados: {len(df)}")
+        return df
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao carregar EM_ATENDIMENTO: {e}")
+        return pd.DataFrame(columns=["Telefone", "Usuario", "Timestamp", "Cliente"])
+
+
+def criar_lock(telefone, usuario, cliente):
+    """Cria um lock quando um card é exibido (bloqueia para outros usuários)"""
+    try:
+        client = get_gsheet_client()
+        sh = client.open_by_key(Config.SHEET_ID)
+        
+        try:
+            ws = sh.worksheet("EM_ATENDIMENTO")
+        except gspread.exceptions.WorksheetNotFound:
+            ws = sh.add_worksheet("EM_ATENDIMENTO", rows=1000, cols=4)
+            ws.append_row(["Telefone", "Usuario", "Timestamp", "Cliente"])
+        
+        agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ws.append_row([str(telefone), str(usuario), agora, str(cliente)])
+        
+        # Limpar cache para outros usuários verem imediatamente
+        load_em_atendimento.clear()
+        logger.info(f"🔒 Lock criado: {telefone} por {usuario}")
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao criar lock: {e}")
+
+
+def remover_lock(telefone):
+    """Remove o lock quando o atendimento é concluído ou pulado"""
+    try:
+        client = get_gsheet_client()
+        sh = client.open_by_key(Config.SHEET_ID)
+        ws = sh.worksheet("EM_ATENDIMENTO")
+        
+        # Buscar a linha do telefone
+        try:
+            cell = ws.find(str(telefone))
+            if cell:
+                ws.delete_rows(cell.row)
+                load_em_atendimento.clear()
+                logger.info(f"🔓 Lock removido: {telefone}")
+        except gspread.exceptions.CellNotFound:
+            logger.warning(f"⚠️ Lock não encontrado para remover: {telefone}")
+            
+    except Exception as e:
+        logger.error(f"❌ Erro ao remover lock: {e}")
+
+
 def converte_dias(v):
     try:
         return int(round(float(str(v).replace(",", "."))))
@@ -165,7 +267,7 @@ def limpar_telefone(v):
 # (3) 💾 FUNÇÕES DE CARREGAMENTO (BASES)
 # =========================================================
 
-@st.cache_data(ttl=Config.CACHE_TTL)
+@st.cache_data(ttl=Config.CACHE_BASE_TTL)  # ✅ ALTERADO: Agora usa cache de 5 minutos
 def load_sheet(sheet_id, sheet_name):
     logger.info(f"Carregando planilha: {sheet_name}")
     
@@ -207,7 +309,7 @@ def load_sheet(sheet_id, sheet_name):
         logger.error(f"Erro ao carregar {sheet_name}: {e}", exc_info=True)
         st.stop()
 
-@st.cache_data(ttl=Config.CACHE_TTL)
+@st.cache_data(ttl=Config.CACHE_BASE_TTL)
 def load_agendamentos_ativos():
     try:
         client = get_gsheet_client()
@@ -219,7 +321,7 @@ def load_agendamentos_ativos():
         logger.error(f"Erro ao carregar agendamentos ativos: {e}", exc_info=True)
         return set()
 
-@st.cache_data(ttl=Config.CACHE_TTL)
+@st.cache_data(ttl=Config.CACHE_BASE_TTL)
 def load_df_agendamentos():
     try:
         client = get_gsheet_client()
@@ -231,7 +333,7 @@ def load_df_agendamentos():
         logger.error(f"Erro ao carregar DataFrame agendamentos: {e}", exc_info=True)
         return pd.DataFrame()
 
-@st.cache_data(ttl=Config.CACHE_TTL)
+@st.cache_data(ttl=Config.CACHE_BASE_TTL)
 def load_historico():
     try:
         client = get_gsheet_client()
@@ -242,6 +344,47 @@ def load_historico():
         return df
     except Exception as e:
         logger.error(f"Erro ao carregar histórico: {e}", exc_info=True)
+        return pd.DataFrame()
+
+@st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)  # Cache de 10 segundos (muda frequentemente)
+def load_agendamentos_hoje():
+    """Carrega APENAS os agendamentos para HOJE (filtrado pela 'Próxima data')"""
+    try:
+        client = get_gsheet_client()
+        ws = client.open(Config.SHEET_AGENDAMENTOS).worksheet("AGENDAMENTOS_ATIVOS")
+        df = pd.DataFrame(ws.get_all_records())
+        
+        if df.empty:
+            logger.info("⚠️ Nenhum agendamento na base")
+            return pd.DataFrame()
+        
+    
+        
+        # Detectar qual coluna usar
+        if "Próxima data" in df.columns:
+            col_data = "Próxima data"
+        elif "Data de chamada" in df.columns:
+            col_data = "Data de chamada"
+        else:
+            logger.error("❌ Nenhuma coluna de data encontrada")
+            return pd.DataFrame()
+        
+        # Filtrar por hoje (aceita formato BR ou ISO)
+        mask = (
+            df[col_data].astype(str).str.contains(hoje_br, na=False) |
+            df[col_data].astype(str).str.contains(hoje_iso, na=False)
+        )
+        
+        df_hoje = df[mask].copy()
+        
+        if not df_hoje.empty:
+            df_hoje["Telefone_limpo"] = df_hoje["Telefone"].apply(limpar_telefone)
+        
+        logger.info(f"✅ Agendamentos para hoje ({hoje_br}): {len(df_hoje)}")
+        return df_hoje
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao carregar agendamentos de hoje: {e}")
         return pd.DataFrame()
 
 # =========================================================
@@ -265,8 +408,17 @@ def init_session_state():
 # (5) 🎨 COMPONENTE CARD DE ATENDIMENTO
 # =========================================================
 
-def card_component(id_fix, row):
+def card_component(id_fix, row, usuario_atual):
     with st.container():
+                telefone = str(row.get("Telefone", ""))
+        
+        # ✅ NOVO: Criar lock ao exibir o card
+        lock_key = f"lock_criado_{id_fix}"
+        if lock_key not in st.session_state:
+            criar_lock(telefone, usuario_atual, row.get("Cliente", "—"))
+            st.session_state[lock_key] = True
+            logger.info(f"🔒 Card exibido e travado para {usuario_atual}: {telefone}")
+
         st.markdown('<div class="card">', unsafe_allow_html=True)
 
         dias_txt = f"{row['Dias_num']} dias desde compra" if pd.notna(row.get("Dias_num")) else "Sem informação"
@@ -316,9 +468,12 @@ def card_component(id_fix, row):
                 acao = None
             else:
                 acao = "concluir"
+                remover_lock(telefone)  # ✅ NOVO: Liberar lock
 
         if col2.button("⏭ Pular cliente", key=f"skip_{id_fix}"):
             acao = "pular"
+            remover_lock(telefone)  # ✅ NOVO: Liberar lock
+
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -628,8 +783,23 @@ def render_sidebar():
 # (8) 🔍 BUILDER — MONTAR df_dia
 # =========================================================
 
-def build_daily_tasks_df(base, telefones_agendados, filtros, metas):
-    base_ck = base[~base["Telefone"].isin(telefones_agendados)].copy()
+def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atual):
+        # ✅ NOVO: Carregar locks ativos para filtrar clientes em atendimento
+    df_locks = load_em_atendimento()
+    telefones_bloqueados = set()
+    
+    if not df_locks.empty:
+        # Bloquear clientes que estão sendo atendidos por OUTROS usuários
+        df_locks_outros = df_locks[df_locks["Usuario"] != usuario_atual]
+        telefones_bloqueados = set(df_locks_outros["Telefone"].astype(str))
+        
+        logger.info(f"🔒 {len(telefones_bloqueados)} clientes bloqueados (em atendimento por outros)")
+
+        base_ck = base[
+        (~base["Telefone"].isin(telefones_agendados)) &
+        (~base["Telefone"].isin(telefones_bloqueados))  # ✅ NOVO: Filtrar bloqueados
+    ].copy()
+
 
     novos = base_ck[
         (base_ck["Classificação"] == "Novo") &
@@ -668,6 +838,16 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas):
         df_dia = df_dia[df_dia["Telefone_limpo"].str.contains(clean, na=False)]
 
     logger.info(f"Tarefas do dia geradas: {len(df_dia)} clientes")
+        # ✅ NOVO: Mostrar indicador visual de quem está atendendo
+    if not df_locks.empty and len(df_locks) > 0:
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 👥 Em atendimento agora:")
+        for _, lock in df_locks.iterrows():
+            emoji = "🟢" if lock["Usuario"] == usuario_atual else "🔴"
+            tempo_lock = pd.to_datetime(lock["Timestamp"])
+            minutos_ago = int((datetime.now() - tempo_lock).total_seconds() / 60)
+            st.sidebar.write(f"{emoji} **{lock['Usuario']}**: {lock['Cliente']} ({minutos_ago}min atrás)")
+
     return df_dia
 
 # =========================================================
@@ -675,20 +855,24 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas):
 # =========================================================
 def render_aba1(aba, df_dia, metas):
     with aba:
+                # ✅ NOVO: Obter e validar usuário atual
+        usuario_atual = obter_usuario_atual()
+        
+        if not usuario_atual or usuario_atual.strip() == "":
+            st.warning("⚠️ **Por favor, identifique-se na barra lateral antes de continuar**")
+            st.info("👈 Digite seu nome no campo 'Seu nome' na sidebar")
+            st.stop()
+
         st.header("🎯 Tarefas do dia")
 
         # =========================================================
         # 🔍 Carregar agendamentos e fazer JOIN com base principal
         # =========================================================
-        df_ag = load_df_agendamentos()
+         # ✅ NOVO: Usar função otimizada que já filtra por hoje
+        df_ag_hoje = load_agendamentos_hoje()
         
-        # Carregar base principal para fazer join
+        # Carregar base completa para join
         df_base_completa = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
-
-        # ✅ CORREÇÃO: Tentar múltiplos formatos de data
-        hoje_br = datetime.now().strftime("%d/%m/%Y")  # 12/12/2025
-        hoje_iso = datetime.now().strftime("%Y/%m/%d")  # 2025/12/12
-        hoje_iso_dash = datetime.now().strftime("%Y-%m-%d")  # 2025-12-12
         
         df_ag_hoje = pd.DataFrame()
         
@@ -851,7 +1035,8 @@ def render_aba1(aba, df_dia, metas):
                 # CARD 1
                 row1 = df_checkin.iloc[i]
                 with col1:
-                    ac, mot, res, prox, vend = card_component(row1["ID"], row1)
+                     ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2)
+
 
                     if ac == "concluir":
                         registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
@@ -972,7 +1157,8 @@ def render_aba1(aba, df_dia, metas):
                     # Badge
                     st.markdown("🔔 **AGENDAMENTO ATIVO**")
                     
-                    ac, mot, res, prox, vend = card_component(row1["ID"], row1)
+                    ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2)
+
 
                     if ac == "concluir":
                         registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
@@ -1061,7 +1247,8 @@ def main():
 
     filtros, metas = render_sidebar()
 
-    df_dia = build_daily_tasks_df(df, telefones_ag, filtros, metas)
+    df_dia = build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atual)  # ✅ Passar usuário
+
 
     aba1, aba2, aba3 = st.tabs([
         "📅 Tarefas do dia",
