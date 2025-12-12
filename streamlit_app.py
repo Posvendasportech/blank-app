@@ -935,23 +935,22 @@ def render_aba1(aba, df_dia, metas):
             # Criar ID
             df_ag_normalizado["ID"] = df_ag_normalizado["Telefone"].astype(str).apply(limpar_telefone)
             
-            # Reset índices
+                       # Reset índices
             df_ag_normalizado = df_ag_normalizado.reset_index(drop=True)
             
-           # ✅ AJUSTE 1: Filtrar concluídos/pulados usando telefone limpo
-ocultos = st.session_state["concluidos"].union(st.session_state["pulados"])
+            # ✅ AJUSTE 1: Filtrar concluídos/pulados usando telefone limpo
+            ocultos = st.session_state["concluidos"].union(st.session_state["pulados"])
 
-# Filtrar por Telefone normal E por Telefone_limpo
-if "Telefone_limpo" in df_ag_normalizado.columns:
-    df_ag_normalizado = df_ag_normalizado[
-        (~df_ag_normalizado["Telefone"].isin(ocultos)) &
-        (~df_ag_normalizado["Telefone_limpo"].isin(ocultos))
-    ]
-else:
-    df_ag_normalizado = df_ag_normalizado[~df_ag_normalizado["Telefone"].isin(ocultos)]
+            # Filtrar por Telefone normal E por Telefone_limpo
+            if "Telefone_limpo" in df_ag_normalizado.columns:
+                df_ag_normalizado = df_ag_normalizado[
+                    (~df_ag_normalizado["Telefone"].isin(ocultos)) &
+                    (~df_ag_normalizado["Telefone_limpo"].isin(ocultos))
+                ]
+            else:
+                df_ag_normalizado = df_ag_normalizado[~df_ag_normalizado["Telefone"].isin(ocultos)]
 
-logger.info(f"Agendamentos após filtrar ocultos: {len(df_ag_normalizado)}")
-
+            logger.info(f"Agendamentos após filtrar ocultos: {len(df_ag_normalizado)}")
 
             if df_ag_normalizado.empty:
                 st.success("🎉 Todos os agendamentos de hoje foram concluídos!")
