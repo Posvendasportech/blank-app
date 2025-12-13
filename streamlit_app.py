@@ -1354,7 +1354,7 @@ def render_aba2(aba, base, total_tarefas):
         
         st.markdown("---")
         
-        # =========================================================
+               # =========================================================
         # 📅 BLOCO 4: PRÓXIMOS AGENDAMENTOS
         # =========================================================
         st.markdown("### 📅 Agendamentos dos Próximos 7 Dias")
@@ -1363,59 +1363,116 @@ def render_aba2(aba, base, total_tarefas):
         df_agendamentos_todos = load_df_agendamentos()
         
         if not df_agendamentos_todos.empty:
-            # Converter próxima data
-            df_agendamentos_todos["Próxima_data_dt"] = pd.to_datetime(
-                df_agendamentos_todos["Próxima data"], 
-                format="%d/%m/%Y", 
-                errors="coerce"
-            )
+            # ✅ VERIFICAR qual coluna de data existe
+            colunas_data_possiveis = [
+                "Próxima data", 
+                "Data de chamada", 
+                "Proxima data",
+                "próxima data",
+                "Data",
+                "Data de contato"
+            ]
             
-            # Filtrar próximos 7 dias
-            hoje = datetime.now()
-            proximos_7 = hoje + pd.Timedelta(days=7)
+            coluna_data_encontrada = None
+            for col in colunas_data_possiveis:
+                if col in df_agendamentos_todos.columns:
+                    coluna_data_encontrada = col
+                    logger.info(f"✅ Coluna de data encontrada: '{col}'")
+                    break
             
-            df_proximos = df_agendamentos_todos[
-                (df_agendamentos_todos["Próxima_data_dt"] >= hoje) &
-                (df_agendamentos_todos["Próxima_data_dt"] <= proximos_7)
-            ].copy()
-            
-            if not df_proximos.empty:
-                # Ordenar por data
-                df_proximos = df_proximos.sort_values("Próxima_data_dt")
-                
-                # Mostrar tabela
-                df_exibir = df_proximos[["Cliente", "Próxima data", "Follow up", "Vendedor"]].copy()
-                df_exibir.columns = ["Cliente", "Data", "Motivo", "Responsável"]
-                
-                st.dataframe(
-                    df_exibir,
-                    use_container_width=True,
-                    hide_index=True
-                )
-                
-                # Resumo por dia
-                st.markdown("**📊 Resumo por Dia:**")
-                resumo_dias = df_proximos["Próxima_data_dt"].dt.date.value_counts().sort_index()
-                
-                col_e, col_f, col_g = st.columns(3)
-                
-                dias_semana = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-                
-                for i, (data, qtd) in enumerate(list(resumo_dias.items())[:7]):
-                    dia_semana = dias_semana[data.weekday()]
-                    col = [col_e, col_f, col_g][i % 3]
+            if coluna_data_encontrada:
+                try:
+                    # Converter próxima data
+                    df_agendamentos_todos["Próxima_data_dt"] = pd.to_datetime(
+                        df_agendamentos_todos[coluna_data_encontrada], 
+                        format="%d/%m/%Y", 
+                        errors="coerce"
+                    )
                     
-                    with col:
-                        st.metric(
-                            f"{dia_semana} {data.strftime('%d/%m')}",
-                            f"{qtd} agendamento(s)"
+                    # Filtrar próximos 7 dias
+                    hoje = datetime.now()
+                    proximos_7 = hoje + pd.Timedelta(days=7)
+                    
+                    df_proximos = df_agendamentos_todos[
+                        (df_agendamentos_todos["Próxima_data_dt"] >= hoje) &
+                        (df_agendamentos_todos["Próxima_data_dt"] <= proximos_7)
+                    ].copy()
+                    
+                    if not df_proximos.empty:
+                        # Ordenar por data
+                        df_proximos = df_proximos.sort_values("Próxima_data_dt")
+                        
+                        # Selecionar colunas existentes
+                        colunas_exibir = []
+                        mapeamento = {
+                            "Cliente": "Cliente",
+                            "Nome": "Cliente",
+                            coluna_data_encontrada: "Data",
+                            "Follow up": "Motivo",
+                            "Motivo": "Motivo",
+                            "Vendedor": "Responsável",
+                            "Responsavel": "Responsável"
+                        }
+                        
+                        # Construir lista de colunas disponíveis
+                        for col_original, col_nova in mapeamento.items():
+                            if col_original in df_proximos.columns and col_nova not in colunas_exibir:
+                                colunas_exibir.append((col_original, col_nova))
+                        
+                        # Criar DataFrame para exibição
+                        df_exibir = df_proximos[[c[0] for c in colunas_exibir]].copy()
+                        df_exibir.columns = [c[1] for c in colunas_exibir]
+                        
+                        st.dataframe(
+                            df_exibir,
+                            use_container_width=True,
+                            hide_index=True
                         )
+                        
+                        # Resumo por dia
+                        st.markdown("**📊 Resumo por Dia:**")
+                        resumo_dias = df_proximos["Próxima_data_dt"].dt.date.value_counts().sort_index()
+                        
+                        if len(resumo_dias) > 0:
+                            col_e, col_f, col_g = st.columns(3)
+                            
+                            dias_semana = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+                            
+                            for i, (data, qtd) in enumerate(list(resumo_dias.items())[:7]):
+                                dia_semana = dias_semana[data.weekday()]
+                                col = [col_e, col_f, col_g][i % 3]
+                                
+                                with col:
+                                    st.metric(
+                                        f"{dia_semana} {data.strftime('%d/%m')}",
+                                        f"{qtd} agendamento(s)"
+                                    )
+                        else:
+                            st.info("📭 Nenhum agendamento nos próximos 7 dias")
+                    else:
+                        st.info("📭 Nenhum agendamento nos próximos 7 dias")
+                
+                except Exception as e:
+                    logger.error(f"❌ Erro ao processar datas de agendamento: {e}")
+                    st.error(f"⚠️ Erro ao processar datas. Verifique o formato na planilha.")
+                    
+                    # Debug: Mostrar estrutura
+                    with st.expander("🔍 Debug - Ver estrutura dos dados"):
+                        st.write("**Colunas disponíveis:**")
+                        st.write(df_agendamentos_todos.columns.tolist())
+                        st.write("**Primeiros registros:**")
+                        st.dataframe(df_agendamentos_todos.head(3))
             else:
-                st.info("📭 Nenhum agendamento nos próximos 7 dias")
+                st.warning("⚠️ Nenhuma coluna de data encontrada na planilha de agendamentos")
+                
+                # Debug: Mostrar colunas disponíveis
+                with st.expander("🔍 Colunas disponíveis na planilha"):
+                    st.write(df_agendamentos_todos.columns.tolist())
         else:
             st.info("📭 Nenhum agendamento cadastrado")
         
         st.markdown("---")
+
         
         # =========================================================
         # 📉 BLOCO 5: CLIENTES EM RISCO
