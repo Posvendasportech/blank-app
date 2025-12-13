@@ -1226,8 +1226,17 @@ def render_aba1(aba, df_dia, metas):
 def render_aba2(aba, base, total_tarefas):
     """Aba de Indicadores e Análises com filtros de data"""
     
+   def render_aba2(aba, base, total_tarefas):
     with aba:
+        # ✅ Força manter na aba 2 durante interações
+        if "forcar_aba2" not in st.session_state:
+            st.session_state.forcar_aba2 = False
+        
+        st.session_state.forcar_aba2 = True
+        
         st.header("📊 Indicadores & Performance")
+        # ... resto do código
+
         
                 # =========================================================
         # 🎛️ SEÇÃO 1: FILTROS DE DATA
@@ -1759,11 +1768,21 @@ def main():
     # ✅ Agora as variáveis correspondem aos parâmetros esperados
     df_dia = build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atual)
 
-    aba1, aba2, aba3 = st.tabs([
+            # Se estava na aba 2, forçar retorno
+    if st.session_state.get("forcar_aba2", False):
+        st.info("💡 Dica: Use os filtros abaixo sem perder sua posição")
+        st.session_state.forcar_aba2 = False
+
+    
+    # Criar tabs com callback para salvar estado
+    abas = st.tabs([
         "📅 Tarefas do dia",
         "📊 Indicadores",
         "🔎 Histórico"
     ])
+    
+    aba1, aba2, aba3 = abas
+
 
     render_aba1(aba1, df_dia, metas)
     render_aba2(aba2, base, len(df_dia))
