@@ -1388,17 +1388,37 @@ def render_aba2(aba, base, total_tarefas):
         
         st.markdown("---")
         
-        # =========================================================
+               # =========================================================
         # 📊 SEÇÃO 3: GRÁFICO DE BARRAS - PESSOAS POR CLASSIFICAÇÃO
         # =========================================================
         st.markdown("### 📊 Distribuição de Clientes por Classificação")
         
         if not base.empty:
+            # ✅ LIMPEZA DE DADOS - Remover duplicados e vazios
+            base_limpa = base.copy()
+            
+            # Remover linhas onde Cliente está vazio
+            base_limpa = base_limpa[base_limpa["Cliente"].notna()]
+            base_limpa = base_limpa[base_limpa["Cliente"].astype(str).str.strip() != ""]
+            
+            # Remover linhas onde Telefone está vazio
+            if "Telefone" in base_limpa.columns:
+                base_limpa = base_limpa[base_limpa["Telefone"].notna()]
+                base_limpa = base_limpa[base_limpa["Telefone"].astype(str).str.strip() != ""]
+            
+            # ✅ REMOVER DUPLICADOS por telefone (cliente único)
+            if "Telefone_limpo" in base_limpa.columns:
+                base_limpa = base_limpa.drop_duplicates(subset=["Telefone_limpo"], keep="first")
+            elif "Telefone" in base_limpa.columns:
+                base_limpa = base_limpa.drop_duplicates(subset=["Telefone"], keep="first")
+            
+            logger.info(f"🔍 Base original: {len(base)} | Base limpa: {len(base_limpa)}")
+            
             col_grafico, col_tabela = st.columns([2, 1])
             
             with col_grafico:
-                # Contar por classificação
-                dist_class = base["Classificação"].value_counts().sort_values(ascending=True)
+                # Contar por classificação (usando base limpa)
+                dist_class = base_limpa["Classificação"].value_counts().sort_values(ascending=True)
                 
                 # Criar DataFrame para o gráfico
                 df_grafico = pd.DataFrame({
@@ -1431,14 +1451,23 @@ def render_aba2(aba, base, total_tarefas):
                     hide_index=True
                 )
                 
+                # Mostrar total
+                st.info(f"📊 **Total de clientes únicos:** {total_clientes:,}".replace(",", "."))
+                
                 # Destaques
                 st.markdown("**🎯 Destaques:**")
                 maior_grupo = df_tabela.iloc[0]
                 st.success(f"**{maior_grupo['Classificação']}**: {maior_grupo['Qtd']} clientes ({maior_grupo['Percentual']})")
+                
+                # ✅ DEBUG: Mostrar contagem de duplicados removidos
+                duplicados_removidos = len(base) - len(base_limpa)
+                if duplicados_removidos > 0:
+                    st.warning(f"⚠️ {duplicados_removidos} duplicados removidos da análise")
         else:
             st.warning("⚠️ Nenhum dado disponível na base")
         
         st.markdown("---")
+
         
         # =========================================================
         # 🍰 SEÇÃO 4: GRÁFICO DE PIZZA - CLASSIFICAÇÕES (SEM DORMENTES)
