@@ -1284,7 +1284,14 @@ def render_aba2(aba, base, total_tarefas):
         
         with col_filtro_class1:
             # Obter todas classificações disponíveis
-            todas_classificacoes = sorted(base["Classificação"].unique().tolist()) if not base.empty else []
+            # ✅ Obter classificações e remover valores nulos
+if not base.empty:
+    todas_classificacoes = base["Classificação"].dropna().unique().tolist()
+    todas_classificacoes = [c for c in todas_classificacoes if c and str(c).strip()]
+    todas_classificacoes = sorted(todas_classificacoes)
+else:
+    todas_classificacoes = []
+
             
             # Pré-selecionar todas EXCETO Dormente
             classificacoes_padrao = [c for c in todas_classificacoes if c != "Dormente"]
