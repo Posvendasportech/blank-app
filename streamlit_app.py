@@ -1458,9 +1458,10 @@ def render_aba2(aba, base, total_tarefas):
         # =========================================================
         st.markdown("### 📊 Distribuição de Clientes por Classificação")
         
-        if not base.empty:
+        if not base_filtrada.empty:  # ✅ Usar base_filtrada
             # ✅ LIMPEZA DE DADOS - Remover duplicados e vazios
-            base_limpa = base.copy()
+            base_limpa = base_filtrada.copy()  # ✅ Usar base_filtrada
+
             
             # Remover linhas onde Cliente está vazio
             base_limpa = base_limpa[base_limpa["Cliente"].notna()]
@@ -1525,7 +1526,7 @@ def render_aba2(aba, base, total_tarefas):
                 st.success(f"**{maior_grupo['Classificação']}**: {maior_grupo['Qtd']} clientes ({maior_grupo['Percentual']})")
                 
                 # ✅ DEBUG: Mostrar contagem de duplicados removidos
-                duplicados_removidos = len(base) - len(base_limpa)
+                duplicados_removidos = len(base_filtrada) - len(base_limpa)
                 if duplicados_removidos > 0:
                     st.warning(f"⚠️ {duplicados_removidos} duplicados removidos da análise")
         else:
@@ -1534,21 +1535,23 @@ def render_aba2(aba, base, total_tarefas):
         st.markdown("---")
 
         
+                # =========================================================
+        # 🍰 SEÇÃO 4: GRÁFICO DE PIZZA - CLASSIFICAÇÕES
         # =========================================================
-        # 🍰 SEÇÃO 4: GRÁFICO DE PIZZA - CLASSIFICAÇÕES (SEM DORMENTES)
-        # =========================================================
-        st.markdown("### 🍰 Proporção de Classificações (exceto Dormentes)")
+        st.markdown("### 🍰 Proporção de Classificações Selecionadas")
+        
+        if not base_filtrada.empty:
+            col_pizza, col_legenda = st.columns([2, 1])
+
         
         if not base.empty:
-            # Filtrar dormentes
-            base_sem_dormentes = base[base["Classificação"] != "Dormente"].copy()
-            
-            if not base_sem_dormentes.empty:
+                        # Usar base já filtrada
+
                 col_pizza, col_legenda = st.columns([2, 1])
                 
                 with col_pizza:
                     # Contar classificações
-                    dist_pizza = base_sem_dormentes["Classificação"].value_counts()
+                    dist_pizza = base_filtrada["Classificação"].value_counts()
                     
                     # Calcular percentuais
                     total = dist_pizza.sum()
@@ -1669,17 +1672,18 @@ def render_aba2(aba, base, total_tarefas):
         # =========================================================
         st.markdown("### ⚠️ Alertas de Clientes em Risco")
         
-        if not base.empty:
+        if not base_filtrada.empty:  # ✅ Usar base_filtrada
             col_alerta1, col_alerta2 = st.columns(2)
             
             with col_alerta1:
                 st.markdown("#### 🚨 **Clientes em Risco**")
                 
-                clientes_risco = base[base["Classificação"] == "Em risco"].copy()
+                clientes_risco = base_filtrada[base_filtrada["Classificação"] == "Em risco"].copy()
+
                 clientes_risco = clientes_risco.sort_values("Dias_num", ascending=False).head(10)
                 
                 if not clientes_risco.empty:
-                    st.error(f"⚠️ **{len(base[base['Classificação'] == 'Em risco'])} clientes** precisam de atenção!")
+                    st.error(f"⚠️ **{len(base_filtrada[base_filtrada['Classificação'] == 'Em risco'])} clientes** precisam de atenção!")
                     
                     df_risco = clientes_risco[["Cliente", "Dias_num", "Valor", "Telefone"]].copy()
                     df_risco.columns = ["Cliente", "Dias sem comprar", "Último valor", "Telefone"]
@@ -1696,7 +1700,7 @@ def render_aba2(aba, base, total_tarefas):
                 st.markdown("#### 😴 **Prestes a Ficar Dormentes**")
                 
                 # Clientes que não são dormentes mas estão há muito tempo sem comprar
-                prestes_dormentes = base[
+                prestes_dormentes = base_filtrada[
                     (base["Classificação"] != "Dormente") &
                     (base["Dias_num"].fillna(0) > 120)  # Mais de 120 dias
                 ].copy()
