@@ -1276,7 +1276,7 @@ def render_aba2(aba, base, total_tarefas):
                 data_fim = datetime.combine(data_fim, datetime.max.time())
         
         # ✅ Esta linha deve ter 8 espaços (não mais!)
-        st.info(f"📅 **Período analisado:** {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
+                st.info(f"📅 **Período analisado:** {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
         
         # ✅ NOVO: Filtro de Classificações
         st.markdown("### 🏷️ Filtrar Classificações")
@@ -1293,7 +1293,39 @@ def render_aba2(aba, base, total_tarefas):
                 todas_classificacoes = []
             
             # Pré-selecionar todas EXCETO Dormente
-            classificacoes_padrao =
+            classificacoes_padrao = [c for c in todas_classificacoes if c != "Dormente"]
+            
+            classificacoes_selecionadas = st.multiselect(
+                "Selecione as classificações para analisar:",
+                options=todas_classificacoes,
+                default=classificacoes_padrao,
+                help="Por padrão, 'Dormentes' não são incluídos. Você pode adicionar ou remover conforme necessário.",
+                key="filtro_classificacoes"
+            )
+        
+        with col_filtro_class2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Botões rápidos
+            if st.button("✅ Selecionar Todas", use_container_width=True):
+                st.session_state["filtro_classificacoes"] = todas_classificacoes
+                st.rerun()
+            
+            if st.button("❌ Remover Dormentes", use_container_width=True):
+                st.session_state["filtro_classificacoes"] = [c for c in todas_classificacoes if c != "Dormente"]
+                st.rerun()
+        
+        # Validar se pelo menos uma classificação foi selecionada
+        if not classificacoes_selecionadas:
+            st.warning("⚠️ Selecione pelo menos uma classificação para visualizar os indicadores")
+            st.stop()
+        
+        # ✅ APLICAR FILTRO NA BASE
+        base_filtrada = base[base["Classificação"].isin(classificacoes_selecionadas)].copy()
+        
+        st.info(f"🔍 **Analisando {len(classificacoes_selecionadas)} classificação(ões):** {', '.join(classificacoes_selecionadas)}")
+        
+        st.markdown("---")
 
 
         
