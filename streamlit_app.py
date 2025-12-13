@@ -1229,7 +1229,7 @@ def render_aba2(aba, base, total_tarefas):
     with aba:
         st.header("📊 Indicadores & Performance")
         
-        # =========================================================
+                # =========================================================
         # 🎛️ SEÇÃO 1: FILTROS DE DATA
         # =========================================================
         st.markdown("### 🎛️ Filtros de Período")
@@ -1243,7 +1243,7 @@ def render_aba2(aba, base, total_tarefas):
                 key="periodo_filtro"
             )
         
-               # Calcular datas baseado no período selecionado
+        # Calcular datas baseado no período selecionado
         hoje = datetime.now()
         
         if periodo == "Hoje":
@@ -1275,12 +1275,14 @@ def render_aba2(aba, base, total_tarefas):
                 )
                 data_fim = datetime.combine(data_fim, datetime.max.time())
         
-               st.info(f"📅 **Período analisado:** {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
+        st.info(f"📅 **Período analisado:** {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
         
-        # ✅ NOVO: Filtro de Classificações
+        # =========================================================
+        # 🏷️ FILTRO DE CLASSIFICAÇÕES
+        # =========================================================
         st.markdown("### 🏷️ Filtrar Classificações")
         
-        # Obter classificações e remover valores nulos
+        # Obter todas classificações disponíveis (incluindo Dormente)
         if not base.empty:
             todas_classificacoes = base["Classificação"].dropna().unique().tolist()
             todas_classificacoes = [c for c in todas_classificacoes if c and str(c).strip()]
@@ -1288,16 +1290,22 @@ def render_aba2(aba, base, total_tarefas):
         else:
             todas_classificacoes = []
         
-        # Pré-selecionar todas EXCETO Dormente
+        # ✅ Pré-selecionar todas EXCETO Dormente (mas Dormente fica disponível para seleção)
         classificacoes_padrao = [c for c in todas_classificacoes if c != "Dormente"]
         
-        classificacoes_selecionadas = st.multiselect(
-            "Selecione as classificações para analisar:",
-            options=todas_classificacoes,
-            default=classificacoes_padrao,
-            help="💡 Dica: Por padrão 'Dormentes' não são incluídos. Use Ctrl/Cmd + clique para selecionar múltiplas.",
-            key="filtro_classificacoes"
-        )
+        col_multi, col_dica = st.columns([4, 1])
+        
+        with col_multi:
+            classificacoes_selecionadas = st.multiselect(
+                "Selecione as classificações para analisar:",
+                options=todas_classificacoes,
+                default=classificacoes_padrao,
+                key="filtro_classificacoes"
+            )
+        
+        with col_dica:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.info(f"💡 {len(todas_classificacoes)} classificações disponíveis\n\n✅ Dormente está disponível para seleção")
         
         # Validar se pelo menos uma classificação foi selecionada
         if not classificacoes_selecionadas:
@@ -1312,20 +1320,29 @@ def render_aba2(aba, base, total_tarefas):
         total_geral = len(base)
         percentual = (total_selecionado / total_geral * 100) if total_geral > 0 else 0
         
-        col_info1, col_info2 = st.columns([3, 1])
+        col_info1, col_info2, col_info3 = st.columns([2, 1, 1])
         
         with col_info1:
             st.info(f"🔍 **Analisando:** {', '.join(classificacoes_selecionadas)}")
         
         with col_info2:
             st.metric(
-                "Clientes selecionados",
+                "📊 Clientes",
                 f"{total_selecionado:,}".replace(",", "."),
                 delta=f"{percentual:.1f}% do total"
             )
         
+        with col_info3:
+            # Verificar se Dormente está selecionado
+            tem_dormente = "Dormente" in classificacoes_selecionadas
+            label_dormente = "✅ Com Dormentes" if tem_dormente else "❌ Sem Dormentes"
+            st.metric(
+                "Status",
+                label_dormente,
+                help="Indica se clientes dormentes estão incluídos na análise"
+            )
+        
         st.markdown("---")
-
 
         
         # =========================================================
