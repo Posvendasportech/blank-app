@@ -1535,70 +1535,60 @@ def render_aba2(aba, base, total_tarefas):
         st.markdown("---")
 
         
-                # =========================================================
+              # =========================================================
         # 🍰 SEÇÃO 4: GRÁFICO DE PIZZA - CLASSIFICAÇÕES
         # =========================================================
         st.markdown("### 🍰 Proporção de Classificações Selecionadas")
         
         if not base_filtrada.empty:
             col_pizza, col_legenda = st.columns([2, 1])
-
-        
-        if not base.empty:
-                        # Usar base já filtrada
-
-                col_pizza, col_legenda = st.columns([2, 1])
+            
+            with col_pizza:
+                # Contar classificações
+                dist_pizza = base_filtrada["Classificação"].value_counts()
                 
-                with col_pizza:
-                    # Contar classificações
-                    dist_pizza = base_filtrada["Classificação"].value_counts()
-                    
-                    # Calcular percentuais
-                    total = dist_pizza.sum()
-                    percentuais = (dist_pizza / total * 100).round(1)
-                    
-                    # Criar visualização de pizza em texto (Streamlit não tem gráfico de pizza nativo)
-                    st.markdown("**📊 Distribuição percentual:**")
-                    
-                    # Cores para cada classificação
-                    cores_map = {
-                        "Novo": "🟦",
-                        "Promissor": "🟩",
-                        "Leal": "🟨",
-                        "Campeão": "🟧",
-                        "Em risco": "🟥"
-                    }
-                    
-                    # Criar barras de progresso como "pizza"
-                    for classificacao, qtd in dist_pizza.items():
-                        perc = percentuais[classificacao]
-                        emoji = cores_map.get(classificacao, "⬜")
-                        
-                        # Barra visual
-                        barra_tamanho = int(perc / 2)  # Dividir por 2 para caber na tela
-                        barra = "█" * barra_tamanho
-                        
-                        st.markdown(f"{emoji} **{classificacao}**: {perc}%")
-                        st.progress(perc / 100)
+                # Calcular percentuais
+                total = dist_pizza.sum()
+                percentuais = (dist_pizza / total * 100).round(1)
                 
-                with col_legenda:
-                    st.markdown("**📋 Valores absolutos:**")
+                # Criar visualização de pizza em texto
+                st.markdown("**📊 Distribuição percentual:**")
+                
+                # Cores para cada classificação
+                cores_map = {
+                    "Novo": "🟦",
+                    "Promissor": "🟩",
+                    "Leal": "🟨",
+                    "Campeão": "🟧",
+                    "Em risco": "🟥",
+                    "Dormente": "⚫"
+                }
+                
+                # Criar barras de progresso
+                for classificacao, qtd in dist_pizza.items():
+                    perc = percentuais[classificacao]
+                    emoji = cores_map.get(classificacao, "⬜")
                     
-                    for classificacao, qtd in dist_pizza.items():
-                        perc = percentuais[classificacao]
-                        emoji = cores_map.get(classificacao, "⬜")
-                        st.write(f"{emoji} **{classificacao}**")
-                        st.write(f"   {qtd:,} clientes ({perc}%)".replace(",", "."))
-                        st.write("")
-                    
-                    st.markdown("---")
-                    st.info(f"**Total analisado:** {total:,} clientes".replace(",", "."))
-                else:
-                    st.info("📭 Todos os clientes estão classificados como Dormentes")
-            else:
-                    st.warning("⚠️ Nenhum dado disponível")
+                    st.markdown(f"{emoji} **{classificacao}**: {perc}%")
+                    st.progress(perc / 100)
+            
+            with col_legenda:
+                st.markdown("**📋 Valores absolutos:**")
+                
+                for classificacao, qtd in dist_pizza.items():
+                    perc = percentuais[classificacao]
+                    emoji = cores_map.get(classificacao, "⬜")
+                    st.write(f"{emoji} **{classificacao}**")
+                    st.write(f"   {qtd:,} clientes ({perc}%)".replace(",", "."))
+                    st.write("")
+                
+                st.markdown("---")
+                st.info(f"**Total analisado:** {total:,} clientes".replace(",", "."))
+        else:
+            st.warning("⚠️ Nenhuma classificação selecionada")
         
         st.markdown("---")
+
         
         # =========================================================
         # 💰 SEÇÃO 5: RECEITA E TICKET MÉDIO POR CLASSIFICAÇÃO
