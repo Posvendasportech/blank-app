@@ -1275,45 +1275,29 @@ def render_aba2(aba, base, total_tarefas):
                 )
                 data_fim = datetime.combine(data_fim, datetime.max.time())
         
-        # ✅ Esta linha deve ter 8 espaços (não mais!)
-                st.info(f"📅 **Período analisado:** {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
+               st.info(f"📅 **Período analisado:** {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
         
         # ✅ NOVO: Filtro de Classificações
         st.markdown("### 🏷️ Filtrar Classificações")
         
-        col_filtro_class1, col_filtro_class2 = st.columns([3, 1])
+        # Obter classificações e remover valores nulos
+        if not base.empty:
+            todas_classificacoes = base["Classificação"].dropna().unique().tolist()
+            todas_classificacoes = [c for c in todas_classificacoes if c and str(c).strip()]
+            todas_classificacoes = sorted(todas_classificacoes)
+        else:
+            todas_classificacoes = []
         
-        with col_filtro_class1:
-            # Obter classificações e remover valores nulos
-            if not base.empty:
-                todas_classificacoes = base["Classificação"].dropna().unique().tolist()
-                todas_classificacoes = [c for c in todas_classificacoes if c and str(c).strip()]
-                todas_classificacoes = sorted(todas_classificacoes)
-            else:
-                todas_classificacoes = []
-            
-            # Pré-selecionar todas EXCETO Dormente
-            classificacoes_padrao = [c for c in todas_classificacoes if c != "Dormente"]
-            
-            classificacoes_selecionadas = st.multiselect(
-                "Selecione as classificações para analisar:",
-                options=todas_classificacoes,
-                default=classificacoes_padrao,
-                help="Por padrão, 'Dormentes' não são incluídos. Você pode adicionar ou remover conforme necessário.",
-                key="filtro_classificacoes"
-            )
+        # Pré-selecionar todas EXCETO Dormente
+        classificacoes_padrao = [c for c in todas_classificacoes if c != "Dormente"]
         
-        with col_filtro_class2:
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            # Botões rápidos
-            if st.button("✅ Selecionar Todas", use_container_width=True):
-                st.session_state["filtro_classificacoes"] = todas_classificacoes
-                st.rerun()
-            
-            if st.button("❌ Remover Dormentes", use_container_width=True):
-                st.session_state["filtro_classificacoes"] = [c for c in todas_classificacoes if c != "Dormente"]
-                st.rerun()
+        classificacoes_selecionadas = st.multiselect(
+            "Selecione as classificações para analisar:",
+            options=todas_classificacoes,
+            default=classificacoes_padrao,
+            help="💡 Dica: Por padrão 'Dormentes' não são incluídos. Use Ctrl/Cmd + clique para selecionar múltiplas.",
+            key="filtro_classificacoes"
+        )
         
         # Validar se pelo menos uma classificação foi selecionada
         if not classificacoes_selecionadas:
@@ -1323,7 +1307,22 @@ def render_aba2(aba, base, total_tarefas):
         # ✅ APLICAR FILTRO NA BASE
         base_filtrada = base[base["Classificação"].isin(classificacoes_selecionadas)].copy()
         
-        st.info(f"🔍 **Analisando {len(classificacoes_selecionadas)} classificação(ões):** {', '.join(classificacoes_selecionadas)}")
+        # Mostrar resumo
+        total_selecionado = len(base_filtrada)
+        total_geral = len(base)
+        percentual = (total_selecionado / total_geral * 100) if total_geral > 0 else 0
+        
+        col_info1, col_info2 = st.columns([3, 1])
+        
+        with col_info1:
+            st.info(f"🔍 **Analisando:** {', '.join(classificacoes_selecionadas)}")
+        
+        with col_info2:
+            st.metric(
+                "Clientes selecionados",
+                f"{total_selecionado:,}".replace(",", "."),
+                delta=f"{percentual:.1f}% do total"
+            )
         
         st.markdown("---")
 
