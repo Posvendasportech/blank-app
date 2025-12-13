@@ -1275,7 +1275,7 @@ def render_aba2(aba, base, total_tarefas):
                 )
                 data_fim = datetime.combine(data_fim, datetime.max.time())
         
-                st.info(f"📅 **Período analisado:** {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
+                        st.info(f"📅 **Período analisado:** {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
         
         # ✅ NOVO: Filtro de Classificações
         st.markdown("### 🏷️ Filtrar Classificações")
@@ -1283,15 +1283,13 @@ def render_aba2(aba, base, total_tarefas):
         col_filtro_class1, col_filtro_class2 = st.columns([3, 1])
         
         with col_filtro_class1:
-            # Obter todas classificações disponíveis
-            # ✅ Obter classificações e remover valores nulos
-if not base.empty:
-    todas_classificacoes = base["Classificação"].dropna().unique().tolist()
-    todas_classificacoes = [c for c in todas_classificacoes if c and str(c).strip()]
-    todas_classificacoes = sorted(todas_classificacoes)
-else:
-    todas_classificacoes = []
-
+            # Obter classificações e remover valores nulos
+            if not base.empty:
+                todas_classificacoes = base["Classificação"].dropna().unique().tolist()
+                todas_classificacoes = [c for c in todas_classificacoes if c and str(c).strip()]
+                todas_classificacoes = sorted(todas_classificacoes)
+            else:
+                todas_classificacoes = []
             
             # Pré-selecionar todas EXCETO Dormente
             classificacoes_padrao = [c for c in todas_classificacoes if c != "Dormente"]
@@ -1305,7 +1303,7 @@ else:
             )
         
         with col_filtro_class2:
-            st.markdown("<br>", unsafe_allow_html=True)  # Espaçamento
+            st.markdown("<br>", unsafe_allow_html=True)
             
             # Botões rápidos
             if st.button("✅ Selecionar Todas", use_container_width=True):
