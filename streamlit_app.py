@@ -1224,321 +1224,404 @@ def render_aba1(aba, df_dia, metas):
 
 
 def render_aba2(aba, base, total_tarefas):
+    """Aba de Indicadores e Análises com filtros de data"""
+    
     with aba:
         st.header("📊 Indicadores & Performance")
         
-        # Obter dados do histórico
+        # =========================================================
+        # 🎛️ SEÇÃO 1: FILTROS DE DATA
+        # =========================================================
+        st.markdown("### 🎛️ Filtros de Período")
+        
+        col_filtro1, col_filtro2, col_filtro3 = st.columns([2, 2, 2])
+        
+        with col_filtro1:
+            periodo = st.selectbox(
+                "Selecione o período:",
+                ["Hoje", "Últimos 7 dias", "Últimos 30 dias", "Este mês", "Personalizado"],
+                key="periodo_filtro"
+            )
+        
+        # Calcular datas baseado no período selecionado
+        hoje = datetime.now()
+        
+        if periodo == "Hoje":
+            data_inicio = hoje.replace(hour=0, minute=0, second=0)
+            data_fim = hoje.replace(hour=23, minute=59, second=59)
+        elif periodo == "Últimos 7 dias":
+            data_inicio = hoje - pd.Timedelta(days=7)
+            data_fim = hoje
+        elif periodo == "Últimos 30 dias":
+            data_inicio = hoje - pd.Timedelta(days=30)
+            data_fim = hoje
+        elif periodo == "Este mês":
+            data_inicio = hoje.replace(day=1, hour=0, minute=0, second=0)
+            data_fim = hoje
+        else:  # Personalizado
+            with col_filtro2:
+                data_inicio = st.date_input(
+                    "Data inicial:",
+                    value=hoje - pd.Timedelta(days=30),
+                    key="data_inicio_custom"
+                )
+                data_inicio = datetime.combine(data_inicio, datetime.min.time())
+            
+            with col_filtro3:
+                data_fim = st.date_input(
+                    "Data final:",
+                    value=hoje,
+                    key="data_fim_custom"
+                )
+                data_fim = datetime.combine(data_fim, datetime.max.time())
+        
+        # Mostrar período selecionado
+        st.info(f"📅 **Período analisado:** {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
+        
+        st.markdown("---")
+        
+        # =========================================================
+        # 📊 SEÇÃO 2: MÉTRICAS PRINCIPAIS (COM FILTRO)
+        # =========================================================
+        st.markdown("### 📈 Resumo do Período")
+        
+        # Carregar histórico
         df_historico = load_historico()
         
-        # =========================================================
-        # 📊 BLOCO 1: RESUMO EXECUTIVO
-        # =========================================================
-        st.markdown("### 📈 Resumo Executivo")
+        # Filtrar histórico por data
+        if not df_historico.empty and "Data_de_contato" in df_historico.columns:
+            # Converter data de contato
+            df_historico["Data_convertida"] = pd.to_datetime(
+                df_historico["Data_de_contato"], 
+                format="%d/%m/%Y %H:%M",
+                errors="coerce"
+            )
+            
+            # Filtrar pelo período
+            df_historico_filtrado = df_historico[
+                (df_historico["Data_convertida"] >= data_inicio) &
+                (df_historico["Data_convertida"] <= data_fim)
+            ]
+            
+            total_checkins = len(df_historico_filtrado)
+        else:
+            df_historico_filtrado = pd.DataFrame()
+            total_checkins = 0
         
+        # Carregar agendamentos
+        df_agendamentos = load_df_agendamentos()
+        
+        # Filtrar agendamentos por data
+        if not df_agendamentos.empty:
+            # Tentar converter data de contato
+            if "Data_de_contato" in df_agendamentos.columns:
+                df_agendamentos["Data_convertida"] = pd.to_datetime(
+                    df_agendamentos["Data_de_contato"],
+                    format="%d/%m/%Y %H:%M",
+                    errors="coerce"
+                )
+                
+                df_agendamentos_filtrado = df_agendamentos[
+                    (df_agendamentos["Data_convertida"] >= data_inicio) &
+                    (df_agendamentos["Data_convertida"] <= data_fim)
+                ]
+                
+                total_agendamentos = len(df_agendamentos_filtrado)
+            else:
+                df_agendamentos_filtrado = df_agendamentos
+                total_agendamentos = len(df_agendamentos)
+        else:
+            df_agendamentos_filtrado = pd.DataFrame()
+            total_agendamentos = 0
+        
+        # Exibir métricas
         col1, col2, col3, col4 = st.columns(4)
-        
-        # Métricas principais
-        total_clientes = len(base)
-        atendidos_hoje = len(st.session_state.get("concluidos", set()))
-        ticket_medio = base["Valor_num"].mean() if not base.empty else 0
-        valor_total = base["Valor_num"].sum() if not base.empty else 0
         
         with col1:
             st.metric(
-                "👥 Total de Clientes",
-                f"{total_clientes:,}".replace(",", "."),
-                help="Total de clientes na base"
+                "✅ Check-ins Realizados",
+                total_checkins,
+                help=f"Total de check-ins no período selecionado"
             )
         
         with col2:
             st.metric(
-                "✅ Atendidos Hoje",
-                atendidos_hoje,
-                delta=f"{(atendidos_hoje/max(total_tarefas, 1)*100):.1f}% da meta" if total_tarefas > 0 else "0%",
-                help="Clientes contatados hoje"
+                "📅 Agendamentos Criados",
+                total_agendamentos,
+                help=f"Agendamentos criados no período"
             )
         
         with col3:
+            # Calcular receita do período (histórico)
+            if not df_historico_filtrado.empty and "Valor" in df_historico_filtrado.columns:
+                # Converter valores
+                def extrair_valor(v):
+                    try:
+                        v_str = str(v).replace("R$", "").replace(".", "").replace(",", ".").strip()
+                        return float(v_str)
+                    except:
+                        return 0
+                
+                df_historico_filtrado["Valor_num"] = df_historico_filtrado["Valor"].apply(extrair_valor)
+                receita_periodo = df_historico_filtrado["Valor_num"].sum()
+            else:
+                receita_periodo = 0
+            
             st.metric(
-                "💰 Ticket Médio",
-                f"R$ {ticket_medio:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
-                help="Valor médio de compra"
+                "💰 Receita do Período",
+                f"R$ {receita_periodo:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                help="Soma dos valores de check-ins realizados"
             )
         
         with col4:
+            # Ticket médio do período
+            if total_checkins > 0 and receita_periodo > 0:
+                ticket_medio_periodo = receita_periodo / total_checkins
+            else:
+                ticket_medio_periodo = 0
+            
             st.metric(
-                "💵 Valor Total Base",
-                f"R$ {valor_total:,.0f}".replace(",", "X").replace(".", ",").replace("X", "."),
-                help="Soma total de vendas da base"
+                "🎯 Ticket Médio",
+                f"R$ {ticket_medio_periodo:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                help="Receita média por check-in"
             )
         
         st.markdown("---")
         
         # =========================================================
-        # 🏷️ BLOCO 2: DISTRIBUIÇÃO POR CLASSIFICAÇÃO
+        # 📊 SEÇÃO 3: GRÁFICO DE BARRAS - PESSOAS POR CLASSIFICAÇÃO
         # =========================================================
-        st.markdown("### 🏷️ Distribuição por Classificação")
-        
-        col_a, col_b = st.columns([2, 1])
-        
-        with col_a:
-            if not base.empty:
-                # Contar por classificação
-                dist_class = base["Classificação"].value_counts().reset_index()
-                dist_class.columns = ["Classificação", "Quantidade"]
-                
-                # Adicionar percentual
-                dist_class["Percentual"] = (dist_class["Quantidade"] / dist_class["Quantidade"].sum() * 100).round(1)
-                
-                st.dataframe(
-                    dist_class,
-                    use_container_width=True,
-                    hide_index=True
-                )
-            else:
-                st.info("Nenhum dado disponível")
-        
-        with col_b:
-            if not base.empty:
-                # Métricas por classificação
-                st.markdown("**📌 Destaques:**")
-                
-                novos = len(base[base["Classificação"] == "Novo"])
-                risco = len(base[base["Classificação"] == "Em risco"])
-                campeoes = len(base[base["Classificação"] == "Campeão"])
-                
-                st.metric("🆕 Novos", novos)
-                st.metric("⚠️ Em Risco", risco, delta=f"{(risco/total_clientes*100):.1f}%", delta_color="inverse")
-                st.metric("🏆 Campeões", campeoes, delta=f"{(campeoes/total_clientes*100):.1f}%")
-        
-        st.markdown("---")
-        
-        # =========================================================
-        # 👥 BLOCO 3: PERFORMANCE POR VENDEDOR
-        # =========================================================
-        st.markdown("### 👥 Performance por Vendedor (Hoje)")
-        
-        if not df_historico.empty:
-            # Filtrar registros de hoje
-            hoje = datetime.now().strftime("%d/%m/%Y")
-            df_hoje = df_historico[df_historico["Data_de_contato"].astype(str).str.contains(hoje, na=False)]
-            
-            if not df_hoje.empty:
-                # Agrupar por vendedor
-                perf_vendedor = df_hoje.groupby("Vendedor").agg({
-                    "Cliente": "count",
-                    "Classificação": lambda x: x.mode()[0] if len(x) > 0 else "—"
-                }).reset_index()
-                
-                perf_vendedor.columns = ["Vendedor", "Atendimentos", "Classificação Mais Comum"]
-                perf_vendedor = perf_vendedor.sort_values("Atendimentos", ascending=False)
-                
-                col_c, col_d = st.columns([3, 2])
-                
-                with col_c:
-                    st.dataframe(
-                        perf_vendedor,
-                        use_container_width=True,
-                        hide_index=True
-                    )
-                
-                with col_d:
-                    st.markdown("**🏆 Ranking do Dia:**")
-                    for idx, row in perf_vendedor.iterrows():
-                        emoji = "🥇" if idx == 0 else "🥈" if idx == 1 else "🥉" if idx == 2 else "📍"
-                        st.write(f"{emoji} **{row['Vendedor']}**: {row['Atendimentos']} atendimentos")
-            else:
-                st.info("📭 Nenhum atendimento registrado hoje")
-        else:
-            st.info("📭 Nenhum histórico disponível")
-        
-        st.markdown("---")
-        
-               # =========================================================
-        # 📅 BLOCO 4: PRÓXIMOS AGENDAMENTOS
-        # =========================================================
-        st.markdown("### 📅 Agendamentos dos Próximos 7 Dias")
-        
-        # Carregar todos agendamentos
-        df_agendamentos_todos = load_df_agendamentos()
-        
-        if not df_agendamentos_todos.empty:
-            # ✅ VERIFICAR qual coluna de data existe
-            colunas_data_possiveis = [
-                "Próxima data", 
-                "Data de chamada", 
-                "Proxima data",
-                "próxima data",
-                "Data",
-                "Data de contato"
-            ]
-            
-            coluna_data_encontrada = None
-            for col in colunas_data_possiveis:
-                if col in df_agendamentos_todos.columns:
-                    coluna_data_encontrada = col
-                    logger.info(f"✅ Coluna de data encontrada: '{col}'")
-                    break
-            
-            if coluna_data_encontrada:
-                try:
-                    # Converter próxima data
-                    df_agendamentos_todos["Próxima_data_dt"] = pd.to_datetime(
-                        df_agendamentos_todos[coluna_data_encontrada], 
-                        format="%d/%m/%Y", 
-                        errors="coerce"
-                    )
-                    
-                    # Filtrar próximos 7 dias
-                    hoje = datetime.now()
-                    proximos_7 = hoje + pd.Timedelta(days=7)
-                    
-                    df_proximos = df_agendamentos_todos[
-                        (df_agendamentos_todos["Próxima_data_dt"] >= hoje) &
-                        (df_agendamentos_todos["Próxima_data_dt"] <= proximos_7)
-                    ].copy()
-                    
-                    if not df_proximos.empty:
-                        # Ordenar por data
-                        df_proximos = df_proximos.sort_values("Próxima_data_dt")
-                        
-                        # Selecionar colunas existentes
-                        colunas_exibir = []
-                        mapeamento = {
-                            "Cliente": "Cliente",
-                            "Nome": "Cliente",
-                            coluna_data_encontrada: "Data",
-                            "Follow up": "Motivo",
-                            "Motivo": "Motivo",
-                            "Vendedor": "Responsável",
-                            "Responsavel": "Responsável"
-                        }
-                        
-                        # Construir lista de colunas disponíveis
-                        for col_original, col_nova in mapeamento.items():
-                            if col_original in df_proximos.columns and col_nova not in colunas_exibir:
-                                colunas_exibir.append((col_original, col_nova))
-                        
-                        # Criar DataFrame para exibição
-                        df_exibir = df_proximos[[c[0] for c in colunas_exibir]].copy()
-                        df_exibir.columns = [c[1] for c in colunas_exibir]
-                        
-                        st.dataframe(
-                            df_exibir,
-                            use_container_width=True,
-                            hide_index=True
-                        )
-                        
-                        # Resumo por dia
-                        st.markdown("**📊 Resumo por Dia:**")
-                        resumo_dias = df_proximos["Próxima_data_dt"].dt.date.value_counts().sort_index()
-                        
-                        if len(resumo_dias) > 0:
-                            col_e, col_f, col_g = st.columns(3)
-                            
-                            dias_semana = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-                            
-                            for i, (data, qtd) in enumerate(list(resumo_dias.items())[:7]):
-                                dia_semana = dias_semana[data.weekday()]
-                                col = [col_e, col_f, col_g][i % 3]
-                                
-                                with col:
-                                    st.metric(
-                                        f"{dia_semana} {data.strftime('%d/%m')}",
-                                        f"{qtd} agendamento(s)"
-                                    )
-                        else:
-                            st.info("📭 Nenhum agendamento nos próximos 7 dias")
-                    else:
-                        st.info("📭 Nenhum agendamento nos próximos 7 dias")
-                
-                except Exception as e:
-                    logger.error(f"❌ Erro ao processar datas de agendamento: {e}")
-                    st.error(f"⚠️ Erro ao processar datas. Verifique o formato na planilha.")
-                    
-                    # Debug: Mostrar estrutura
-                    with st.expander("🔍 Debug - Ver estrutura dos dados"):
-                        st.write("**Colunas disponíveis:**")
-                        st.write(df_agendamentos_todos.columns.tolist())
-                        st.write("**Primeiros registros:**")
-                        st.dataframe(df_agendamentos_todos.head(3))
-            else:
-                st.warning("⚠️ Nenhuma coluna de data encontrada na planilha de agendamentos")
-                
-                # Debug: Mostrar colunas disponíveis
-                with st.expander("🔍 Colunas disponíveis na planilha"):
-                    st.write(df_agendamentos_todos.columns.tolist())
-        else:
-            st.info("📭 Nenhum agendamento cadastrado")
-        
-        st.markdown("---")
-
-        
-        # =========================================================
-        # 📉 BLOCO 5: CLIENTES EM RISCO
-        # =========================================================
-        st.markdown("### ⚠️ Clientes em Risco de Churn")
+        st.markdown("### 📊 Distribuição de Clientes por Classificação")
         
         if not base.empty:
-            # Filtrar em risco ou sem compra há muito tempo
-            clientes_risco = base[
-                (base["Classificação"] == "Em risco") |
-                (base["Dias_num"].fillna(0) > 90)
-            ].copy()
+            col_grafico, col_tabela = st.columns([2, 1])
             
-            clientes_risco = clientes_risco.sort_values("Dias_num", ascending=False).head(10)
-            
-            if not clientes_risco.empty:
-                st.warning(f"⚠️ **{len(clientes_risco)} clientes** precisam de atenção urgente!")
+            with col_grafico:
+                # Contar por classificação
+                dist_class = base["Classificação"].value_counts().sort_values(ascending=True)
                 
-                df_risco_exibir = clientes_risco[["Cliente", "Classificação", "Dias_num", "Valor", "Telefone"]].copy()
-                df_risco_exibir.columns = ["Cliente", "Status", "Dias sem comprar", "Último valor", "Telefone"]
+                # Criar DataFrame para o gráfico
+                df_grafico = pd.DataFrame({
+                    "Classificação": dist_class.index,
+                    "Quantidade": dist_class.values
+                })
+                
+                # Gráfico de barras horizontal
+                st.bar_chart(
+                    df_grafico.set_index("Classificação"),
+                    height=400,
+                    use_container_width=True
+                )
+            
+            with col_tabela:
+                st.markdown("**📋 Detalhamento:**")
+                
+                # Criar tabela com percentuais
+                df_tabela = pd.DataFrame({
+                    "Classificação": dist_class.index,
+                    "Qtd": dist_class.values
+                })
+                
+                total_clientes = df_tabela["Qtd"].sum()
+                df_tabela["Percentual"] = (df_tabela["Qtd"] / total_clientes * 100).round(1).astype(str) + "%"
                 
                 st.dataframe(
-                    df_risco_exibir,
+                    df_tabela,
                     use_container_width=True,
                     hide_index=True
                 )
-            else:
-                st.success("✅ Nenhum cliente em risco crítico!")
+                
+                # Destaques
+                st.markdown("**🎯 Destaques:**")
+                maior_grupo = df_tabela.iloc[0]
+                st.success(f"**{maior_grupo['Classificação']}**: {maior_grupo['Qtd']} clientes ({maior_grupo['Percentual']})")
+        else:
+            st.warning("⚠️ Nenhum dado disponível na base")
         
         st.markdown("---")
         
         # =========================================================
-        # 💰 BLOCO 6: ANÁLISE FINANCEIRA
+        # 🍰 SEÇÃO 4: GRÁFICO DE PIZZA - CLASSIFICAÇÕES (SEM DORMENTES)
+        # =========================================================
+        st.markdown("### 🍰 Proporção de Classificações (exceto Dormentes)")
+        
+        if not base.empty:
+            # Filtrar dormentes
+            base_sem_dormentes = base[base["Classificação"] != "Dormente"].copy()
+            
+            if not base_sem_dormentes.empty:
+                col_pizza, col_legenda = st.columns([2, 1])
+                
+                with col_pizza:
+                    # Contar classificações
+                    dist_pizza = base_sem_dormentes["Classificação"].value_counts()
+                    
+                    # Calcular percentuais
+                    total = dist_pizza.sum()
+                    percentuais = (dist_pizza / total * 100).round(1)
+                    
+                    # Criar visualização de pizza em texto (Streamlit não tem gráfico de pizza nativo)
+                    st.markdown("**📊 Distribuição percentual:**")
+                    
+                    # Cores para cada classificação
+                    cores_map = {
+                        "Novo": "🟦",
+                        "Promissor": "🟩",
+                        "Leal": "🟨",
+                        "Campeão": "🟧",
+                        "Em risco": "🟥"
+                    }
+                    
+                    # Criar barras de progresso como "pizza"
+                    for classificacao, qtd in dist_pizza.items():
+                        perc = percentuais[classificacao]
+                        emoji = cores_map.get(classificacao, "⬜")
+                        
+                        # Barra visual
+                        barra_tamanho = int(perc / 2)  # Dividir por 2 para caber na tela
+                        barra = "█" * barra_tamanho
+                        
+                        st.markdown(f"{emoji} **{classificacao}**: {perc}%")
+                        st.progress(perc / 100)
+                
+                with col_legenda:
+                    st.markdown("**📋 Valores absolutos:**")
+                    
+                    for classificacao, qtd in dist_pizza.items():
+                        perc = percentuais[classificacao]
+                        emoji = cores_map.get(classificacao, "⬜")
+                        st.write(f"{emoji} **{classificacao}**")
+                        st.write(f"   {qtd:,} clientes ({perc}%)".replace(",", "."))
+                        st.write("")
+                    
+                    st.markdown("---")
+                    st.info(f"**Total analisado:** {total:,} clientes".replace(",", "."))
+            else:
+                st.info("📭 Todos os clientes estão classificados como Dormentes")
+        else:
+            st.warning("⚠️ Nenhum dado disponível")
+        
+        st.markdown("---")
+        
+        # =========================================================
+        # 💰 SEÇÃO 5: RECEITA E TICKET MÉDIO POR CLASSIFICAÇÃO
         # =========================================================
         st.markdown("### 💰 Análise Financeira por Classificação")
         
         if not base.empty:
+            # Agrupar por classificação
             analise_financeira = base.groupby("Classificação").agg({
                 "Valor_num": ["sum", "mean", "count"]
             }).reset_index()
             
-            analise_financeira.columns = ["Classificação", "Valor Total", "Ticket Médio", "Quantidade"]
-            analise_financeira = analise_financeira.sort_values("Valor Total", ascending=False)
+            analise_financeira.columns = ["Classificação", "Receita Total", "Ticket Médio", "Quantidade"]
             
-            # Formatar valores
-            analise_financeira["Valor Total"] = analise_financeira["Valor Total"].apply(
+            # Ordenar por receita
+            analise_financeira = analise_financeira.sort_values("Receita Total", ascending=False)
+            
+            # Adicionar percentual da receita
+            receita_total_geral = analise_financeira["Receita Total"].sum()
+            analise_financeira["% Receita"] = (
+                analise_financeira["Receita Total"] / receita_total_geral * 100
+            ).round(1)
+            
+            # Formatar valores para exibição
+            df_exibir = analise_financeira.copy()
+            df_exibir["Receita Total"] = df_exibir["Receita Total"].apply(
                 lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             )
-            analise_financeira["Ticket Médio"] = analise_financeira["Ticket Médio"].apply(
+            df_exibir["Ticket Médio"] = df_exibir["Ticket Médio"].apply(
                 lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             )
+            df_exibir["% Receita"] = df_exibir["% Receita"].astype(str) + "%"
             
             st.dataframe(
-                analise_financeira,
+                df_exibir,
                 use_container_width=True,
                 hide_index=True
             )
             
+            # Destaques
+            col_dest1, col_dest2, col_dest3 = st.columns(3)
+            
+            maior_receita = analise_financeira.iloc[0]
+            maior_ticket = analise_financeira.loc[analise_financeira["Ticket Médio"].idxmax()]
+            maior_volume = analise_financeira.loc[analise_financeira["Quantidade"].idxmax()]
+            
+            with col_dest1:
+                st.success(f"**💰 Maior Receita:**\n\n{maior_receita['Classificação']}\n\nR$ {maior_receita['Receita Total']:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            
+            with col_dest2:
+                st.info(f"**🎯 Maior Ticket:**\n\n{maior_ticket['Classificação']}\n\nR$ {maior_ticket['Ticket Médio']:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            
+            with col_dest3:
+                st.warning(f"**📊 Maior Volume:**\n\n{maior_volume['Classificação']}\n\n{int(maior_volume['Quantidade'])} clientes")
+            
             # Download CSV
-            csv_financeiro = analise_financeira.to_csv(index=False).encode("utf-8-sig")
+            csv_financeiro = df_exibir.to_csv(index=False).encode("utf-8-sig")
             st.download_button(
                 "📥 Baixar Análise Financeira (CSV)",
                 csv_financeiro,
                 "analise_financeira.csv",
                 use_container_width=True
             )
+        else:
+            st.warning("⚠️ Nenhum dado disponível")
+        
+        st.markdown("---")
+        
+        # =========================================================
+        # ⚠️ SEÇÃO 6: ALERTAS E RISCOS
+        # =========================================================
+        st.markdown("### ⚠️ Alertas de Clientes em Risco")
+        
+        if not base.empty:
+            col_alerta1, col_alerta2 = st.columns(2)
+            
+            with col_alerta1:
+                st.markdown("#### 🚨 **Clientes em Risco**")
+                
+                clientes_risco = base[base["Classificação"] == "Em risco"].copy()
+                clientes_risco = clientes_risco.sort_values("Dias_num", ascending=False).head(10)
+                
+                if not clientes_risco.empty:
+                    st.error(f"⚠️ **{len(base[base['Classificação'] == 'Em risco'])} clientes** precisam de atenção!")
+                    
+                    df_risco = clientes_risco[["Cliente", "Dias_num", "Valor", "Telefone"]].copy()
+                    df_risco.columns = ["Cliente", "Dias sem comprar", "Último valor", "Telefone"]
+                    
+                    st.dataframe(
+                        df_risco,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                else:
+                    st.success("✅ Nenhum cliente em risco!")
+            
+            with col_alerta2:
+                st.markdown("#### 😴 **Prestes a Ficar Dormentes**")
+                
+                # Clientes que não são dormentes mas estão há muito tempo sem comprar
+                prestes_dormentes = base[
+                    (base["Classificação"] != "Dormente") &
+                    (base["Dias_num"].fillna(0) > 120)  # Mais de 120 dias
+                ].copy()
+                
+                prestes_dormentes = prestes_dormentes.sort_values("Dias_num", ascending=False).head(10)
+                
+                if not prestes_dormentes.empty:
+                    st.warning(f"😴 **{len(prestes_dormentes)} clientes** prestes a ficar dormentes!")
+                    
+                    df_dormentes = prestes_dormentes[["Cliente", "Classificação", "Dias_num", "Telefone"]].copy()
+                    df_dormentes.columns = ["Cliente", "Status Atual", "Dias inativos", "Telefone"]
+                    
+                    st.dataframe(
+                        df_dormentes,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                else:
+                    st.success("✅ Nenhum cliente em risco de ficar dormente!")
 
 
 def render_aba3(aba):
