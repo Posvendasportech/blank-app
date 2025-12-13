@@ -1593,10 +1593,10 @@ def render_aba2(aba, base, total_tarefas):
                     
                     st.markdown("---")
                     st.info(f"**Total analisado:** {total:,} clientes".replace(",", "."))
+                else:
+                    st.info("📭 Todos os clientes estão classificados como Dormentes")
             else:
-                st.info("📭 Todos os clientes estão classificados como Dormentes")
-        else:
-            st.warning("⚠️ Nenhum dado disponível")
+                    st.warning("⚠️ Nenhum dado disponível")
         
         st.markdown("---")
         
