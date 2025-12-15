@@ -416,22 +416,31 @@ def load_historico():
         logger.error(f"Erro ao carregar histórico: {e}", exc_info=True)
         return pd.DataFrame()
 
-@st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)  # Cache de 10 segundos (muda frequentemente)
+# Cache de 10 segundos (muda frequentemente)
 @st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)
 def load_agendamentos_hoje():
     """Carrega APENAS os agendamentos para HOJE (filtrado pela 'Próxima data')"""
     try:
         client = get_gsheet_client()
-        ws = client.open(Config.SHEET_AGENDAMENTOS).worksheet("AGENDAMENTOS_ATIVOS")
-        df = pd.DataFrame(ws.get_all_records())
+        sh = client.open(Config.SHEET_AGENDAMENTOS)
+        ws = sh.worksheet("AGENDAMENTOS_ATIVOS")
         
-        if df.empty:
+        # ✅ PEGAR TODOS OS DADOS COM CABEÇALHOS
+        data = ws.get_all_values()
+        
+        if len(data) <= 1:  # Só tem cabeçalho ou está vazio
             logger.info("⚠️ Nenhum agendamento na base")
             return pd.DataFrame()
         
-        logger.info(f"📊 Total de agendamentos na base: {len(df)}")
+        # Criar DataFrame com cabeçalhos corretos
+        headers = data[0]
+        rows = data[1:]
+        df = pd.DataFrame(rows, columns=headers)
         
-        # Detectar qual coluna usar
+        logger.info(f"📊 Total de agendamentos na base: {len(df)}")
+        logger.info(f"📋 Colunas encontradas: {df.columns.tolist()}")
+        
+        # Detectar qual coluna de data usar
         if "Próxima data" in df.columns:
             col_data = "Próxima data"
         elif "Data de chamada" in df.columns:
@@ -444,7 +453,7 @@ def load_agendamentos_hoje():
         # ✅ MELHORADO: Tentar múltiplos formatos de data
         df['data_convertida'] = None
         
-        # Formato 1: YYYY/MM/DD (seu caso: 2025/12/24)
+        # Formato 1: YYYY/MM/DD
         df['data_convertida'] = pd.to_datetime(df[col_data], format='%Y/%m/%d', errors='coerce')
         
         # Formato 2: DD/MM/YYYY (se o primeiro falhar)
@@ -467,54 +476,79 @@ def load_agendamentos_hoje():
         # Data de hoje (sem hora)
         hoje = datetime.now().date()
         
+        # ✅ FILTRAR POR TIPO DE ATENDIMENTO (excluir Suporte)
+        if "Tipo de atendimento" in df.columns:
+            df = df[df["Tipo de atendimento"].isin(["Venda", "Experiência", "venda", "experiência"])].copy()
+            logger.info(f"📊 Após filtrar tipos (Venda/Experiência): {len(df)} registros")
+        
         # Filtrar por hoje
         df_hoje = df[df['data_convertida'].dt.date == hoje].copy()
         
-        # ✅ PRÉ-COMPUTAR TELEFONE LIMPO (só no df filtrado)
+        # ✅ PRÉ-COMPUTAR TELEFONE LIMPO
         if not df_hoje.empty:
             df_hoje["Telefone_limpo"] = df_hoje["Telefone"].apply(limpar_telefone)
             logger.info(f"✅ Agendamentos para hoje ({hoje.strftime('%Y/%m/%d')}): {len(df_hoje)}")
         else:
-            # ✅ DEBUG: Mostrar quais datas estão na base
             datas_unicas = df['data_convertida'].dropna().dt.date.unique()
             logger.warning(f"⚠️ Datas encontradas na base: {sorted(datas_unicas)}")
             logger.warning(f"⚠️ Procurando por: {hoje}")
             logger.warning(f"⚠️ Nenhum agendamento para hoje")
         
         return df_hoje
-
         
     except Exception as e:
         logger.error(f"❌ Erro ao carregar agendamentos de hoje: {e}", exc_info=True)
         return pd.DataFrame()
-
 @st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)
 def load_casos_suporte():
-    """Carrega APENAS casos marcados como 'Suporte'"""
+    """Carrega APENAS casos marcados como 'Suporte' na coluna J (Tipo de atendimento)"""
     try:
         client = get_gsheet_client()
-        ws = client.open(Config.SHEET_AGENDAMENTOS).worksheet("AGENDAMENTOS_ATIVOS")
-        df = pd.DataFrame(ws.get_all_records())
+        sh = client.open(Config.SHEET_AGENDAMENTOS)
+        ws = sh.worksheet("AGENDAMENTOS_ATIVOS")
         
-        if df.empty:
+        # ✅ PEGAR TODOS OS DADOS COM CABEÇALHOS
+        data = ws.get_all_values()
+        
+        if len(data) <= 1:
             logger.info("⚠️ Nenhum agendamento na base")
             return pd.DataFrame()
         
-        # Filtrar apenas "Suporte"
-        if "Tipo de atendimento" in df.columns:
-            df_suporte = df[df["Tipo de atendimento"] == "Suporte"].copy()
-            
-            if not df_suporte.empty:
-                df_suporte["Telefone_limpo"] = df_suporte["Telefone"].apply(limpar_telefone)
-            
-            logger.info(f"🛠️ Casos de suporte carregados: {len(df_suporte)}")
-            return df_suporte
-        else:
-            logger.warning("⚠️ Coluna 'Tipo de atendimento' não encontrada")
+        # Criar DataFrame com cabeçalhos corretos
+        headers = data[0]
+        rows = data[1:]
+        df = pd.DataFrame(rows, columns=headers)
+        
+        logger.info(f"📊 Total de registros na base: {len(df)}")
+        logger.info(f"📋 Colunas disponíveis: {df.columns.tolist()}")
+        
+        # ✅ VERIFICAR SE A COLUNA EXISTE
+        if "Tipo de atendimento" not in df.columns:
+            logger.error("❌ Coluna 'Tipo de atendimento' não encontrada!")
+            logger.error(f"Colunas disponíveis: {df.columns.tolist()}")
             return pd.DataFrame()
+        
+        # ✅ FILTRAR APENAS "Suporte" (case-insensitive)
+        df_suporte = df[df["Tipo de atendimento"].str.lower().str.strip() == "suporte"].copy()
+        
+        logger.info(f"🛠️ Casos de suporte encontrados: {len(df_suporte)}")
+        
+        if not df_suporte.empty:
+            # PRÉ-COMPUTAR TELEFONE LIMPO
+            df_suporte["Telefone_limpo"] = df_suporte["Telefone"].apply(limpar_telefone)
             
+            # ✅ DEBUG: Mostrar alguns exemplos
+            logger.info(f"🔍 Exemplo de casos: {df_suporte[['Cliente', 'Telefone', 'Tipo de atendimento']].head(3).to_dict('records')}")
+        else:
+            logger.warning("⚠️ Nenhum caso de suporte encontrado")
+            # ✅ DEBUG: Mostrar quais tipos existem
+            tipos_unicos = df["Tipo de atendimento"].unique()
+            logger.warning(f"⚠️ Tipos encontrados na coluna: {tipos_unicos}")
+        
+        return df_suporte
+        
     except Exception as e:
-        logger.error(f"❌ Erro ao carregar suporte: {e}", exc_info=True)
+        logger.error(f"❌ Erro ao carregar casos de suporte: {e}", exc_info=True)
         return pd.DataFrame()
 
 # =========================================================
@@ -651,9 +685,20 @@ def card_component(id_fix, row, usuario_atual):
 
 
 def agendamento_card(id_fix, row):
-    """Card completo para agendamentos ativos"""
+    """Card completo para agendamentos ativos - VERSÃO CORRIGIDA"""
     
-    nome = row.get("Cliente") or row.get("Nome", "—")
+    # ✅ TENTAR MÚLTIPLAS COLUNAS PARA PEGAR O NOME
+    nome = None
+    for col in ["Cliente", "Nome", "cliente", "nome"]:
+        if col in row and row.get(col) and str(row.get(col)).strip():
+            nome = str(row.get(col)).strip()
+            break
+    
+    # Se não encontrou nome, usar "Cliente sem nome"
+    if not nome or nome == "—":
+        nome = "⚠️ Cliente sem nome"
+        logger.warning(f"Cliente sem nome detectado. Colunas disponíveis: {row.keys()}")
+    
     telefone = row.get("Telefone", "—")
     ultima_compra = row.get("Data", "—")
     valor_gasto = safe_valor(row.get("Valor", "—"))
@@ -673,7 +718,7 @@ def agendamento_card(id_fix, row):
         font-size:15px;
         line-height:1.5;
     ">
-        <b>{nome}</b><br>
+        <b style="font-size:18px; color:#60A5FA;">📋 {nome}</b><br>
         📱 {telefone}<br><br>
         🕓 <b>Último contato:</b> {ultimo_contato}<br>
         ⏳ <b>Dias desde o último contato:</b> {dias_ult_contato}<br><br>
@@ -696,7 +741,6 @@ def agendamento_card(id_fix, row):
 
     with colA:
         if st.button("📩 Registrar conversa", key=f"ok_ag_{id_fix}"):
-            # Validar campos
             if not resumo.strip():
                 st.error("⚠️ O campo 'Resumo da conversa' é obrigatório")
             elif not novo_motivo.strip():
@@ -709,6 +753,7 @@ def agendamento_card(id_fix, row):
             acao = "pular"
 
     return acao, novo_motivo, resumo, proxima, vendedor
+
 
 def card_suporte(id_fix, row, usuario_atual):
     """Card específico para casos de SUPORTE"""
