@@ -2310,6 +2310,8 @@ def render_aba3(aba):
                 
                 st.markdown("---")
                 
+                st.markdown("---")
+                
                 # ==========================================
                 # SEÇÃO 3: AGENDAMENTOS FUTUROS
                 # ==========================================
@@ -2325,7 +2327,7 @@ def render_aba3(aba):
                     ].copy()
                     
                     if not agendamentos_cliente.empty:
-                        # Detectar coluna de data
+                        # ✅ Detectar coluna de data (múltiplas possibilidades)
                         colunas_data_possiveis = ["Próxima data", "Data de chamada", "Proxima data", "Data"]
                         coluna_data = None
                         
@@ -2335,44 +2337,111 @@ def render_aba3(aba):
                                 break
                         
                         if coluna_data:
-                            # Converter data
+                            st.info(f"🔍 Usando coluna: **{coluna_data}**")
+                            
+                            # ✅ TENTAR MÚLTIPLOS FORMATOS DE DATA
+                            # Formato 1: YYYY/MM/DD (2025/12/24)
                             agendamentos_cliente["Data_convertida"] = pd.to_datetime(
                                 agendamentos_cliente[coluna_data],
-                                format="%d/%m/%Y",
+                                format="%Y/%m/%d",
                                 errors="coerce"
                             )
                             
-                            hoje = datetime.now()
-                            agendamentos_futuros = agendamentos_cliente[
-                                agendamentos_cliente["Data_convertida"] >= hoje
-                            ].sort_values("Data_convertida")
+                            # Formato 2: DD/MM/YYYY (24/12/2025)
+                            mascara_nulas = agendamentos_cliente["Data_convertida"].isna()
+                            if mascara_nulas.any():
+                                agendamentos_cliente.loc[mascara_nulas, "Data_convertida"] = pd.to_datetime(
+                                    agendamentos_cliente.loc[mascara_nulas, coluna_data],
+                                    format="%d/%m/%Y",
+                                    errors="coerce"
+                                )
                             
-                            if not agendamentos_futuros.empty:
-                                st.success(f"✅ {len(agendamentos_futuros)} agendamento(s) futuro(s)")
+                            # Formato 3: Deixar pandas decidir (último recurso)
+                            mascara_nulas = agendamentos_cliente["Data_convertida"].isna()
+                            if mascara_nulas.any():
+                                agendamentos_cliente.loc[mascara_nulas, "Data_convertida"] = pd.to_datetime(
+                                    agendamentos_cliente.loc[mascara_nulas, coluna_data],
+                                    errors="coerce"
+                                )
+                            
+                            # ✅ DEBUG: Mostrar conversão
+                            total_datas = len(agendamentos_cliente)
+                            datas_validas = agendamentos_cliente["Data_convertida"].notna().sum()
+                            
+                            if datas_validas == 0:
+                                st.error(f"❌ Nenhuma data convertida de {total_datas} registros")
                                 
-                                for idx, agd in agendamentos_futuros.head(5).iterrows():
-                                    data_agd = agd.get(coluna_data, "—")
-                                    motivo = agd.get("Follow up", agd.get("Motivo", "—"))
-                                    vendedor = agd.get("Vendedor", "—")
-                                    st.info(f"📅 {data_agd} • {motivo} • 👤 {vendedor}")
+                                with st.expander("🔍 Debug - Ver dados brutos"):
+                                    st.write(f"**Coluna:** {coluna_data}")
+                                    st.write("**Valores originais:**")
+                                    for idx, val in enumerate(agendamentos_cliente[coluna_data].head(5)):
+                                        st.write(f"{idx+1}. `{val}` (tipo: {type(val).__name__})")
                             else:
-                                st.warning("⚠️ Nenhum agendamento futuro")
+                                st.success(f"✅ {datas_validas} de {total_datas} datas convertidas")
+                                
+                                # ✅ Comparar apenas DATA (sem hora)
+                                hoje = datetime.now().date()
+                                
+                                # Filtrar agendamentos futuros (incluindo hoje)
+                                agendamentos_futuros = agendamentos_cliente[
+                                    agendamentos_cliente["Data_convertida"].notna() &
+                                    (agendamentos_cliente["Data_convertida"].dt.date >= hoje)
+                                ].sort_values("Data_convertida")
+                                
+                                if not agendamentos_futuros.empty:
+                                    st.success(f"🎯 **{len(agendamentos_futuros)} agendamento(s) futuro(s)**")
+                                    
+                                    # ✅ Exibir em cards
+                                    for idx, agd in agendamentos_futuros.iterrows():
+                                        data_agd = agd.get(coluna_data, "—")
+                                        data_convertida = agd.get("Data_convertida")
+                                        motivo = agd.get("Follow up", agd.get("Motivo", "—"))
+                                        vendedor = agd.get("Vendedor", "—")
+                                        tipo = agd.get("Tipo de atendimento", "—")
+                                        
+                                        # Escolher emoji baseado no tipo
+                                        if tipo == "Suporte":
+                                            emoji_tipo = "🛠️"
+                                        elif tipo == "Venda":
+                                            emoji_tipo = "💰"
+                                        elif tipo == "Experiência":
+                                            emoji_tipo = "✨"
+                                        else:
+                                            emoji_tipo = "📅"
+                                        
+                                        # Calcular dias restantes
+                                        if data_convertida:
+                                            dias_restantes = (data_convertida.date() - hoje).days
+                                            if dias_restantes == 0:
+                                                urgencia = "🔴 HOJE"
+                                            elif dias_restantes == 1:
+                                                urgencia = "🟠 AMANHÃ"
+                                            elif dias_restantes <= 3:
+                                                urgencia = f"🟡 Em {dias_restantes} dias"
+                                            else:
+                                                urgencia = f"🟢 Em {dias_restantes} dias"
+                                        else:
+                                            urgencia = ""
+                                        
+                                        st.info(
+                                            f"{emoji_tipo} **{data_agd}** {urgencia}\n\n"
+                                            f"📝 {motivo}\n\n"
+                                            f"👤 {vendedor} • 🏷️ {tipo}"
+                                        )
+                                else:
+                                    st.warning("⏳ Nenhum agendamento futuro encontrado")
+                                    
+                                    # ✅ Mostrar o mais recente (mesmo que passado)
+                                    if not agendamentos_cliente.empty:
+                                        ultimo = agendamentos_cliente.sort_values("Data_convertida", ascending=False).iloc[0]
+                                        st.info(f"📌 Último agendamento foi em: **{ultimo[coluna_data]}**")
                         else:
-                            st.warning("⚠️ Não foi possível identificar a coluna de data")
+                            st.warning("⚠️ Não foi possível identificar a coluna de data nos agendamentos")
+                            st.write("**Colunas disponíveis:**", agendamentos_cliente.columns.tolist())
                     else:
                         st.info("ℹ️ Nenhum agendamento encontrado para este cliente")
                 else:
-                    st.info("ℹ️ Nenhum agendamento na base")
-                
-            else:
-                st.warning(f"❌ Nenhum cliente encontrado com o telefone **{telefone_para_buscar}**")
-                st.info("**Dicas:**")
-                st.write("- Verifique se o telefone está correto")
-                st.write("- Tente sem formatação (apenas números)")
-                st.write("- Verifique se o cliente está cadastrado na base")
-        
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        st.markdown("---")
+                    st.info("ℹ️ Nenhum agendamento na base de dados")
 
 
     
