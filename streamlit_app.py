@@ -1276,6 +1276,8 @@ def diagnostico_planilha():
 # (9) 🖥️ UI — ABAS PRINCIPAIS
 # =========================================================
 def render_aba1(aba, df_dia, metas):
+    diagnostico_planilha()  # ← ADICIONE ESTA LINHA
+    st.markdown("---")
     """
     Renderiza a aba principal de Tarefas do Dia
     Inclui: Dashboard de métricas + 3 modos de atendimento (Suporte, Agendamentos, Check-in)
