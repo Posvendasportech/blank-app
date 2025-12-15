@@ -1178,6 +1178,16 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atua
 # (9) 🖥️ UI — ABAS PRINCIPAIS
 # =========================================================
 def render_aba1(aba, df_dia, metas):
+
+     with aba:
+        # ✅ DEBUG TEMPORÁRIO - REMOVER DEPOIS
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 🐛 DEBUG Suporte")
+        df_debug_suporte = load_casos_suporte()
+        st.sidebar.write(f"Total: {len(df_debug_suporte)}")
+        if not df_debug_suporte.empty:
+            st.sidebar.write("Tipos encontrados:")
+            st.sidebar.write(df_debug_suporte["Tipo de atendimento"].value_counts())
     with aba:
         # ✅ CONTADOR GLOBAL PARA IDs ÚNICOS
         if "card_counter" not in st.session_state:
