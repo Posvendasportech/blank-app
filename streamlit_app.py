@@ -2306,9 +2306,7 @@ def render_aba3(aba):
                     "classificacao": str(row.get("Classificação", "Novo")),
                     "valor": row.get("Valor", 0)
                 }
-                
-                # ✅ FORÇAR RERUN PARA ATUALIZAR O FORMULÁRIO
-                st.rerun()
+        
 
                 
                 # Exibir informações do cliente
