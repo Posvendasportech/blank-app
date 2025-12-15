@@ -752,12 +752,13 @@ def render_sidebar():
             </p>
         """, unsafe_allow_html=True)
         
-       if st.button("🔄 Atualizar agora", use_container_width=True):
+        if st.button("🔄 Atualizar agora", use_container_width=True):
             # ✅ Usar função otimizada
             limpar_caches_volateis()
             st.success("✅ Dados sincronizados!")
             time.sleep(0.5)  # Pequena pausa para garantir que o cache foi limpo
             st.rerun()
+
 
 
         # ===========================
