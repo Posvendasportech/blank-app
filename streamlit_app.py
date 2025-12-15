@@ -532,6 +532,11 @@ def init_session_state():
     
     if "rerun_necessario" not in st.session_state:
         st.session_state["rerun_necessario"] = False
+    
+    # ✅ ADICIONAR ESTA LINHA:
+    if "aba_ativa" not in st.session_state:
+        st.session_state["aba_ativa"] = 0  # 0 = primeira aba por padrão
+
 def limpar_caches_volateis():
     """Limpa apenas caches de dados que mudam frequentemente"""
     load_em_atendimento.clear()
@@ -1213,10 +1218,12 @@ def render_aba1(aba, df_dia, metas):
                     registrar_agendamento(row, resumo, motivo, proxima.strftime("%d/%m/%Y") if proxima else "", vendedor, tipo_atendimento="Suporte")
                     remover_card(telefone, concluido=True)
                     limpar_caches_volateis()
+                    st.session_state["aba_ativa"] = 0
                     st.rerun()
                 
                 elif acao == "pular":
                     remover_card(telefone, concluido=False)
+                    st.session_state["aba_ativa"] = 0
                     st.rerun()
         
         st.markdown("<br><br>", unsafe_allow_html=True)
@@ -1371,9 +1378,11 @@ def render_aba1(aba, df_dia, metas):
                         if ac == "concluir":
                             registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
                             remover_card(row1["Telefone"], True)
+                            st.session_state["aba_ativa"] = 0
                             st.rerun()
                         elif ac == "pular":
                             remover_card(row1["Telefone"], False)
+                            st.session_state["aba_ativa"] = 0
                             st.rerun()
 
                     # CARD 2
@@ -1385,9 +1394,11 @@ def render_aba1(aba, df_dia, metas):
                             if ac2 == "concluir":
                                 registrar_agendamento(row2, res2, mot2, prox2.strftime("%d/%m/%Y") if prox2 else "", vend2)
                                 remover_card(row2["Telefone"], True)
+                                st.session_state["aba_ativa"] = 0
                                 st.rerun()
                             elif ac2 == "pular":
                                 remover_card(row2["Telefone"], False)
+                                st.session_state["aba_ativa"] = 0
                                 st.rerun()
 
         # =========================================================
@@ -1473,9 +1484,11 @@ def render_aba1(aba, df_dia, metas):
                             if ac == "concluir":
                                 registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
                                 remover_card(row1["Telefone"], True)
+                                st.session_state["aba_ativa"] = 0
                                 st.rerun()
                             elif ac == "pular":
                                 remover_card(row1["Telefone"], False)
+                                st.session_state["aba_ativa"] = 0
                                 st.rerun()
 
                         # CARD 2
@@ -1489,9 +1502,11 @@ def render_aba1(aba, df_dia, metas):
                                 if ac2 == "concluir":
                                     registrar_agendamento(row2, res2, mot2, prox2.strftime("%d/%m/%Y") if prox2 else "", vend2)
                                     remover_card(row2["Telefone"], True)
+                                    st.session_state["aba_ativa"] = 0
                                     st.rerun()
                                 elif ac2 == "pular":
                                     remover_card(row2["Telefone"], False)
+                                    st.session_state["aba_ativa"] = 0
                                     st.rerun()
 
 def render_aba2(aba, base, total_tarefas):
@@ -2556,14 +2571,35 @@ def main():
         st.session_state.forcar_aba2 = False
 
     
-    # Criar tabs com callback para salvar estado
-    abas = st.tabs([
-        "📅 Tarefas do dia",
-        "📊 Indicadores",
-        "🔎 Histórico"
-    ])
-    
-    aba1, aba2, aba3 = abas
+# ✅ Tabs com índice controlado
+aba_nomes = ["📋 Tarefas do dia", "📊 Indicadores", "🔍 Histórico/Pesquisa"]
+
+# Inicializar aba ativa se não existir
+if "aba_ativa" not in st.session_state:
+    st.session_state["aba_ativa"] = 0
+
+# Criar abas - Streamlit 1.31+ suporta on_change
+aba_selecionada = st.radio(
+    "Navegação",
+    options=list(range(len(aba_nomes))),
+    format_func=lambda x: aba_nomes[x],
+    index=st.session_state["aba_ativa"],
+    horizontal=True,
+    label_visibility="collapsed",
+    key="navegacao_abas"
+)
+
+# Atualizar estado quando mudar de aba manualmente
+if aba_selecionada != st.session_state["aba_ativa"]:
+    st.session_state["aba_ativa"] = aba_selecionada
+
+# Renderizar conteúdo baseado na aba selecionada
+if st.session_state["aba_ativa"] == 0:
+    render_aba1(None, df_dia, metas)  # Aba 1
+elif st.session_state["aba_ativa"] == 1:
+    render_aba2(None)  # Aba 2
+elif st.session_state["aba_ativa"] == 2:
+    render_aba3(None)  # Aba 3
 
 
     render_aba1(aba1, df_dia, metas)
