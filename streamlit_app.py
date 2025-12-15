@@ -1179,63 +1179,19 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atua
 # =========================================================
 def render_aba1(aba, df_dia, metas):
     with aba:
-        # ✅ NOVO: Obter e validar usuário atual
+        # ✅ CONTADOR GLOBAL PARA IDs ÚNICOS
+        if "card_counter" not in st.session_state:
+            st.session_state["card_counter"] = 0
+        
         usuario_atual = obter_usuario_atual()
         
         if not usuario_atual or usuario_atual.strip() == "":
             st.warning("⚠️ **Por favor, identifique-se na barra lateral antes de continuar**")
             st.info("👈 Digite seu nome no campo 'Seu nome' na sidebar")
             st.stop()
-        # ==========================================
-        # SEÇÃO 1: ACOMPANHAMENTO DE SUPORTE
-        # ==========================================
-        st.markdown("## 🛠️ Acompanhamento de Suporte")
-        st.markdown("---")
         
-        df_suporte = load_casos_suporte()
-        
-        if df_suporte.empty:
-            st.info("✅ Nenhum caso de suporte pendente")
-        else:
-            total_suporte = len(df_suporte)
-            concluidos_suporte = len([t for t in df_suporte["Telefone"] if str(t) in st.session_state["concluidos"]])
-            
-            st.markdown(f"**📊 Casos pendentes:** {total_suporte - concluidos_suporte}/{total_suporte}")
-            
-            if total_suporte > 0:
-                progresso = concluidos_suporte / total_suporte
-                st.progress(progresso)
-            
-            st.markdown("---")
-            
-            # Exibir cards de suporte
-            for idx, row in df_suporte.iterrows():
-                telefone = str(row.get("Telefone", ""))
-                
-                if telefone in st.session_state["concluidos"] or telefone in st.session_state["pulados"]:
-                    continue
-                
-                id_fix = f"suporte_{limpar_telefone(telefone)}"
-                
-                acao, motivo, resumo, proxima, vendedor = card_suporte(id_fix, row, usuario_atual)
-                
-                if acao == "concluir":
-                    registrar_agendamento(row, resumo, motivo, proxima.strftime("%d/%m/%Y") if proxima else "", vendedor, tipo_atendimento="Suporte")
-                    remover_card(telefone, concluido=True)
-                    limpar_caches_volateis()
-                    st.session_state["aba_ativa"] = 0
-                    st.rerun()
-                
-                elif acao == "pular":
-                    remover_card(telefone, concluido=False)
-                    st.session_state["aba_ativa"] = 0
-                    st.rerun()
-        
-        st.markdown("<br><br>", unsafe_allow_html=True)
-
-        
-        # ✅ NOVO: Auto-refresh suave a cada 30 segundos
-        if 'last_refresh' not in st.session_state:
+        # Auto-refresh
+        if "last_refresh" not in st.session_state:
             st.session_state.last_refresh = datetime.now()
         
         tempo_decorrido = (datetime.now() - st.session_state.last_refresh).total_seconds()
@@ -1244,9 +1200,112 @@ def render_aba1(aba, df_dia, metas):
             load_em_atendimento.clear()
             load_agendamentos_hoje.clear()
             st.session_state.last_refresh = datetime.now()
-            logger.info("🔄 Auto-refresh de dados executado (30s)")
+            logger.info("Auto-refresh de dados executado (30s)")
+        
+        st.header("Tarefas do dia")
+        
+        # ==========================================
+        # ✅ SEÇÃO 1: ACOMPANHAMENTO DE SUPORTE (NOVA)
+        # ==========================================
+        st.markdown("## 🛠️ Acompanhamento de Suporte")
+        st.markdown("Casos prioritários que precisam de acompanhamento até resolução")
+        st.markdown("---")
+        
+        df_suporte = load_casos_suporte()
+        
+        if df_suporte.empty:
+            st.info("✅ Nenhum caso de suporte pendente no momento")
+        else:
+            total_suporte = len(df_suporte)
+            concluidos_suporte = len([t for t in df_suporte["Telefone"] if str(t) in st.session_state["concluidos"]])
+            
+            col_prog_sup, col_meta_sup = st.columns([3, 1])
+            with col_prog_sup:
+                st.markdown(f"**📊 Casos pendentes:** {total_suporte - concluidos_suporte}/{total_suporte}")
+                if total_suporte > 0:
+                    progresso_sup = concluidos_suporte / total_suporte
+                    st.progress(progresso_sup)
+            
+            with col_meta_sup:
+                st.metric("🎯 Resolvidos", concluidos_suporte)
+            
+            st.markdown("---")
+            
+            # ✅ Exibir cards de suporte (2 por linha)
+            df_suporte_pendente = df_suporte[
+                ~df_suporte["Telefone"].isin(st.session_state["concluidos"]) &
+                ~df_suporte["Telefone"].isin(st.session_state["pulados"])
+            ]
+            
+            if df_suporte_pendente.empty:
+                st.success("🎉 Todos os casos de suporte foram atendidos!")
+            else:
+                for i in range(0, len(df_suporte_pendente), 2):
+                    col1, col2 = st.columns(2)
+                    
+                    # CARD SUPORTE 1
+                    row1 = df_suporte_pendente.iloc[i]
+                    with col1:
+                        st.session_state["card_counter"] += 1
+                        id_fix = f"suporte_{limpar_telefone(row1['Telefone'])}_{st.session_state['card_counter']}"
+                        
+                        acao, motivo, resumo, proxima, vendedor = card_suporte(id_fix, row1, usuario_atual)
+                        
+                        if acao == "concluir":
+                            registrar_agendamento(
+                                row1, 
+                                resumo, 
+                                motivo, 
+                                proxima.strftime("%d/%m/%Y") if proxima else "", 
+                                vendedor, 
+                                tipo_atendimento="Suporte"
+                            )
+                            remover_card(row1["Telefone"], concluido=True)
+                            remover_lock(row1["Telefone"])
+                            limpar_caches_volateis()
+                            st.rerun()
+                        
+                        elif acao == "pular":
+                            remover_card(row1["Telefone"], concluido=False)
+                            remover_lock(row1["Telefone"])
+                            st.rerun()
+                    
+                    # CARD SUPORTE 2
+                    if i + 1 < len(df_suporte_pendente):
+                        row2 = df_suporte_pendente.iloc[i + 1]
+                        with col2:
+                            st.session_state["card_counter"] += 1
+                            id_fix = f"suporte_{limpar_telefone(row2['Telefone'])}_{st.session_state['card_counter']}"
+                            
+                            acao2, motivo2, resumo2, proxima2, vendedor2 = card_suporte(id_fix, row2, usuario_atual)
+                            
+                            if acao2 == "concluir":
+                                registrar_agendamento(
+                                    row2, 
+                                    resumo2, 
+                                    motivo2, 
+                                    proxima2.strftime("%d/%m/%Y") if proxima2 else "", 
+                                    vendedor2, 
+                                    tipo_atendimento="Suporte"
+                                )
+                                remover_card(row2["Telefone"], concluido=True)
+                                remover_lock(row2["Telefone"])
+                                limpar_caches_volateis()
+                                st.rerun()
+                            
+                            elif acao2 == "pular":
+                                remover_card(row2["Telefone"], concluido=False)
+                                remover_lock(row2["Telefone"])
+                                st.rerun()
+        
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        # ==========================================
+        # SEÇÃO 2: AGENDAMENTOS ATIVOS (código existente continua aqui)
+        # ==========================================
+        st.markdown("## 📅 Agendamentos Ativos para Hoje")
+        # ... resto do código existente da aba1 ...
 
-        st.header("🎯 Tarefas do dia")
 
         # =========================================================
         # 🔍 Carregar agendamentos e fazer JOIN com base principal
