@@ -843,7 +843,7 @@ def _salvar_no_sheets_com_retry(ws_hist, ws_ag, dados, proxima_data):
         logger.info(f"✅ Agendamento salvo")
 
 
-registrar_agendamento(row_ficticia, resumo, motivo, proxima_data, vendedor, tipo_atendimento=tipo_atendimento):
+def registrar_agendamento(row_ficticia, resumo, motivo, proxima_data, vendedor, tipo_atendimento=tipo_atendimento):
 
     logger.info(f"Iniciando registro para: {row.get('Cliente', 'N/A')} - Tel: {row.get('Telefone', 'N/A')}")
     
