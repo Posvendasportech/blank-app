@@ -470,21 +470,19 @@ def load_agendamentos_hoje():
         # Filtrar por hoje
         df_hoje = df[df['data_convertida'].dt.date == hoje].copy()
         
-        logger.info(f"✅ Agendamentos para hoje ({hoje.strftime('%Y/%m/%d')}): {len(df_hoje)}")
-        
-         if not df.empty:
-            # ✅ PRÉ-COMPUTAR TELEFONE LIMPO (economiza tempo depois)
-            df["Telefone_limpo"] = df["Telefone"].apply(limpar_telefone)
-            
-            logger.info(f"✅ Agendamentos de hoje carregados: {len(df)}")
-            return df
+        # ✅ PRÉ-COMPUTAR TELEFONE LIMPO (só no df filtrado)
+        if not df_hoje.empty:
+            df_hoje["Telefone_limpo"] = df_hoje["Telefone"].apply(limpar_telefone)
+            logger.info(f"✅ Agendamentos para hoje ({hoje.strftime('%Y/%m/%d')}): {len(df_hoje)}")
         else:
             # ✅ DEBUG: Mostrar quais datas estão na base
             datas_unicas = df['data_convertida'].dropna().dt.date.unique()
             logger.warning(f"⚠️ Datas encontradas na base: {sorted(datas_unicas)}")
             logger.warning(f"⚠️ Procurando por: {hoje}")
+            logger.warning(f"⚠️ Nenhum agendamento para hoje")
         
         return df_hoje
+
         
     except Exception as e:
         logger.error(f"❌ Erro ao carregar agendamentos de hoje: {e}", exc_info=True)
