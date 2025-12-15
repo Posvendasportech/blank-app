@@ -2046,12 +2046,6 @@ def render_aba3(aba):
                 # =====================================================
                 # 📋 SEÇÃO 1: DADOS ATUAIS DO CLIENTE
                 # =====================================================
-                # ... TODO O RESTO DO CÓDIGO CONTINUA AQUI ...
-                # (mantenha tudo igual das seções 1, 2, 3 e 4)
-
-                # =====================================================
-                # 📋 SEÇÃO 1: DADOS ATUAIS DO CLIENTE
-                # =====================================================
                 st.markdown("### 👤 Dados do Cliente")
                 
                 cliente = cliente_encontrado.iloc[0]
@@ -2059,31 +2053,19 @@ def render_aba3(aba):
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    st.metric(
-                        "👤 Nome",
-                        cliente.get("Cliente", "—")
-                    )
+                    st.metric("👤 Nome", cliente.get("Cliente", "—"))
                 
                 with col2:
-                    st.metric(
-                        "🏷️ Classificação",
-                        cliente.get("Classificação", "—")
-                    )
+                    st.metric("🏷️ Classificação", cliente.get("Classificação", "—"))
                 
                 with col3:
                     valor_formatado = safe_valor(cliente.get("Valor", "—"))
-                    st.metric(
-                        "💰 Último Valor",
-                        valor_formatado
-                    )
+                    st.metric("💰 Último Valor", valor_formatado)
                 
                 with col4:
                     dias = cliente.get("Dias_num", "—")
                     if pd.notna(dias):
-                        st.metric(
-                            "📅 Dias desde compra",
-                            f"{int(dias)} dias"
-                        )
+                        st.metric("📅 Dias desde compra", f"{int(dias)} dias")
                     else:
                         st.metric("📅 Dias desde compra", "—")
                 
@@ -2110,7 +2092,7 @@ def render_aba3(aba):
                 if not df_agendamentos.empty:
                     # Buscar agendamentos deste telefone
                     agendamentos_cliente = df_agendamentos[
-                        df_agendamentos["Telefone"].astype(str).apply(limpar_telefone) == telefone_limpo
+                        df_agendamentos["Telefone_limpo"] == telefone_limpo
                     ].copy()
                     
                     if not agendamentos_cliente.empty:
@@ -2165,7 +2147,7 @@ def render_aba3(aba):
                 if not df_historico.empty:
                     # Buscar histórico deste telefone
                     historico_cliente = df_historico[
-                        df_historico["Telefone"].astype(str).apply(limpar_telefone) == telefone_limpo
+                        df_historico["Telefone_limpo"] == telefone_limpo
                     ].copy()
                     
                     if not historico_cliente.empty:
@@ -2198,11 +2180,7 @@ def render_aba3(aba):
                         df_exibir = historico_cliente[[c[0] for c in colunas_exibir]].copy()
                         df_exibir.columns = [c[1] for c in colunas_exibir]
                         
-                        st.dataframe(
-                            df_exibir,
-                            use_container_width=True,
-                            hide_index=True
-                        )
+                        st.dataframe(df_exibir, use_container_width=True, hide_index=True)
                         
                         # Download histórico
                         csv_historico = df_exibir.to_csv(index=False).encode("utf-8-sig")
@@ -2257,20 +2235,19 @@ def render_aba3(aba):
                             st.success(f"✅ Agendamento criado para {proxima_data_novo.strftime('%d/%m/%Y')}!")
                             st.balloons()
                             
-                            # Aguardar 2 segundos e recarregar
-                            import time
-                            time.sleep(2)
-                            st.rerun()
+                            # Limpar cache de agendamentos
+                            load_df_agendamentos.clear()
+                            
+                            st.info("🔄 Agendamento registrado! A página será atualizada automaticamente.")
             
             else:
-                st.warning(f"❌ Nenhum cliente encontrado com o telefone: **{telefone_busca}**")
+                # Cliente não encontrado
+                st.warning(f"❌ Nenhum cliente encontrado com o telefone: **{telefone_para_buscar}**")
                 st.info("💡 **Dicas:**")
                 st.write("- Verifique se o telefone está correto")
                 st.write("- Tente sem formatação (apenas números)")
                 st.write("- Verifique se o cliente está cadastrado na base")
-        
-        elif buscar and not telefone_limpo:
-            st.warning("⚠️ Digite um telefone válido para pesquisar")
+                st.write("- Use o DEBUG acima para ver exemplos de telefones na base")
 
 # =========================================================
 # (10) 🚀 MAIN FLOW
