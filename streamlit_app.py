@@ -556,6 +556,11 @@ def card_component(id_fix, row, usuario_atual):
     
     telefone = str(row.get("Telefone", ""))
     
+    # ✅ GARANTIR ID ÚNICO - adicionar timestamp se necessário
+    import hashlib
+    unique_id = hashlib.md5(f"{id_fix}_{telefone}_{row.get('Cliente', '')}".encode()).hexdigest()[:8]
+
+    
     # ✅ VERSÃO CORRIGIDA: Só bloqueia se REALMENTE tiver outro usuário
     lock_key = f"lock_criado_{id_fix}"
     if lock_key not in st.session_state:
@@ -607,7 +612,7 @@ def card_component(id_fix, row, usuario_atual):
         st.markdown(header_html, unsafe_allow_html=True)
 
         # Usar FORM para evitar reruns ao digitar
-        with st.form(key=f"form_{id_fix}", clear_on_submit=False):
+        with st.form(key=f"form_{unique_id}", clear_on_submit=False):
             vendedor = st.selectbox("Responsável", Config.VENDEDORES, key=f"vend_{id_fix}")
             motivo = st.text_input("Motivo do contato", key=f"mot_{id_fix}")
             resumo = st.text_area("Resumo da conversa", key=f"res_{id_fix}", height=80)
