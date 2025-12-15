@@ -1238,20 +1238,75 @@ def render_aba2(aba, base, total_tarefas):
                 # =========================================================
         # 🎛️ SEÇÃO 1: FILTROS DE DATA
         # =========================================================
-        st.markdown("### 🎛️ Filtros de Período")
+                st.markdown("### 🎛️ Filtros de Período e Classificações")
         
-        col_filtro1, col_filtro2, col_filtro3 = st.columns([2, 2, 2])
-        
-        with col_filtro1:
-            periodo = st.selectbox(
-                "Selecione o período:",
-                ["Hoje", "Últimos 7 dias", "Últimos 30 dias", "Este mês", "Personalizado"],
-                key="periodo_filtro"
+        # ✅ USAR FORM para evitar reruns constantes
+        with st.form(key="filtros_aba2", clear_on_submit=False):
+            col_filtro1, col_filtro2, col_filtro3 = st.columns([2, 2, 2])
+            
+            with col_filtro1:
+                periodo = st.selectbox(
+                    "Selecione o período:",
+                    ["Hoje", "Últimos 7 dias", "Últimos 30 dias", "Este mês", "Personalizado"],
+                    key="periodo_filtro"
+                )
+            
+            # Calcular datas baseado no período selecionado
+            hoje = datetime.now()
+            
+            # Mostrar date pickers se for personalizado
+            mostrar_custom = (periodo == "Personalizado")
+            
+            if mostrar_custom:
+                with col_filtro2:
+                    data_inicio = st.date_input(
+                        "Data inicial:",
+                        value=hoje - pd.Timedelta(days=30),
+                        key="data_inicio_custom"
+                    )
+                
+                with col_filtro3:
+                    data_fim = st.date_input(
+                        "Data final:",
+                        value=hoje,
+                        key="data_fim_custom"
+                    )
+            
+            st.markdown("---")
+            
+            # Filtro de classificações
+            if not base.empty:
+                todas_classificacoes = base["Classificação"].dropna().unique().tolist()
+                todas_classificacoes = [c for c in todas_classificacoes if c and str(c).strip()]
+                todas_classificacoes = sorted(todas_classificacoes)
+            else:
+                todas_classificacoes = []
+            
+            classificacoes_padrao = [c for c in todas_classificacoes if c != "Dormente"]
+            
+            classificacoes_selecionadas = st.multiselect(
+                "🏷️ Selecione as classificações:",
+                options=todas_classificacoes,
+                default=classificacoes_padrao,
+                key="filtro_classificacoes"
             )
+            
+            # ✅ BOTÃO APLICAR (só recarrega quando clicar)
+            col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
+            
+            with col_btn1:
+                aplicar = st.form_submit_button("🔍 Aplicar Filtros", use_container_width=True, type="primary")
+            
+            with col_btn2:
+                limpar = st.form_submit_button("🔄 Resetar", use_container_width=True)
         
-        # Calcular datas baseado no período selecionado
-        hoje = datetime.now()
+        # ✅ Processar filtros APÓS o form
+        if limpar:
+            st.session_state.filtro_classificacoes = classificacoes_padrao
+            st.session_state.periodo_filtro = "Últimos 30 dias"
+            st.rerun()
         
+        # Calcular datas finais
         if periodo == "Hoje":
             data_inicio = hoje.replace(hour=0, minute=0, second=0)
             data_fim = hoje.replace(hour=23, minute=59, second=59)
@@ -1265,63 +1320,23 @@ def render_aba2(aba, base, total_tarefas):
             data_inicio = hoje.replace(day=1, hour=0, minute=0, second=0)
             data_fim = hoje
         else:  # Personalizado
-            with col_filtro2:
-                data_inicio = st.date_input(
-                    "Data inicial:",
-                    value=hoje - pd.Timedelta(days=30),
-                    key="data_inicio_custom"
-                )
+            if mostrar_custom:
                 data_inicio = datetime.combine(data_inicio, datetime.min.time())
-            
-            with col_filtro3:
-                data_fim = st.date_input(
-                    "Data final:",
-                    value=hoje,
-                    key="data_fim_custom"
-                )
                 data_fim = datetime.combine(data_fim, datetime.max.time())
+            else:
+                data_inicio = hoje - pd.Timedelta(days=30)
+                data_fim = hoje
         
-        st.info(f"📅 **Período analisado:** {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
+        st.info(f"📅 **Período:** {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
         
-        # =========================================================
-        # 🏷️ FILTRO DE CLASSIFICAÇÕES
-        # =========================================================
-        st.markdown("### 🏷️ Filtrar Classificações")
-        
-        # Obter todas classificações disponíveis (incluindo Dormente)
-        if not base.empty:
-            todas_classificacoes = base["Classificação"].dropna().unique().tolist()
-            todas_classificacoes = [c for c in todas_classificacoes if c and str(c).strip()]
-            todas_classificacoes = sorted(todas_classificacoes)
-        else:
-            todas_classificacoes = []
-        
-        # ✅ Pré-selecionar todas EXCETO Dormente (mas Dormente fica disponível para seleção)
-        classificacoes_padrao = [c for c in todas_classificacoes if c != "Dormente"]
-        
-        col_multi, col_dica = st.columns([4, 1])
-        
-        with col_multi:
-            classificacoes_selecionadas = st.multiselect(
-                "Selecione as classificações para analisar:",
-                options=todas_classificacoes,
-                default=classificacoes_padrao,
-                key="filtro_classificacoes"
-            )
-        
-        with col_dica:
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.info(f"💡 {len(todas_classificacoes)} classificações disponíveis\n\n✅ Dormente está disponível para seleção")
-        
-        # Validar se pelo menos uma classificação foi selecionada
+        # Validar classificações
         if not classificacoes_selecionadas:
-            st.warning("⚠️ Selecione pelo menos uma classificação para visualizar os indicadores")
+            st.warning("⚠️ Selecione pelo menos uma classificação")
             st.stop()
         
-        # ✅ APLICAR FILTRO NA BASE
+        # Aplicar filtro
         base_filtrada = base[base["Classificação"].isin(classificacoes_selecionadas)].copy()
         
-        # Mostrar resumo
         total_selecionado = len(base_filtrada)
         total_geral = len(base)
         percentual = (total_selecionado / total_geral * 100) if total_geral > 0 else 0
@@ -1339,14 +1354,9 @@ def render_aba2(aba, base, total_tarefas):
             )
         
         with col_info3:
-            # Verificar se Dormente está selecionado
             tem_dormente = "Dormente" in classificacoes_selecionadas
             label_dormente = "✅ Com Dormentes" if tem_dormente else "❌ Sem Dormentes"
-            st.metric(
-                "Status",
-                label_dormente,
-                help="Indica se clientes dormentes estão incluídos na análise"
-            )
+            st.metric("Status", label_dormente)
         
         st.markdown("---")
 
