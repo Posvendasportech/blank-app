@@ -2528,13 +2528,20 @@ else:
                         "Telefone": telefone_novo,
                         "Compras": 0
                     }
-                    
-                    try:
+                                try:
                         registrar_agendamento(
                             row_ficticia,
                             resumo_novo if resumo_novo.strip() else "Agendamento criado via pesquisa",
                             motivo_novo,
-                            proxima_data_novo
+                            proxima_data_novo.strftime("%d/%m/%Y"),
+                            vendedor_novo,
+                            tipo_atendimento=tipo_atendimento
+                        )  # ✅ FALTAVA ESTE PARÊNTESE
+                        
+                        # Limpar caches
+                        load_agendamentos_ativos.clear()
+                        load_df_agendamentos.clear()
+                        load_casos_suporte.clear()
 
 
 # =========================================================
