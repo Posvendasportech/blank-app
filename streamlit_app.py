@@ -2220,13 +2220,16 @@ def render_aba3(aba):
                 key="buscar_telefone",
                 placeholder="Ex: (11) 98765-4321 ou 11987654321"
             )
-        
+                
         with col_busca2:
-            st.write("")  # Espaçamento
-            st.write("")  # Espaçamento
-            buscar = st.button("🔍 Buscar", use_container_width=True)
-        
-        if buscar and telefone_para_buscar.strip():
+            st.write("")  
+            st.write("")  
+            # ✅ Não usar botão - usar auto-busca quando digitar
+    
+            # ✅ BUSCAR AUTOMATICAMENTE quando tiver pelo menos 8 dígitos
+            if telefone_para_buscar.strip() and len(limpar_telefone(telefone_para_buscar)) >= 8:
+
+
             telefone_limpo = limpar_telefone(telefone_para_buscar)
             
             # Carregar base de dados
@@ -2368,34 +2371,90 @@ def render_aba3(aba):
         
         st.markdown("<br><br>", unsafe_allow_html=True)
         st.markdown("---")
-        
+
+        # ==========================================
+# PREPARAR DADOS PARA O FORMULÁRIO
+# ==========================================
+
+# ✅ NOVO: Se encontrou cliente, salvar no session_state
+if buscar and not cliente_encontrado.empty:
+    st.session_state["cliente_selecionado"] = {
+        "nome": row["Cliente"],
+        "telefone": row["Telefone"],
+        "classificacao": row.get("Classificação", "Novo"),
+        "valor": row.get("Valor", 0)
+    }
+else:
+    # Se não buscou, verificar se já tem no session_state
+    if "cliente_selecionado" not in st.session_state:
+        st.session_state["cliente_selecionado"] = None
+
+
+    
         # ==========================================
         # SEÇÃO 4: CRIAR NOVO AGENDAMENTO
         # ==========================================
         st.subheader("➕ Criar Novo Agendamento")
-        st.info("💡 Use esta seção para agendar um cliente que NÃO está na lista de tarefas do dia")
+
+# ✅ MOSTRAR SE TEM CLIENTE SELECIONADO
+dados_cliente = st.session_state.get("cliente_selecionado", None)
+
+if dados_cliente:
+    col_aviso, col_limpar = st.columns([3, 1])
+    with col_aviso:
+        st.info(f"📌 **Cliente selecionado:** {dados_cliente['nome']} • {dados_cliente['telefone']}")
+    with col_limpar:
+        if st.button("🗑️ Limpar seleção"):
+            st.session_state["cliente_selecionado"] = None
+            st.rerun()
+else:
+    st.info("💡 Busque um cliente acima OU preencha manualmente abaixo")
+
+st.markdown("---")
+
         
         with st.form(key="form_criar_agendamento", clear_on_submit=False):
             col_form1, col_form2 = st.columns(2)
             
             with col_form1:
-                cliente_novo = st.text_input(
-                    "Nome do Cliente *",
-                    key="cliente_novo",
-                    placeholder="Digite o nome completo"
-                )
-                
-                telefone_novo = st.text_input(
-                    "Telefone *",
-                    key="telefone_novo",
-                    placeholder="(11) 98765-4321"
-                )
-                
-                classificacao_nova = st.selectbox(
-                    "Classificação",
-                    ["Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"],
-                    key="classificacao_nova"
-                )
+    # ✅ PEGAR VALORES DO SESSION STATE (se tiver)
+    dados_cliente = st.session_state.get("cliente_selecionado", None)
+    
+    cliente_novo = st.text_input(
+        "Nome do Cliente *",
+        value=dados_cliente["nome"] if dados_cliente else "",  # ✅ PREENCHE AUTO
+        key="cliente_novo",
+        placeholder="Digite o nome completo",
+        disabled=dados_cliente is not None  # ✅ TRAVA SE JÁ TEM CLIENTE
+    )
+    
+    telefone_novo = st.text_input(
+        "Telefone *",
+        value=dados_cliente["telefone"] if dados_cliente else "",  # ✅ PREENCHE AUTO
+        key="telefone_novo",
+        placeholder="(11) 98765-4321",
+        disabled=dados_cliente is not None  # ✅ TRAVA SE JÁ TEM CLIENTE
+    )
+    
+    # ✅ SELECTBOX COM ÍNDICE CORRETO
+    opcoes_class = ["Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
+    
+    if dados_cliente:
+        # Encontrar índice da classificação atual
+        try:
+            indice_class = opcoes_class.index(dados_cliente["classificacao"])
+        except ValueError:
+            indice_class = 0
+    else:
+        indice_class = 0
+    
+    classificacao_nova = st.selectbox(
+        "Classificação",
+        opcoes_class,
+        index=indice_class,  # ✅ PRÉ-SELECIONA A CORRETA
+        key="classificacao_nova"
+    )
+
             
             with col_form2:
                 vendedor_novo = st.selectbox(
