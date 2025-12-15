@@ -1001,14 +1001,14 @@ def render_aba1(aba, df_dia, metas):
             st.warning("⚠️ **Por favor, identifique-se na barra lateral antes de continuar**")
             st.info("👈 Digite seu nome no campo 'Seu nome' na sidebar")
             st.stop()
-        # ✅ NOVO: Auto-refresh suave a cada 30 segundos (só recarrega dados, não a página)
+        
+        # ✅ NOVO: Auto-refresh suave a cada 30 segundos
         if 'last_refresh' not in st.session_state:
             st.session_state.last_refresh = datetime.now()
         
         tempo_decorrido = (datetime.now() - st.session_state.last_refresh).total_seconds()
         
-        if tempo_decorrido > 30:  # 30 segundos
-            # Limpar apenas caches voláteis (não perde o que está digitando)
+        if tempo_decorrido > 30:
             load_em_atendimento.clear()
             load_agendamentos_hoje.clear()
             st.session_state.last_refresh = datetime.now()
@@ -1019,32 +1019,24 @@ def render_aba1(aba, df_dia, metas):
         # =========================================================
         # 🔍 Carregar agendamentos e fazer JOIN com base principal
         # =========================================================
-        # ✅ NOVO: Usar função otimizada que já filtra por hoje
         df_ag_hoje = load_agendamentos_hoje()
-        
-        # Carregar base completa para join
         df_base_completa = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
         
-        # ✅ FAZER JOIN COM BASE PRINCIPAL PARA PEGAR DADOS COMPLETOS
         if not df_ag_hoje.empty and not df_base_completa.empty:
-            # Limpar telefones para join
             df_ag_hoje["Telefone_limpo"] = df_ag_hoje["Telefone"].apply(limpar_telefone)
-            
-            # Fazer merge com base principal
             df_ag_hoje = df_ag_hoje.merge(
                 df_base_completa[["Telefone_limpo", "Dias_num", "Compras", "Data"]],
                 on="Telefone_limpo",
                 how="left",
                 suffixes=("", "_base")
             )
-            
             logger.info(f"✅ Join realizado: {len(df_ag_hoje)} agendamentos com dados da base")
 
         qtd_checkin = len(df_dia)
         qtd_agendamentos = len(df_ag_hoje)
         total_dia = qtd_checkin + qtd_agendamentos
 
-        # Contar apenas concluídos que estão no total_dia
+        # Contar concluídos
         telefones_do_dia = set()
         if not df_dia.empty:
             telefones_do_dia.update(df_dia["Telefone"].astype(str).tolist())
@@ -1053,20 +1045,17 @@ def render_aba1(aba, df_dia, metas):
         
         concluidos_hoje = len(st.session_state["concluidos"].intersection(telefones_do_dia))
 
-        # Garantir progresso entre 0.0 e 1.0
+        # Progresso
         if total_dia > 0:
             progresso = min(concluidos_hoje / total_dia, 1.0)
         else:
             progresso = 0.0
 
-        # ---------------------------------------------------------
         # Barra de progresso
-        # ---------------------------------------------------------
         st.markdown("### Progresso do Dia")
         st.progress(progresso)
         st.write(f"**{concluidos_hoje} de {total_dia} contatos concluídos** ({progresso*100:.1f}%)")
 
-        # Balões aparecem apenas uma vez
         if "baloes_mostrados" not in st.session_state:
             st.session_state["baloes_mostrados"] = False
 
@@ -1112,222 +1101,177 @@ def render_aba1(aba, df_dia, metas):
             key="modo_filtro_aba1"
         )
 
-       # ✅ NOVO: Mostrar agendamentos do dia SEMPRE no topo (antes do seletor)
-if modo == "Clientes para Check-in (Base de Leitura)" and not df_ag_hoje.empty:
-    st.markdown("---")
-    st.markdown("### 📅 Agendamentos para Hoje")
-    st.info(f"Você tem **{len(df_ag_hoje)} agendamento(s)** marcado(s) para hoje. Role para baixo para ver check-ins.")
-    
-    # Mostrar cards de agendamentos
-    for i, (idx, row_ag) in enumerate(df_ag_hoje.iterrows()):
-        tel_ag = str(row_ag.get("Telefone", ""))
-        
-        # ✅ Pular se já foi concluído nesta sessão
-        if tel_ag in st.session_state["concluidos"]:
-            continue
-        if tel_ag in st.session_state["pulados"]:
-            continue
-        
-        st.markdown(f"#### 🟧 Agendamento {i+1}/{len(df_ag_hoje)}")
-        
-        # ✅ Usar card específico para agendamentos
-        ac_ag, mot_ag, res_ag, prox_ag, vend_ag = agendamento_card(
-            f"ag_hoje_{idx}", 
-            row_ag
-        )
-        
-        if ac_ag == "concluir":
-            registrar_agendamento(row_ag, res_ag, mot_ag, prox_ag, vend_ag)
-            remover_card(tel_ag, True)
-            st.rerun()
-        elif ac_ag == "pular":
-            remover_card(tel_ag, False)
-            st.rerun()
-        
-        st.markdown("---")
-    
-    st.markdown("### 🟦 Check-ins do Dia")
-    
-    # =========================================================
-    # 🟦 MODO CHECK-IN — EXIBE CARDS
-    # =========================================================
-    if modo == "Clientes para Check-in (Base de Leitura)":
+        # =========================================================
+        # 🟦 MODO CHECK-IN
+        # =========================================================
+        if modo == "Clientes para Check-in (Base de Leitura)":
 
-        class_filter = st.radio(
-            "Filtrar por classificação:",
-            Config.CLASSIFICACOES,
-            horizontal=True,
-        )
+            class_filter = st.radio(
+                "Filtrar por classificação:",
+                Config.CLASSIFICACOES,
+                horizontal=True,
+            )
 
-        df_checkin = df_dia.copy()
-        if class_filter != "Todos":
-            df_checkin = df_checkin[df_checkin["Classificação"] == class_filter]
+            df_checkin = df_dia.copy()
+            if class_filter != "Todos":
+                df_checkin = df_checkin[df_checkin["Classificação"] == class_filter]
 
-        # Reset de índices para evitar problemas
-        df_checkin = df_checkin.reset_index(drop=True)
+            df_checkin = df_checkin.reset_index(drop=True)
 
-        if df_checkin.empty:
-            st.balloons()
-            st.success("🎉 **Parabéns!** Todos os check-ins foram concluídos!")
-            st.info("💡 **Próximos passos:**")
-            st.write("- Ajuste os filtros na barra lateral para ver mais clientes")
-            st.write("- Verifique a aba 'Agendamentos Ativos'")
-            st.write("- Confira os indicadores na aba 'Indicadores'")
-                    
-            col1, col2 = st.columns(2)
-            col1.metric("✅ Concluídos hoje", concluidos_hoje)
-            col2.metric("⏭ Pulados hoje", len(st.session_state["pulados"]))
-        else:
-            st.subheader("📌 Atendimentos do dia (Check-in)")
-
-            # CSV
-            csv = df_checkin.drop(columns=["Telefone_limpo", "ID"], errors="ignore").to_csv(index=False).encode("utf-8-sig")
-            st.download_button("📥 Baixar lista (CSV)", csv, "checkin_dia.csv")
-
-            st.markdown("---")
-
-            # Cards (2 por linha)
-            for i in range(0, len(df_checkin), 2):
+            if df_checkin.empty:
+                st.balloons()
+                st.success("🎉 **Parabéns!** Todos os check-ins foram concluídos!")
+                st.info("💡 **Próximos passos:**")
+                st.write("- Ajuste os filtros na barra lateral para ver mais clientes")
+                st.write("- Verifique a aba 'Agendamentos Ativos'")
+                st.write("- Confira os indicadores na aba 'Indicadores'")
+                        
                 col1, col2 = st.columns(2)
+                col1.metric("✅ Concluídos hoje", concluidos_hoje)
+                col2.metric("⏭ Pulados hoje", len(st.session_state["pulados"]))
+            else:
+                st.subheader("📌 Atendimentos do dia (Check-in)")
 
-                # CARD 1
-                row1 = df_checkin.iloc[i]
-                with col1:
-                    ac, mot, res, prox, vend = card_component(row1["ID"], row1, usuario_atual)
+                # CSV
+                csv = df_checkin.drop(columns=["Telefone_limpo", "ID"], errors="ignore").to_csv(index=False).encode("utf-8-sig")
+                st.download_button("📥 Baixar lista (CSV)", csv, "checkin_dia.csv")
 
-                    if ac == "concluir":
-                        registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
-                        remover_card(row1["Telefone"], True)
-                        st.rerun()
-                    elif ac == "pular":
-                        remover_card(row1["Telefone"], False)
-                        st.rerun()
+                st.markdown("---")
 
-                # CARD 2
-                if i + 1 < len(df_checkin):
-                    row2 = df_checkin.iloc[i + 1]
-                    with col2:
-                        ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2, usuario_atual)
+                # Cards (2 por linha)
+                for i in range(0, len(df_checkin), 2):
+                    col1, col2 = st.columns(2)
 
-                        if ac2 == "concluir":
-                            registrar_agendamento(row2, res2, mot2, prox2.strftime("%d/%m/%Y") if prox2 else "", vend2)
-                            remover_card(row2["Telefone"], True)
+                    # CARD 1
+                    row1 = df_checkin.iloc[i]
+                    with col1:
+                        ac, mot, res, prox, vend = card_component(row1["ID"], row1, usuario_atual)
+
+                        if ac == "concluir":
+                            registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
+                            remover_card(row1["Telefone"], True)
                             st.rerun()
-                        elif ac2 == "pular":
-                            remover_card(row2["Telefone"], False)
+                        elif ac == "pular":
+                            remover_card(row1["Telefone"], False)
                             st.rerun()
+
+                    # CARD 2
+                    if i + 1 < len(df_checkin):
+                        row2 = df_checkin.iloc[i + 1]
+                        with col2:
+                            ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2, usuario_atual)
+
+                            if ac2 == "concluir":
+                                registrar_agendamento(row2, res2, mot2, prox2.strftime("%d/%m/%Y") if prox2 else "", vend2)
+                                remover_card(row2["Telefone"], True)
+                                st.rerun()
+                            elif ac2 == "pular":
+                                remover_card(row2["Telefone"], False)
+                                st.rerun()
 
         # =========================================================
-        # 🟧 MODO AGENDAMENTOS ATIVOS — MESMO FORMATO DO CHECK-IN
+        # 🟧 MODO AGENDAMENTOS ATIVOS
         # =========================================================
-    
-
-        st.subheader("📂 Agendamentos Ativos (Hoje)")
-
-        # Debug expandido
-        with st.expander("🔍 Debug: Ver agendamentos de hoje", expanded=False):
-            st.write(f"**Agendamentos para hoje:** {len(df_ag_hoje)}")
+        elif modo == "Agendamentos Ativos":
             
-            if not df_ag_hoje.empty:
-                st.write(f"**Colunas disponíveis:** {', '.join(df_ag_hoje.columns.tolist())}")
-                st.write("**Primeiros 10 registros:**")
-                st.dataframe(df_ag_hoje.head(10))
+            st.subheader("📂 Agendamentos Ativos (Hoje)")
 
-        if df_ag_hoje.empty:
-            st.warning("📭 Nenhum agendamento encontrado para hoje.")
-            st.info("💡 **Possíveis razões:**")
-            st.write("1. Não há agendamentos programados para hoje")
-            st.write("2. Verifique se a 'Próxima data' nos agendamentos está correta")
-            st.write("3. Crie novos agendamentos na aba 'Check-in'")
-        return  # ← Agora está dentro da função com 8 espaços
-
-        # ✅ NORMALIZAR para formato igual ao check-in
-        df_ag_normalizado = df_ag_hoje.copy()
-        
-        # Mapear colunas
-        if "Nome" in df_ag_normalizado.columns and "Cliente" not in df_ag_normalizado.columns:
-            df_ag_normalizado["Cliente"] = df_ag_normalizado["Nome"]
-        
-        # Garantir colunas necessárias
-        colunas_obrigatorias = {
-            "Cliente": "—",
-            "Telefone": "—",
-            "Classificação": "—",
-            "Valor": "—",
-            "Dias_num": None
-        }
-        
-        for col, default in colunas_obrigatorias.items():
-            if col not in df_ag_normalizado.columns:
-                df_ag_normalizado[col] = default
-        
-        # Criar ID
-        df_ag_normalizado["ID"] = df_ag_normalizado["Telefone"].astype(str).apply(limpar_telefone)
-        
-        # Reset índices
-        df_ag_normalizado = df_ag_normalizado.reset_index(drop=True)
-        
-        # ✅ Filtrar concluídos/pulados usando telefone limpo
-        ocultos = st.session_state["concluidos"].union(st.session_state["pulados"])
-
-        # Filtrar por Telefone normal E por Telefone_limpo
-        if "Telefone_limpo" in df_ag_normalizado.columns:
-            df_ag_normalizado = df_ag_normalizado[
-                (~df_ag_normalizado["Telefone"].isin(ocultos)) &
-                (~df_ag_normalizado["Telefone_limpo"].isin(ocultos))
-            ]
-        else:
-            df_ag_normalizado = df_ag_normalizado[~df_ag_normalizado["Telefone"].isin(ocultos)]
-
-        logger.info(f"Agendamentos após filtrar ocultos: {len(df_ag_normalizado)}")
-
-        if df_ag_normalizado.empty:
-            st.success("🎉 Todos os agendamentos de hoje foram concluídos!")
-            return  # ← Agora está dentro da função com 8 espaços
-
-        # CSV para download
-        csv_ag = df_ag_normalizado.drop(columns=["ID", "Telefone_limpo"], errors="ignore").to_csv(index=False).encode("utf-8-sig")
-        st.download_button("📥 Baixar agendamentos (CSV)", csv_ag, "agendamentos_hoje.csv")
-
-        st.markdown("---")
-
-        # ✅ CARDS (2 por linha) - FORMATO IDÊNTICO AO CHECK-IN
-        for i in range(0, len(df_ag_normalizado), 2):
-            col1, col2 = st.columns(2)
-
-            # CARD 1
-            row1 = df_ag_normalizado.iloc[i]
-            with col1:
-                # Badge
-                st.markdown("🔔 **AGENDAMENTO ATIVO**")
+            # Debug expandido
+            with st.expander("🔍 Debug: Ver agendamentos de hoje", expanded=False):
+                st.write(f"**Agendamentos para hoje:** {len(df_ag_hoje)}")
                 
-                ac, mot, res, prox, vend = card_component(row1["ID"], row1, usuario_atual)
+                if not df_ag_hoje.empty:
+                    st.write(f"**Colunas disponíveis:** {', '.join(df_ag_hoje.columns.tolist())}")
+                    st.write("**Primeiros 10 registros:**")
+                    st.dataframe(df_ag_hoje.head(10))
 
-                if ac == "concluir":
-                    registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
-                    remover_card(row1["Telefone"], True)
-                    st.rerun()
-                elif ac == "pular":
-                    remover_card(row1["Telefone"], False)
-                    st.rerun()
+            if df_ag_hoje.empty:
+                st.warning("📭 Nenhum agendamento encontrado para hoje.")
+                st.info("💡 **Possíveis razões:**")
+                st.write("1. Não há agendamentos programados para hoje")
+                st.write("2. Verifique se a 'Próxima data' nos agendamentos está correta")
+                st.write("3. Crie novos agendamentos na aba 'Check-in'")
+            else:
+                # ✅ NORMALIZAR para formato igual ao check-in
+                df_ag_normalizado = df_ag_hoje.copy()
+                
+                # Mapear colunas
+                if "Nome" in df_ag_normalizado.columns and "Cliente" not in df_ag_normalizado.columns:
+                    df_ag_normalizado["Cliente"] = df_ag_normalizado["Nome"]
+                
+                # Garantir colunas necessárias
+                colunas_obrigatorias = {
+                    "Cliente": "—",
+                    "Telefone": "—",
+                    "Classificação": "—",
+                    "Valor": "—",
+                    "Dias_num": None
+                }
+                
+                for col, default in colunas_obrigatorias.items():
+                    if col not in df_ag_normalizado.columns:
+                        df_ag_normalizado[col] = default
+                
+                # Criar ID
+                df_ag_normalizado["ID"] = df_ag_normalizado["Telefone"].astype(str).apply(limpar_telefone)
+                df_ag_normalizado = df_ag_normalizado.reset_index(drop=True)
+                
+                # Filtrar concluídos/pulados
+                ocultos = st.session_state["concluidos"].union(st.session_state["pulados"])
 
-            # CARD 2
-            if i + 1 < len(df_ag_normalizado):
-                row2 = df_ag_normalizado.iloc[i + 1]
-                with col2:
-                    # Badge
-                    st.markdown("🔔 **AGENDAMENTO ATIVO**")
-                    
-                    ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2, usuario_atual)
+                if "Telefone_limpo" in df_ag_normalizado.columns:
+                    df_ag_normalizado = df_ag_normalizado[
+                        (~df_ag_normalizado["Telefone"].isin(ocultos)) &
+                        (~df_ag_normalizado["Telefone_limpo"].isin(ocultos))
+                    ]
+                else:
+                    df_ag_normalizado = df_ag_normalizado[~df_ag_normalizado["Telefone"].isin(ocultos)]
 
-                    if ac2 == "concluir":
-                        registrar_agendamento(row2, res2, mot2, prox2.strftime("%d/%m/%Y") if prox2 else "", vend2)
-                        remover_card(row2["Telefone"], True)
-                        st.rerun()
-                    elif ac2 == "pular":
-                        remover_card(row2["Telefone"], False)
-                        st.rerun()
+                logger.info(f"Agendamentos após filtrar ocultos: {len(df_ag_normalizado)}")
 
+                if df_ag_normalizado.empty:
+                    st.success("🎉 Todos os agendamentos de hoje foram concluídos!")
+                else:
+                    # CSV para download
+                    csv_ag = df_ag_normalizado.drop(columns=["ID", "Telefone_limpo"], errors="ignore").to_csv(index=False).encode("utf-8-sig")
+                    st.download_button("📥 Baixar agendamentos (CSV)", csv_ag, "agendamentos_hoje.csv")
+
+                    st.markdown("---")
+
+                    # Cards (2 por linha)
+                    for i in range(0, len(df_ag_normalizado), 2):
+                        col1, col2 = st.columns(2)
+
+                        # CARD 1
+                        row1 = df_ag_normalizado.iloc[i]
+                        with col1:
+                            st.markdown("🔔 **AGENDAMENTO ATIVO**")
+                            
+                            ac, mot, res, prox, vend = card_component(row1["ID"], row1, usuario_atual)
+
+                            if ac == "concluir":
+                                registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
+                                remover_card(row1["Telefone"], True)
+                                st.rerun()
+                            elif ac == "pular":
+                                remover_card(row1["Telefone"], False)
+                                st.rerun()
+
+                        # CARD 2
+                        if i + 1 < len(df_ag_normalizado):
+                            row2 = df_ag_normalizado.iloc[i + 1]
+                            with col2:
+                                st.markdown("🔔 **AGENDAMENTO ATIVO**")
+                                
+                                ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2, usuario_atual)
+
+                                if ac2 == "concluir":
+                                    registrar_agendamento(row2, res2, mot2, prox2.strftime("%d/%m/%Y") if prox2 else "", vend2)
+                                    remover_card(row2["Telefone"], True)
+                                    st.rerun()
+                                elif ac2 == "pular":
+                                    remover_card(row2["Telefone"], False)
+                                    st.rerun()
 
 def render_aba2(aba, base, total_tarefas):
     """Aba de Indicadores e Análises com filtros de data"""
