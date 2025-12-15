@@ -1218,6 +1218,58 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atua
     logger.info(f"✅ Tarefas do dia geradas: {len(df_dia)} clientes")
     return df_dia
 
+def diagnostico_planilha():
+    """Função de diagnóstico - mostra TUDO que tem na planilha"""
+    
+    st.markdown("### 🔍 MODO DIAGNÓSTICO")
+    
+    try:
+        client = get_gsheet_client()
+        sh = client.open(Config.SHEET_AGENDAMENTOS)
+        ws = sh.worksheet("AGENDAMENTOS_ATIVOS")
+        
+        # Pegar TODOS os dados
+        data = ws.get_all_values()
+        
+        st.write(f"**Total de linhas na planilha:** {len(data)}")
+        
+        if len(data) > 0:
+            # Mostrar cabeçalhos
+            st.write("**📋 CABEÇALHOS (Linha 1):**")
+            st.write(data[0])
+            
+            # Criar DataFrame
+            if len(data) > 1:
+                headers = data[0]
+                rows = data[1:]
+                df = pd.DataFrame(rows, columns=headers)
+                
+                st.write(f"**📊 Total de registros:** {len(df)}")
+                
+                # Mostrar colunas
+                st.write("**🏷️ COLUNAS ENCONTRADAS:**")
+                for i, col in enumerate(df.columns):
+                    st.write(f"{i+1}. '{col}'")
+                
+                # Verificar coluna J
+                st.write("---")
+                if "Tipo de atendimento" in df.columns:
+                    st.success("✅ Coluna 'Tipo de atendimento' EXISTE!")
+                    
+                    valores_unicos = df["Tipo de atendimento"].unique()
+                    st.write(f"**Valores encontrados:**")
+                    for val in valores_unicos:
+                        count = len(df[df["Tipo de atendimento"] == val])
+                        st.write(f"  • '{val}' → {count} registros")
+                    
+                    st.write("**📋 PRIMEIROS 5 REGISTROS:**")
+                    st.dataframe(df.head(5))
+                else:
+                    st.error("❌ Coluna 'Tipo de atendimento' NÃO EXISTE!")
+                    st.write("**Nomes exatos das colunas:**")
+                    st.json(df.columns.tolist())
+    except Exception as e:
+        st.error(f"❌ ERRO: {e}")
 
 
 # =========================================================
