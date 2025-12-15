@@ -2374,23 +2374,6 @@ def render_aba3(aba):
         st.markdown("<br><br>", unsafe_allow_html=True)
         st.markdown("---")
 
-        # ==========================================
-# PREPARAR DADOS PARA O FORMULÁRIO
-# ==========================================
-
-# ✅ NOVO: Se encontrou cliente, salvar no session_state
-if buscar and not cliente_encontrado.empty:
-    st.session_state["cliente_selecionado"] = {
-        "nome": row["Cliente"],
-        "telefone": row["Telefone"],
-        "classificacao": row.get("Classificação", "Novo"),
-        "valor": row.get("Valor", 0)
-    }
-else:
-    # Se não buscou, verificar se já tem no session_state
-    if "cliente_selecionado" not in st.session_state:
-        st.session_state["cliente_selecionado"] = None
-
 
     
         # ==========================================
