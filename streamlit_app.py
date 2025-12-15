@@ -1537,7 +1537,182 @@ def render_aba2(aba, base, total_tarefas):
         else:
             st.warning("⚠️ Nenhum dado disponível na base")
         
-        st.markdown("---")
+                st.markdown("---")
+        
+        # =========================================================
+        # 📈 SEÇÃO 3.5: ANÁLISE DE CRESCIMENTO POR CLASSIFICAÇÃO
+        # =========================================================
+        st.markdown("### 📈 Evolução das Classificações")
+        
+        if not base.empty:
+            # Calcular período anterior (mesmo tamanho do período selecionado)
+            duracao_periodo = (data_fim - data_inicio).days
+            data_inicio_anterior = data_inicio - pd.Timedelta(days=duracao_periodo)
+            data_fim_anterior = data_inicio - pd.Timedelta(days=1)
+            
+            st.info(f"📊 **Comparando:** Período atual vs período anterior ({duracao_periodo} dias)")
+            
+            # Carregar histórico completo
+            df_historico_completo = load_historico()
+            
+            if not df_historico_completo.empty and "Data_de_contato" in df_historico_completo.columns:
+                # Converter datas
+                df_historico_completo["Data_convertida"] = pd.to_datetime(
+                    df_historico_completo["Data_de_contato"],
+                    format="%d/%m/%Y %H:%M",
+                    errors="coerce"
+                )
+                
+                # Filtrar período atual
+                df_periodo_atual = df_historico_completo[
+                    (df_historico_completo["Data_convertida"] >= data_inicio) &
+                    (df_historico_completo["Data_convertida"] <= data_fim)
+                ].copy()
+                
+                # Filtrar período anterior
+                df_periodo_anterior = df_historico_completo[
+                    (df_historico_completo["Data_convertida"] >= data_inicio_anterior) &
+                    (df_historico_completo["Data_convertida"] <= data_fim_anterior)
+                ].copy()
+                
+                # Contar por classificação
+                if not df_periodo_atual.empty and not df_periodo_anterior.empty:
+                    # Contar classificações no período atual
+                    contagem_atual = df_periodo_atual["Classificação"].value_counts()
+                    
+                    # Contar classificações no período anterior
+                    contagem_anterior = df_periodo_anterior["Classificação"].value_counts()
+                    
+                    # Criar DataFrame de comparação
+                    df_comparacao = pd.DataFrame({
+                        "Período Anterior": contagem_anterior,
+                        "Período Atual": contagem_atual
+                    }).fillna(0)
+                    
+                    # Calcular variação
+                    df_comparacao["Variação Absoluta"] = df_comparacao["Período Atual"] - df_comparacao["Período Anterior"]
+                    df_comparacao["Variação %"] = (
+                        (df_comparacao["Variação Absoluta"] / df_comparacao["Período Anterior"]) * 100
+                    ).replace([float('inf'), -float('inf')], 0).fillna(0).round(1)
+                    
+                    # Filtrar apenas classificações selecionadas
+                    df_comparacao = df_comparacao[df_comparacao.index.isin(classificacoes_selecionadas)]
+                    
+                    # Ordenar por variação percentual
+                    df_comparacao = df_comparacao.sort_values("Variação %", ascending=False)
+                    
+                    col_graficos, col_tabela = st.columns([2, 1])
+                    
+                    with col_graficos:
+                        st.markdown("**📊 Variação Percentual por Classificação:**")
+                        
+                        # Criar gráfico de barras
+                        import plotly.graph_objects as go
+                        
+                        cores_variacao = [
+                            '#00C851' if v > 0 else '#ff4444' if v < 0 else '#33b5e5'
+                            for v in df_comparacao["Variação %"]
+                        ]
+                        
+                        fig = go.Figure(data=[
+                            go.Bar(
+                                x=df_comparacao.index,
+                                y=df_comparacao["Variação %"],
+                                marker_color=cores_variacao,
+                                text=[f"{v:+.1f}%" for v in df_comparacao["Variação %"]],
+                                textposition='outside'
+                            )
+                        ])
+                        
+                        fig.update_layout(
+                            title="Crescimento/Redução por Classificação (%)",
+                            xaxis_title="Classificação",
+                            yaxis_title="Variação (%)",
+                            height=400,
+                            showlegend=False,
+                            hovermode='x'
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                    with col_tabela:
+                        st.markdown("**📋 Detalhamento:**")
+                        
+                        # Formatar tabela para exibição
+                        df_exibir = df_comparacao.copy()
+                        df_exibir["Período Anterior"] = df_exibir["Período Anterior"].astype(int)
+                        df_exibir["Período Atual"] = df_exibir["Período Atual"].astype(int)
+                        df_exibir["Variação Absoluta"] = df_exibir["Variação Absoluta"].apply(
+                            lambda x: f"+{int(x)}" if x > 0 else str(int(x))
+                        )
+                        df_exibir["Variação %"] = df_exibir["Variação %"].apply(
+                            lambda x: f"+{x:.1f}%" if x > 0 else f"{x:.1f}%"
+                        )
+                        
+                        st.dataframe(
+                            df_exibir,
+                            use_container_width=True
+                        )
+                    
+                    # Cards de destaques
+                    st.markdown("---")
+                    st.markdown("**🎯 Destaques de Crescimento:**")
+                    
+                    col_d1, col_d2, col_d3 = st.columns(3)
+                    
+                    # Maior crescimento percentual
+                    if len(df_comparacao) > 0:
+                        maior_crescimento = df_comparacao["Variação %"].idxmax()
+                        valor_crescimento = df_comparacao.loc[maior_crescimento, "Variação %"]
+                        
+                        with col_d1:
+                            if valor_crescimento > 0:
+                                st.success(f"📈 **Maior Crescimento**\n\n{maior_crescimento}\n\n+{valor_crescimento:.1f}%")
+                            else:
+                                st.info(f"📊 **Crescimento**\n\nSem crescimentos positivos")
+                        
+                        # Maior redução
+                        menor_crescimento = df_comparacao["Variação %"].idxmin()
+                        valor_reducao = df_comparacao.loc[menor_crescimento, "Variação %"]
+                        
+                        with col_d2:
+                            if valor_reducao < 0:
+                                st.error(f"📉 **Maior Redução**\n\n{menor_crescimento}\n\n{valor_reducao:.1f}%")
+                            else:
+                                st.success(f"✅ **Redução**\n\nSem reduções negativas")
+                        
+                        # Mais estável
+                        mais_estavel = df_comparacao["Variação %"].abs().idxmin()
+                        valor_estavel = df_comparacao.loc[mais_estavel, "Variação %"]
+                        
+                        with col_d3:
+                            st.info(f"🔄 **Mais Estável**\n\n{mais_estavel}\n\n{valor_estavel:+.1f}%")
+                    
+                    # Download
+                    csv_crescimento = df_comparacao.to_csv().encode("utf-8-sig")
+                    st.download_button(
+                        "📥 Baixar Análise de Crescimento (CSV)",
+                        csv_crescimento,
+                        "crescimento_classificacoes.csv",
+                        use_container_width=True
+                    )
+                
+                else:
+                    st.warning("⚠️ Não há dados suficientes para comparar os períodos")
+                    
+                    if df_periodo_atual.empty:
+                        st.info(f"📭 Período atual ({data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}): Sem registros")
+                    
+                    if df_periodo_anterior.empty:
+                        st.info(f"📭 Período anterior ({data_inicio_anterior.strftime('%d/%m/%Y')} a {data_fim_anterior.strftime('%d/%m/%Y')}): Sem registros")
+            
+            else:
+                st.warning("⚠️ Histórico não disponível para análise de crescimento")
+                st.info("💡 Para ver a evolução, é necessário ter check-ins registrados no histórico")
+        
+        else:
+            st.warning("⚠️ Nenhum dado disponível")
+
 
         
         # =========================================================
