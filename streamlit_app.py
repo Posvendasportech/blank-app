@@ -509,7 +509,7 @@ def card_component(id_fix, row, usuario_atual):
             if usuario_lock != usuario_atual:
                 st.warning(f"⚠️ Este cliente está sendo atendido por **{usuario_lock}** agora!")
                 st.info("🔄 Aguarde ou escolha outro cliente")
-                return None, "", "", None, ""  # ✅ Retorna valores vazios em vez de st.stop()
+                return None, "", "", None, ""  # ✅ Retorna valores vazios
         
         # Criar lock para o usuário atual
         criar_lock(telefone, usuario_atual, row.get("Cliente", "—"))
@@ -519,25 +519,23 @@ def card_component(id_fix, row, usuario_atual):
     with st.container():
         st.markdown('<div class="card">', unsafe_allow_html=True)
 
-
-    dias_txt = f"{row['Dias_num']} dias desde compra" if pd.notna(row.get("Dias_num")) else "Sem informação"
-    motivo_anterior = row.get("Follow up", row.get("Motivo", row.get("Relato da conversa", "")))
-    
-    header_html = f"""
-        <div class="card-header">
-            <b>{row.get('Cliente', '—')}</b><br>
-            📱 {row.get('Telefone', '—')}<br>
-            🏷 {row.get('Classificação', '—')}<br>
-            💰 {safe_valor(row.get('Valor', '—'))}<br>
-            ⏳ {dias_txt}
-    """
-    
-    if motivo_anterior and str(motivo_anterior).strip() and str(motivo_anterior) != "—":
-        header_html += f"""<br><br>
-            📋 <b>Direcionamento anterior:</b><br>
-            <i style="color:#a0d8ff;">{motivo_anterior}</i>
+        dias_txt = f"{row['Dias_num']} dias desde compra" if pd.notna(row.get("Dias_num")) else "Sem informação"
+        motivo_anterior = row.get("Follow up", row.get("Motivo", row.get("Relato da conversa", "")))
+        
+        header_html = f"""
+            <div class="card-header">
+                <b>{row.get('Cliente', '—')}</b><br>
+                📱 {row.get('Telefone', '—')}<br>
+                🏷 {row.get('Classificação', '—')}<br>
+                💰 {safe_valor(row.get('Valor', '—'))}<br>
+                ⏳ {dias_txt}
         """
-
+        
+        if motivo_anterior and str(motivo_anterior).strip() and str(motivo_anterior) != "—":
+            header_html += f"""<br><br>
+                📋 <b>Direcionamento anterior:</b><br>
+                <i style="color:#a0d8ff;">{motivo_anterior}</i>
+            """
         
         header_html += "</div>"
         st.markdown(header_html, unsafe_allow_html=True)
@@ -551,10 +549,11 @@ def card_component(id_fix, row, usuario_atual):
 
             col1, col2 = st.columns(2)
             
-            # Botões dentro do form - só processa ao clicar
+            # Botões dentro do form
             concluir = col1.form_submit_button("✅ Registrar e concluir", use_container_width=True)
             pular = col2.form_submit_button("⏭ Pular cliente", use_container_width=True)
             
+            # ✅ INICIALIZAR acao SEMPRE
             acao = None
             
             if concluir:
@@ -574,6 +573,7 @@ def card_component(id_fix, row, usuario_atual):
 
         st.markdown("</div>", unsafe_allow_html=True)
 
+    # ✅ GARANTIR QUE SEMPRE RETORNA 5 VALORES
     return acao, motivo, resumo, proxima, vendedor
 
 
