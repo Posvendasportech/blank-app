@@ -2528,6 +2528,7 @@ else:
                         "Telefone": telefone_novo,
                         "Compras": 0
                     }
+                    
                     try:
                         registrar_agendamento(
                             row_ficticia,
@@ -2536,18 +2537,42 @@ else:
                             proxima_data_novo.strftime("%d/%m/%Y"),
                             vendedor_novo,
                             tipo_atendimento=tipo_atendimento
-                        )  # ✅ FALTAVA ESTE PARÊNTESE
+                        )
                         
                         # Limpar caches
                         load_agendamentos_ativos.clear()
                         load_df_agendamentos.clear()
                         load_casos_suporte.clear()
+                        
+                        st.success(f"✅ **Agendamento criado com sucesso!**")
+                        st.info(f"📅 **Data:** {proxima_data_novo.strftime('%d/%m/%Y')}")
+                        st.info(f"🏷️ **Tipo:** {tipo_atendimento}")
+                        st.info(f"👤 **Responsável:** {vendedor_novo}")
+                        
+                        if tipo_atendimento == "Suporte":
+                            st.warning("🛠️ Este caso aparecerá na seção de **Suporte**")
+                        
+                        st.balloons()
+                    
+                    except Exception as e:
+                        st.error(f"❌ Erro ao criar agendamento: {e}")
+                        logger.error(f"Erro ao criar agendamento via aba3: {e}", exc_info=True)
+            
+            if limpar_form:
+                st.info("🔄 Recarregue a página (F5) para limpar o formulário")
 
 # =========================================================
 # (10) 🚀 MAIN FLOW
 # =========================================================
 
 def main():
+
+
+# =========================================================
+# (10) 🚀 MAIN FLOW
+# =========================================================
+
+def main(:
     st.title("📅 CRM Sportech – Tarefas do Dia")
 
     init_session_state()
