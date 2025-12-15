@@ -419,137 +419,132 @@ def load_historico():
 # Cache de 10 segundos (muda frequentemente)
 @st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)
 def load_agendamentos_hoje():
-    """Carrega APENAS os agendamentos para HOJE (filtrado pela 'Próxima data')"""
+    """Carrega agendamentos de HOJE (Experiência + vazios) - VERSÃO CORRIGIDA"""
     try:
         client = get_gsheet_client()
         sh = client.open(Config.SHEET_AGENDAMENTOS)
         ws = sh.worksheet("AGENDAMENTOS_ATIVOS")
-        
-        # ✅ PEGAR TODOS OS DADOS COM CABEÇALHOS
+
+        # Pegar todos os dados
         data = ws.get_all_values()
-        
-        if len(data) <= 1:  # Só tem cabeçalho ou está vazio
-            logger.info("⚠️ Nenhum agendamento na base")
+
+        if len(data) <= 1:
+            logger.info("⚠️ Planilha vazia")
             return pd.DataFrame()
-        
-        # Criar DataFrame com cabeçalhos corretos
+
+        # Criar DataFrame
         headers = data[0]
         rows = data[1:]
         df = pd.DataFrame(rows, columns=headers)
-        
-        logger.info(f"📊 Total de agendamentos na base: {len(df)}")
-        logger.info(f"📋 Colunas encontradas: {df.columns.tolist()}")
-        
-        # Detectar qual coluna de data usar
-        if "Próxima data" in df.columns:
-            col_data = "Próxima data"
-        elif "Data de chamada" in df.columns:
-            col_data = "Data de chamada"
-        else:
-            logger.error("❌ Nenhuma coluna de data encontrada")
-            logger.error(f"Colunas disponíveis: {df.columns.tolist()}")
-            return pd.DataFrame()
-        
-        # ✅ MELHORADO: Tentar múltiplos formatos de data
-        df['data_convertida'] = None
-        
-        # Formato 1: YYYY/MM/DD
-        df['data_convertida'] = pd.to_datetime(df[col_data], format='%Y/%m/%d', errors='coerce')
-        
-        # Formato 2: DD/MM/YYYY (se o primeiro falhar)
-        mascara_nulas = df['data_convertida'].isna()
-        if mascara_nulas.any():
-            df.loc[mascara_nulas, 'data_convertida'] = pd.to_datetime(
-                df.loc[mascara_nulas, col_data], 
-                format='%d/%m/%Y', 
-                errors='coerce'
-            )
-        
-        # Formato 3: ISO padrão (último recurso)
-        mascara_nulas = df['data_convertida'].isna()
-        if mascara_nulas.any():
-            df.loc[mascara_nulas, 'data_convertida'] = pd.to_datetime(
-                df.loc[mascara_nulas, col_data], 
-                errors='coerce'
-            )
-        
-        # Data de hoje (sem hora)
-        hoje = datetime.now().date()
-        
-        # ✅ FILTRAR POR TIPO DE ATENDIMENTO (excluir Suporte)
+
+        logger.info(f"📊 Total de registros na base: {len(df)}")
+
+        # ✅ FILTRAR POR TIPO: Experiência, Venda e vazios (EXCLUI Suporte)
         if "Tipo de atendimento" in df.columns:
-            df = df[df["Tipo de atendimento"].isin(["Venda", "Experiência", "venda", "experiência"])].copy()
-            logger.info(f"📊 Após filtrar tipos (Venda/Experiência): {len(df)} registros")
-        
-        # Filtrar por hoje
-        df_hoje = df[df['data_convertida'].dt.date == hoje].copy()
-        
-        # ✅ PRÉ-COMPUTAR TELEFONE LIMPO
-        if not df_hoje.empty:
-            df_hoje["Telefone_limpo"] = df_hoje["Telefone"].apply(limpar_telefone)
-            logger.info(f"✅ Agendamentos para hoje ({hoje.strftime('%Y/%m/%d')}): {len(df_hoje)}")
+            # Pegar tudo que NÃO é "Suporte"
+            df = df[
+                (df["Tipo de atendimento"].str.lower().str.strip() != "suporte") &
+                (df["Tipo de atendimento"].str.lower().str.strip() != "")
+            ].copy()
+
+            # ✅ ALTERNATIVA: Se quiser incluir vazios também, use:
+            # df = df[
+            #     (df["Tipo de atendimento"].str.lower().str.strip().isin(["experiência", "experiencia", "venda", ""])) |
+            #     (df["Tipo de atendimento"] == "")
+            # ].copy()
+
+            logger.info(f"📊 Após filtrar tipo (sem Suporte): {len(df)} registros")
+
+        # ✅ CONVERTER DATA usando "Data de chamada"
+        if "Data de chamada" in df.columns:
+            # Tentar formato YYYY/MM/DD primeiro
+            df['data_convertida'] = pd.to_datetime(df["Data de chamada"], format='%Y/%m/%d', errors='coerce')
+
+            # Se não funcionou, tentar DD/MM/YYYY
+            mascara_nulas = df['data_convertida'].isna()
+            if mascara_nulas.any():
+                df.loc[mascara_nulas, 'data_convertida'] = pd.to_datetime(
+                    df.loc[mascara_nulas, "Data de chamada"], 
+                    format='%d/%m/%Y', 
+                    errors='coerce'
+                )
+
+            # Data de hoje
+            hoje = datetime.now().date()
+
+            # Filtrar por hoje
+            df_hoje = df[df['data_convertida'].dt.date == hoje].copy()
+
+            if not df_hoje.empty:
+                df_hoje["Telefone_limpo"] = df_hoje["Telefone"].apply(limpar_telefone)
+                logger.info(f"✅ Agendamentos para HOJE ({hoje}): {len(df_hoje)}")
+
+                # ✅ DEBUG: Mostrar exemplos
+                logger.info(f"🔍 Exemplos: {df_hoje[['Nome', 'Telefone', 'Tipo de atendimento']].head(3).to_dict('records')}")
+            else:
+                # Mostrar quais datas existem
+                datas_unicas = df['data_convertida'].dropna().dt.date.unique()
+                logger.warning(f"⚠️ Nenhum agendamento para hoje ({hoje})")
+                if len(datas_unicas) > 0:
+                    logger.warning(f"⚠️ Datas na base: {sorted(datas_unicas)[:5]}")
+
+            return df_hoje
         else:
-            datas_unicas = df['data_convertida'].dropna().dt.date.unique()
-            logger.warning(f"⚠️ Datas encontradas na base: {sorted(datas_unicas)}")
-            logger.warning(f"⚠️ Procurando por: {hoje}")
-            logger.warning(f"⚠️ Nenhum agendamento para hoje")
-        
-        return df_hoje
-        
+            logger.error("❌ Coluna 'Data de chamada' não encontrada!")
+            return pd.DataFrame()
+
     except Exception as e:
-        logger.error(f"❌ Erro ao carregar agendamentos de hoje: {e}", exc_info=True)
+        logger.error(f"❌ Erro ao carregar agendamentos: {e}", exc_info=True)
         return pd.DataFrame()
+        
 @st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)
 def load_casos_suporte():
-    """Carrega APENAS casos marcados como 'Suporte' na coluna J (Tipo de atendimento)"""
+    """Carrega APENAS casos de Suporte - VERSÃO CORRIGIDA"""
     try:
         client = get_gsheet_client()
         sh = client.open(Config.SHEET_AGENDAMENTOS)
         ws = sh.worksheet("AGENDAMENTOS_ATIVOS")
-        
-        # ✅ PEGAR TODOS OS DADOS COM CABEÇALHOS
+
+        # Pegar todos os dados
         data = ws.get_all_values()
-        
+
         if len(data) <= 1:
-            logger.info("⚠️ Nenhum agendamento na base")
+            logger.info("⚠️ Planilha vazia")
             return pd.DataFrame()
-        
-        # Criar DataFrame com cabeçalhos corretos
+
+        # Criar DataFrame
         headers = data[0]
         rows = data[1:]
         df = pd.DataFrame(rows, columns=headers)
-        
-        logger.info(f"📊 Total de registros na base: {len(df)}")
-        logger.info(f"📋 Colunas disponíveis: {df.columns.tolist()}")
-        
-        # ✅ VERIFICAR SE A COLUNA EXISTE
-        if "Tipo de atendimento" not in df.columns:
-            logger.error("❌ Coluna 'Tipo de atendimento' não encontrada!")
-            logger.error(f"Colunas disponíveis: {df.columns.tolist()}")
-            return pd.DataFrame()
-        
-        # ✅ FILTRAR APENAS "Suporte" (case-insensitive)
-        df_suporte = df[df["Tipo de atendimento"].str.lower().str.strip() == "suporte"].copy()
-        
-        logger.info(f"🛠️ Casos de suporte encontrados: {len(df_suporte)}")
-        
-        if not df_suporte.empty:
-            # PRÉ-COMPUTAR TELEFONE LIMPO
-            df_suporte["Telefone_limpo"] = df_suporte["Telefone"].apply(limpar_telefone)
-            
-            # ✅ DEBUG: Mostrar alguns exemplos
-            logger.info(f"🔍 Exemplo de casos: {df_suporte[['Cliente', 'Telefone', 'Tipo de atendimento']].head(3).to_dict('records')}")
+
+        logger.info(f"📊 Total de registros: {len(df)}")
+
+        # ✅ FILTRAR APENAS "Suporte"
+        if "Tipo de atendimento" in df.columns:
+            df_suporte = df[
+                df["Tipo de atendimento"].str.lower().str.strip() == "suporte"
+            ].copy()
+
+            logger.info(f"🛠️ Casos de SUPORTE: {len(df_suporte)}")
+
+            if not df_suporte.empty:
+                df_suporte["Telefone_limpo"] = df_suporte["Telefone"].apply(limpar_telefone)
+
+                # ✅ DEBUG
+                logger.info(f"🔍 Exemplos suporte: {df_suporte[['Nome', 'Telefone', 'Follow up']].head(3).to_dict('records')}")
+            else:
+                valores = df["Tipo de atendimento"].unique()
+                logger.warning(f"⚠️ Nenhum caso de suporte. Tipos na base: {valores}")
+
+            return df_suporte
         else:
-            logger.warning("⚠️ Nenhum caso de suporte encontrado")
-            # ✅ DEBUG: Mostrar quais tipos existem
-            tipos_unicos = df["Tipo de atendimento"].unique()
-            logger.warning(f"⚠️ Tipos encontrados na coluna: {tipos_unicos}")
-        
-        return df_suporte
-        
+            logger.error("❌ Coluna 'Tipo de atendimento' não existe!")
+            return pd.DataFrame()
+
     except Exception as e:
-        logger.error(f"❌ Erro ao carregar casos de suporte: {e}", exc_info=True)
+        logger.error(f"❌ Erro ao carregar suporte: {e}", exc_info=True)
         return pd.DataFrame()
+
 
 # =========================================================
 # (4) 🧠 ESTADO DA SESSÃO
@@ -685,27 +680,23 @@ def card_component(id_fix, row, usuario_atual):
 
 
 def agendamento_card(id_fix, row):
-    """Card completo para agendamentos ativos - VERSÃO CORRIGIDA"""
-    
-    # ✅ TENTAR MÚLTIPLAS COLUNAS PARA PEGAR O NOME
-    nome = None
-    for col in ["Cliente", "Nome", "cliente", "nome"]:
-        if col in row and row.get(col) and str(row.get(col)).strip():
-            nome = str(row.get(col)).strip()
-            break
-    
-    # Se não encontrou nome, usar "Cliente sem nome"
-    if not nome or nome == "—":
+    """Card de agendamento - USA 'Nome' E 'Data de chamada'"""
+
+    # ✅ USAR 'Nome' ao invés de 'Cliente'
+    nome = row.get("Nome") or row.get("Cliente", "—")
+
+    if not nome or str(nome).strip() == "" or nome == "—":
         nome = "⚠️ Cliente sem nome"
-        logger.warning(f"Cliente sem nome detectado. Colunas disponíveis: {row.keys()}")
-    
+        logger.warning(f"Nome vazio. Colunas: {row.keys()}")
+
     telefone = row.get("Telefone", "—")
     ultima_compra = row.get("Data", "—")
     valor_gasto = safe_valor(row.get("Valor", "—"))
     num_compras = row.get("Compras", "—")
     ultimo_contato = row.get("Data de contato", "—")
-    dias_ult_contato = row.get("Dias_desde_contato", "—")
+    data_chamada = row.get("Data de chamada", "—")  # ✅ ADICIONAR
     followup = row.get("Follow up", "—")
+    relato = row.get("Relato da conversa", "—")
 
     cabecalho_html = f"""
     <div style="
@@ -719,13 +710,14 @@ def agendamento_card(id_fix, row):
         line-height:1.5;
     ">
         <b style="font-size:18px; color:#60A5FA;">📋 {nome}</b><br>
-        📱 {telefone}<br><br>
-        🕓 <b>Último contato:</b> {ultimo_contato}<br>
-        ⏳ <b>Dias desde o último contato:</b> {dias_ult_contato}<br><br>
+        📱 {telefone}<br>
+        📅 <b>Data da chamada agendada:</b> {data_chamada}<br><br>
+        🕓 <b>Data último contato:</b> {ultimo_contato}<br>
         🛒 <b>Data da última compra:</b> {ultima_compra}<br>
         💵 <b>Valor gasto:</b> {valor_gasto}<br>
         📦 <b>Nº de compras:</b> {num_compras}<br><br>
-        📝 <b>Direcionamento anterior:</b> {followup}
+        📝 <b>Direcionamento anterior:</b> {followup}<br>
+        💬 <b>Relato anterior:</b> {relato}
     </div>
     """
 
@@ -755,33 +747,34 @@ def agendamento_card(id_fix, row):
     return acao, novo_motivo, resumo, proxima, vendedor
 
 
+
 def card_suporte(id_fix, row, usuario_atual):
-    """Card específico para casos de SUPORTE"""
-    
+    """Card de SUPORTE - USA 'Nome'"""
+
     telefone = str(row.get("Telefone", ""))
-    
+    nome = row.get("Nome") or row.get("Cliente", "—")
+
     # Sistema de lock
     lock_key = f"lock_criado_{id_fix}"
     if lock_key not in st.session_state:
         df_locks = load_em_atendimento()
         telefone_limpo = limpar_telefone(telefone)
-        
+
         lock_existente = df_locks[
             (df_locks["Telefone"].astype(str) == str(telefone)) | 
             (df_locks["Telefone"].apply(limpar_telefone) == telefone_limpo)
         ]
-        
+
         if not lock_existente.empty:
             usuario_lock = lock_existente.iloc[0]["Usuario"]
             if usuario_lock != usuario_atual:
                 st.warning(f"⚠️ Este caso está sendo atendido por **{usuario_lock}**")
                 return None, "", "", None, ""
-        
-        criar_lock(telefone, usuario_atual, row.get("Cliente", "—"))
+
+        criar_lock(telefone, usuario_atual, nome)
         st.session_state[lock_key] = True
 
     with st.container():
-        # Card com cor diferenciada (vermelho para suporte)
         st.markdown("""
             <style>
             .card-suporte {
@@ -795,46 +788,53 @@ def card_suporte(id_fix, row, usuario_atual):
             }
             </style>
         """, unsafe_allow_html=True)
-        
+
         st.markdown('<div class="card-suporte">', unsafe_allow_html=True)
-        
-        # Header com informações do problema
+
+        # Header
+        valor_gasto = safe_valor(row.get("Valor", "—"))
+        followup = row.get("Follow up", "")
+        relato = row.get("Relato da conversa", "")
+
         header_html = f"""
             <div style="background: rgba(0,0,0,0.3); padding: 14px; border-radius: 12px; margin-bottom: 14px;">
-                <b>🛠️ SUPORTE - {row.get('Cliente', '—')}</b><br>
+                <b style="font-size:18px;">🛠️ SUPORTE - {nome}</b><br>
                 📱 {row.get('Telefone', '—')}<br>
-                💰 {safe_valor(row.get('Valor', '—'))}<br>
+                💰 {valor_gasto}<br>
         """
-        
-        # Mostrar o problema reportado
-        follow_up = row.get("Follow up", row.get("Motivo", ""))
-        if follow_up and str(follow_up).strip():
+
+        if followup and str(followup).strip():
             header_html += f"""
                 <br><b style="color:#FFD700;">⚠️ Problema reportado:</b><br>
-                <i style="color:#FFA07A;">{follow_up}</i>
+                <i style="color:#FFA07A;">{followup}</i>
             """
-        
+
+        if relato and str(relato).strip():
+            header_html += f"""
+                <br><br><b style="color:#FFD700;">💬 Relato anterior:</b><br>
+                <i style="color:#FFA07A;">{relato}</i>
+            """
+
         header_html += "</div>"
         st.markdown(header_html, unsafe_allow_html=True)
-        
-        # Formulário específico para suporte
+
+        # Formulário
         with st.form(key=f"form_suporte_{id_fix}", clear_on_submit=False):
             vendedor = st.selectbox("Responsável", Config.VENDEDORES, key=f"vend_sup_{id_fix}")
-            
+
             status = st.selectbox(
                 "Status do problema",
                 ["Aguardando fornecedor", "Em análise", "Resolvido", "Escalado"],
                 key=f"status_{id_fix}"
             )
-            
+
             resumo = st.text_area(
                 "Atualização do caso",
                 key=f"res_sup_{id_fix}",
                 height=100,
-                placeholder="Descreva o andamento do problema..."
+                placeholder="Descreva o andamento..."
             )
-            
-            # Se resolvido, não precisa de próxima data
+
             if status != "Resolvido":
                 proxima = st.date_input("Próximo acompanhamento", key=f"dt_sup_{id_fix}")
                 motivo = f"[{status}] Acompanhamento de suporte"
@@ -842,27 +842,27 @@ def card_suporte(id_fix, row, usuario_atual):
                 proxima = None
                 motivo = "[Resolvido] Caso encerrado"
                 st.success("✅ Caso será marcado como resolvido")
-            
+
             col1, col2 = st.columns(2)
-            
+
             concluir = col1.form_submit_button("✅ Atualizar", use_container_width=True)
             pular = col2.form_submit_button("⏭ Pular", use_container_width=True)
-            
+
             acao = None
-            
+
             if concluir:
                 if not resumo.strip():
-                    st.error("⚠️ Descreva a atualização do caso")
+                    st.error("⚠️ Descreva a atualização")
                 else:
                     acao = "concluir"
                     remover_lock(telefone)
-            
+
             if pular:
                 acao = "pular"
                 remover_lock(telefone)
-        
+
         st.markdown("</div>", unsafe_allow_html=True)
-    
+
     return acao, motivo, resumo, proxima, vendedor
 
 # =========================================================
