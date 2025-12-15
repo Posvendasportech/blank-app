@@ -2566,7 +2566,7 @@ else:
 # (10) 🚀 MAIN FLOW
 # =========================================================
 
-def main(:
+def main():
     st.title("📅 CRM Sportech – Tarefas do Dia")
 
     init_session_state()
