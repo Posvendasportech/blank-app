@@ -1150,6 +1150,9 @@ if modo == "Clientes para Check-in (Base de Leitura)" and not df_ag_hoje.empty:
         # =========================================================
         # 🟦 MODO CHECK-IN — EXIBE CARDS
         # =========================================================
+        # =========================================================
+        # 🟦 MODO CHECK-IN — EXIBE CARDS
+        # =========================================================
         if modo == "Clientes para Check-in (Base de Leitura)":
 
             class_filter = st.radio(
