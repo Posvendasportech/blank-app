@@ -1537,7 +1537,7 @@ def render_aba2(aba, base, total_tarefas):
         else:
             st.warning("⚠️ Nenhum dado disponível na base")
         
-                st.markdown("---")
+            st.markdown("---")
         
         # =========================================================
         # 📈 SEÇÃO 3.5: ANÁLISE DE CRESCIMENTO POR CLASSIFICAÇÃO
