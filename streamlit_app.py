@@ -1146,7 +1146,6 @@ if modo == "Clientes para Check-in (Base de Leitura)" and not df_ag_hoje.empty:
         st.markdown("---")
     
     st.markdown("### 🟦 Check-ins do Dia")
-
         # =========================================================
         # 🟦 MODO CHECK-IN — EXIBE CARDS
         # =========================================================
