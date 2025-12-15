@@ -1358,7 +1358,7 @@ def render_aba1(aba, df_dia, metas):
         
         st.markdown("---")
         
-        # ==========================================
+               # ==========================================
         # MODO 1: ACOMPANHAMENTO DE SUPORTE
         # ==========================================
         if modo == "🛠️ Acompanhamento de Suporte":
@@ -1369,6 +1369,28 @@ def render_aba1(aba, df_dia, metas):
                 st.success("✅ Nenhum caso de suporte pendente no momento!")
                 st.info("💡 Quando houver problemas reportados pelos clientes, eles aparecerão aqui automaticamente")
             else:
+                # ✅ FAZER JOIN COM BASE PRINCIPAL (enriquecer com dados do cliente)
+                df_base_completa = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
+                
+                if not df_base_completa.empty:
+                    # Garantir que ambos têm Telefone_limpo
+                    if "Telefone_limpo" not in df_suporte.columns:
+                        df_suporte["Telefone_limpo"] = df_suporte["Telefone"].apply(limpar_telefone)
+                    
+                    df_base_completa["Telefone_limpo"] = df_base_completa["Telefone"].apply(limpar_telefone)
+                    
+                    # JOIN: Adicionar colunas da base (Dias_num, Compras, Data, Valor, etc)
+                    df_suporte = df_suporte.merge(
+                        df_base_completa[["Telefone_limpo", "Dias_num", "Compras", "Data", "Valor", "Classificação"]],
+                        on="Telefone_limpo",
+                        how="left",
+                        suffixes=("", "_base")
+                    )
+                    
+                    logger.info(f"✅ Suporte: JOIN realizado - {len(df_suporte)} registros enriquecidos")
+                else:
+                    logger.warning("⚠️ Base principal vazia - cards sem dados complementares")
+                
                 # Filtrar apenas pendentes (não concluídos nem pulados)
                 df_suporte_pendente = df_suporte[
                     ~df_suporte["Telefone"].astype(str).isin(st.session_state["concluidos"]) &
@@ -1440,6 +1462,7 @@ def render_aba1(aba, df_dia, metas):
                                     remover_card(row2["Telefone"], concluido=False)
                                     remover_lock(row2["Telefone"])
                                     st.rerun()
+
         
         # ==========================================
         # MODO 2: AGENDAMENTOS ATIVOS
@@ -1452,6 +1475,28 @@ def render_aba1(aba, df_dia, metas):
                 st.success("✅ Nenhum agendamento para hoje!")
                 st.info("💡 Use a aba 'Histórico/Pesquisa' para criar novos agendamentos")
             else:
+                # ✅ FAZER JOIN COM BASE PRINCIPAL (enriquecer com dados do cliente)
+                df_base_completa = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
+                
+                if not df_base_completa.empty:
+                    # Garantir que ambos têm Telefone_limpo
+                    if "Telefone_limpo" not in df_ag_hoje.columns:
+                        df_ag_hoje["Telefone_limpo"] = df_ag_hoje["Telefone"].apply(limpar_telefone)
+                    
+                    df_base_completa["Telefone_limpo"] = df_base_completa["Telefone"].apply(limpar_telefone)
+                    
+                    # JOIN: Adicionar colunas da base (Dias_num, Compras, Data, Valor, etc)
+                    df_ag_hoje = df_ag_hoje.merge(
+                        df_base_completa[["Telefone_limpo", "Dias_num", "Compras", "Data", "Valor", "Classificação"]],
+                        on="Telefone_limpo",
+                        how="left",
+                        suffixes=("", "_base")
+                    )
+                    
+                    logger.info(f"✅ Agendamentos: JOIN realizado - {len(df_ag_hoje)} registros enriquecidos")
+                else:
+                    logger.warning("⚠️ Base principal vazia - cards sem dados complementares")
+                
                 # Filtrar pendentes
                 df_ag_pendente = df_ag_hoje[
                     ~df_ag_hoje["Telefone"].astype(str).isin(st.session_state["concluidos"]) &
@@ -1515,6 +1560,7 @@ def render_aba1(aba, df_dia, metas):
                                 elif ac2 == "pular":
                                     remover_card(row2["Telefone"], False)
                                     st.rerun()
+
         
         # ==========================================
         # MODO 3: CHECK-IN DE CLIENTES
