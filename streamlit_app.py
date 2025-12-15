@@ -1219,7 +1219,7 @@ if modo == "Clientes para Check-in (Base de Leitura)" and not df_ag_hoje.empty:
         # =========================================================
         # 🟧 MODO AGENDAMENTOS ATIVOS — MESMO FORMATO DO CHECK-IN
         # =========================================================
-        else:
+    
 
             st.subheader("📂 Agendamentos Ativos (Hoje)")
 
