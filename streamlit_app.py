@@ -416,6 +416,7 @@ def load_historico():
         return pd.DataFrame()
 
 @st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)  # Cache de 10 segundos (muda frequentemente)
+@st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)
 def load_agendamentos_hoje():
     """Carrega APENAS os agendamentos para HOJE (filtrado pela 'Próxima data')"""
     try:
@@ -427,7 +428,7 @@ def load_agendamentos_hoje():
             logger.info("⚠️ Nenhum agendamento na base")
             return pd.DataFrame()
         
-    
+        logger.info(f"📊 Total de agendamentos na base: {len(df)}")
         
         # Detectar qual coluna usar
         if "Próxima data" in df.columns:
@@ -436,24 +437,53 @@ def load_agendamentos_hoje():
             col_data = "Data de chamada"
         else:
             logger.error("❌ Nenhuma coluna de data encontrada")
+            logger.error(f"Colunas disponíveis: {df.columns.tolist()}")
             return pd.DataFrame()
         
-        # Filtrar por hoje (aceita formato BR ou ISO)
-        mask = (
-            df[col_data].astype(str).str.contains(hoje_br, na=False) |
-            df[col_data].astype(str).str.contains(hoje_iso, na=False)
-        )
+        # ✅ MELHORADO: Tentar múltiplos formatos de data
+        df['data_convertida'] = None
         
-        df_hoje = df[mask].copy()
+        # Formato 1: YYYY/MM/DD (seu caso: 2025/12/24)
+        df['data_convertida'] = pd.to_datetime(df[col_data], format='%Y/%m/%d', errors='coerce')
+        
+        # Formato 2: DD/MM/YYYY (se o primeiro falhar)
+        mascara_nulas = df['data_convertida'].isna()
+        if mascara_nulas.any():
+            df.loc[mascara_nulas, 'data_convertida'] = pd.to_datetime(
+                df.loc[mascara_nulas, col_data], 
+                format='%d/%m/%Y', 
+                errors='coerce'
+            )
+        
+        # Formato 3: ISO padrão (último recurso)
+        mascara_nulas = df['data_convertida'].isna()
+        if mascara_nulas.any():
+            df.loc[mascara_nulas, 'data_convertida'] = pd.to_datetime(
+                df.loc[mascara_nulas, col_data], 
+                errors='coerce'
+            )
+        
+        # Data de hoje (sem hora)
+        hoje = datetime.now().date()
+        
+        # Filtrar por hoje
+        df_hoje = df[df['data_convertida'].dt.date == hoje].copy()
+        
+        logger.info(f"✅ Agendamentos para hoje ({hoje.strftime('%Y/%m/%d')}): {len(df_hoje)}")
         
         if not df_hoje.empty:
             df_hoje["Telefone_limpo"] = df_hoje["Telefone"].apply(limpar_telefone)
+            logger.info(f"📞 Telefones: {df_hoje['Telefone'].tolist()}")
+        else:
+            # ✅ DEBUG: Mostrar quais datas estão na base
+            datas_unicas = df['data_convertida'].dropna().dt.date.unique()
+            logger.warning(f"⚠️ Datas encontradas na base: {sorted(datas_unicas)}")
+            logger.warning(f"⚠️ Procurando por: {hoje}")
         
-        logger.info(f"✅ Agendamentos para hoje ({hoje_br}): {len(df_hoje)}")
         return df_hoje
         
     except Exception as e:
-        logger.error(f"❌ Erro ao carregar agendamentos de hoje: {e}")
+        logger.error(f"❌ Erro ao carregar agendamentos de hoje: {e}", exc_info=True)
         return pd.DataFrame()
 
 # =========================================================
@@ -1021,6 +1051,20 @@ def render_aba1(aba, df_dia, metas):
         # =========================================================
         df_ag_hoje = load_agendamentos_hoje()
         df_base_completa = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
+
+        # Logo após: df_ag_hoje = load_agendamentos_hoje()
+        
+        # ✅ DEBUG TEMPORÁRIO
+        st.write("🔍 **DEBUG: Agendamentos carregados**")
+        st.write(f"Total de agendamentos hoje: {len(df_ag_hoje)}")
+        
+        if not df_ag_hoje.empty:
+            st.write("Colunas disponíveis:", df_ag_hoje.columns.tolist())
+            st.write("Primeiros registros:")
+            st.dataframe(df_ag_hoje.head())
+        else:
+            st.warning("df_ag_hoje está vazio!")
+
         
         if not df_ag_hoje.empty and not df_base_completa.empty:
             df_ag_hoje["Telefone_limpo"] = df_ag_hoje["Telefone"].apply(limpar_telefone)
