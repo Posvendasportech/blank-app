@@ -1164,7 +1164,7 @@ if modo == "Clientes para Check-in (Base de Leitura)":
 
     # Reset de índices para evitar problemas
 
-            df_checkin = df_checkin.reset_index(drop=True)
+        df_checkin = df_checkin.reset_index(drop=True)
 
             if df_checkin.empty:
                 st.balloons()
