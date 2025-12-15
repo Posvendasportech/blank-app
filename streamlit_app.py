@@ -2514,7 +2514,7 @@ def render_aba3(aba):
         # ==========================================
         st.subheader("➕ Criar Novo Agendamento")
         
-        # ✅ MOSTRAR SE TEM CLIENTE SELECIONADO
+        # ✅ LER DADOS DO SESSION STATE **ANTES** DO FORM
         dados_cliente = st.session_state.get("cliente_selecionado", None)
         
         if dados_cliente:
@@ -2534,13 +2534,13 @@ def render_aba3(aba):
             col_form1, col_form2 = st.columns(2)
             
             with col_form1:
-                # ✅ PEGAR VALORES DO SESSION STATE (se tiver)
+                # ✅ USAR dados_cliente que foi lido ANTES do form
                 cliente_novo = st.text_input(
                     "Nome do Cliente *",
                     value=dados_cliente["nome"] if dados_cliente else "",
                     key="cliente_novo",
                     placeholder="Digite o nome completo",
-                    disabled=dados_cliente is not None
+                    disabled=(dados_cliente is not None)
                 )
                 
                 telefone_novo = st.text_input(
@@ -2548,7 +2548,7 @@ def render_aba3(aba):
                     value=dados_cliente["telefone"] if dados_cliente else "",
                     key="telefone_novo",
                     placeholder="(11) 98765-4321",
-                    disabled=dados_cliente is not None
+                    disabled=(dados_cliente is not None)
                 )
                 
                 # ✅ SELECTBOX COM ÍNDICE CORRETO
@@ -2557,7 +2557,7 @@ def render_aba3(aba):
                 if dados_cliente:
                     try:
                         indice_class = opcoes_class.index(dados_cliente["classificacao"])
-                    except ValueError:
+                    except (ValueError, KeyError):
                         indice_class = 0
                 else:
                     indice_class = 0
