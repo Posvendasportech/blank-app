@@ -497,7 +497,7 @@ if lock_key not in st.session_state:
     df_locks = load_em_atendimento()
     telefone_limpo = limpar_telefone(telefone)
     
-    lock_existente = df_locks[
+        lock_existente = df_locks[
         (df_locks["Telefone"].astype(str) == str(telefone)) | 
         (df_locks["Telefone"].apply(limpar_telefone) == telefone_limpo)
     ]
@@ -516,28 +516,27 @@ if lock_key not in st.session_state:
     st.session_state[lock_key] = True
     logger.info(f"🔒 Card exibido e travado para {usuario_atual}: {telefone}")
 
-        logger.info(f"🔒 Card exibido e travado para {usuario_atual}: {telefone}")
+with st.container():
+    st.markdown('<div class="card">', unsafe_allow_html=True)
 
-    with st.container():
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-
-        dias_txt = f"{row['Dias_num']} dias desde compra" if pd.notna(row.get("Dias_num")) else "Sem informação"
-        motivo_anterior = row.get("Follow up", row.get("Motivo", row.get("Relato da conversa", "")))
-        
-        header_html = f"""
-            <div class="card-header">
-                <b>{row.get('Cliente', '—')}</b><br>
-                📱 {row.get('Telefone', '—')}<br>
-                🏷 {row.get('Classificação', '—')}<br>
-                💰 {safe_valor(row.get('Valor', '—'))}<br>
-                ⏳ {dias_txt}
+    dias_txt = f"{row['Dias_num']} dias desde compra" if pd.notna(row.get("Dias_num")) else "Sem informação"
+    motivo_anterior = row.get("Follow up", row.get("Motivo", row.get("Relato da conversa", "")))
+    
+    header_html = f"""
+        <div class="card-header">
+            <b>{row.get('Cliente', '—')}</b><br>
+            📱 {row.get('Telefone', '—')}<br>
+            🏷 {row.get('Classificação', '—')}<br>
+            💰 {safe_valor(row.get('Valor', '—'))}<br>
+            ⏳ {dias_txt}
+    """
+    
+    if motivo_anterior and str(motivo_anterior).strip() and str(motivo_anterior) != "—":
+        header_html += f"""<br><br>
+            📋 <b>Direcionamento anterior:</b><br>
+            <i style="color:#a0d8ff;">{motivo_anterior}</i>
         """
-        
-        if motivo_anterior and str(motivo_anterior).strip() and str(motivo_anterior) != "—":
-            header_html += f"""<br><br>
-                📋 <b>Direcionamento anterior:</b><br>
-                <i style="color:#a0d8ff;">{motivo_anterior}</i>
-            """
+
         
         header_html += "</div>"
         st.markdown(header_html, unsafe_allow_html=True)
