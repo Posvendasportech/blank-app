@@ -1147,77 +1147,75 @@ if modo == "Clientes para Check-in (Base de Leitura)" and not df_ag_hoje.empty:
     
     st.markdown("### 🟦 Check-ins do Dia")
 
-# =========================================================
-# 🟦 MODO CHECK-IN — EXIBE CARDS
-# =========================================================
-if modo == "Clientes para Check-in (Base de Leitura)":
+        # =========================================================
+        # 🟦 MODO CHECK-IN — EXIBE CARDS
+        # =========================================================
+        if modo == "Clientes para Check-in (Base de Leitura)":
 
-    class_filter = st.radio(
-        "Filtrar por classificação:",
-        Config.CLASSIFICACOES,
-        horizontal=True,
-    )
+            class_filter = st.radio(
+                "Filtrar por classificação:",
+                Config.CLASSIFICACOES,
+                horizontal=True,
+            )
 
-    df_checkin = df_dia.copy()
-    if class_filter != "Todos":
-        df_checkin = df_checkin[df_checkin["Classificação"] == class_filter]
+            df_checkin = df_dia.copy()
+            if class_filter != "Todos":
+                df_checkin = df_checkin[df_checkin["Classificação"] == class_filter]
 
-    # Reset de índices para evitar problemas
+            # Reset de índices para evitar problemas
+            df_checkin = df_checkin.reset_index(drop=True)
 
-        df_checkin = df_checkin.reset_index(drop=True)
-
-    if df_checkin.empty:
-        st.balloons()
-        st.success("🎉 **Parabéns!** Todos os check-ins foram concluídos!")
-        st.info("💡 **Próximos passos:**")
-        st.write("- Ajuste os filtros na barra lateral para ver mais clientes")
-        st.write("- Verifique a aba 'Agendamentos Ativos'")
-        st.write("- Confira os indicadores na aba 'Indicadores'")
-                
-        col1, col2 = st.columns(2)
-        col1.metric("✅ Concluídos hoje", concluidos_hoje)
-        col2.metric("⏭ Pulados hoje", len(st.session_state["pulados"]))
-        return
-
-        st.subheader("📌 Atendimentos do dia (Check-in)")
-
-            # CSV
-            csv = df_checkin.drop(columns=["Telefone_limpo", "ID"], errors="ignore").to_csv(index=False).encode("utf-8-sig")
-            st.download_button("📥 Baixar lista (CSV)", csv, "checkin_dia.csv")
-
-            st.markdown("---")
-
-            # Cards (2 por linha)
-            for i in range(0, len(df_checkin), 2):
+            if df_checkin.empty:
+                st.balloons()
+                st.success("🎉 **Parabéns!** Todos os check-ins foram concluídos!")
+                st.info("💡 **Próximos passos:**")
+                st.write("- Ajuste os filtros na barra lateral para ver mais clientes")
+                st.write("- Verifique a aba 'Agendamentos Ativos'")
+                st.write("- Confira os indicadores na aba 'Indicadores'")
+                        
                 col1, col2 = st.columns(2)
+                col1.metric("✅ Concluídos hoje", concluidos_hoje)
+                col2.metric("⏭ Pulados hoje", len(st.session_state["pulados"]))
+            else:
+                st.subheader("📌 Atendimentos do dia (Check-in)")
 
-                # CARD 1
-                row1 = df_checkin.iloc[i]
-                with col1:
-                    ac, mot, res, prox, vend = card_component(row1["ID"], row1, usuario_atual)
+                # CSV
+                csv = df_checkin.drop(columns=["Telefone_limpo", "ID"], errors="ignore").to_csv(index=False).encode("utf-8-sig")
+                st.download_button("📥 Baixar lista (CSV)", csv, "checkin_dia.csv")
 
-                    if ac == "concluir":
-                        registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
-                        remover_card(row1["Telefone"], True)
-                        # ✅ Rerun direto (mais rápido que usar flag)
-                        st.rerun()
-                    elif ac == "pular":
-                        remover_card(row1["Telefone"], False)
-                        st.rerun()
+                st.markdown("---")
 
-                # CARD 2
-                if i + 1 < len(df_checkin):
-                    row2 = df_checkin.iloc[i + 1]
-                    with col2:
-                        ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2, usuario_atual)
+                # Cards (2 por linha)
+                for i in range(0, len(df_checkin), 2):
+                    col1, col2 = st.columns(2)
 
-                        if ac2 == "concluir":
-                            registrar_agendamento(row2, res2, mot2, prox2.strftime("%d/%m/%Y") if prox2 else "", vend2)
-                            remover_card(row2["Telefone"], True)
+                    # CARD 1
+                    row1 = df_checkin.iloc[i]
+                    with col1:
+                        ac, mot, res, prox, vend = card_component(row1["ID"], row1, usuario_atual)
+
+                        if ac == "concluir":
+                            registrar_agendamento(row1, res, mot, prox.strftime("%d/%m/%Y") if prox else "", vend)
+                            remover_card(row1["Telefone"], True)
                             st.rerun()
-                        elif ac2 == "pular":
-                            remover_card(row2["Telefone"], False)
+                        elif ac == "pular":
+                            remover_card(row1["Telefone"], False)
                             st.rerun()
+
+                    # CARD 2
+                    if i + 1 < len(df_checkin):
+                        row2 = df_checkin.iloc[i + 1]
+                        with col2:
+                            ac2, mot2, res2, prox2, vend2 = card_component(row2["ID"], row2, usuario_atual)
+
+                            if ac2 == "concluir":
+                                registrar_agendamento(row2, res2, mot2, prox2.strftime("%d/%m/%Y") if prox2 else "", vend2)
+                                remover_card(row2["Telefone"], True)
+                                st.rerun()
+                            elif ac2 == "pular":
+                                remover_card(row2["Telefone"], False)
+                                st.rerun()
+
         # =========================================================
         # 🟧 MODO AGENDAMENTOS ATIVOS — MESMO FORMATO DO CHECK-IN
         # =========================================================
