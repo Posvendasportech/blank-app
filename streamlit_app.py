@@ -1178,120 +1178,53 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atua
 # (9) 🖥️ UI — ABAS PRINCIPAIS
 # =========================================================
 def render_aba1(aba, df_dia, metas):
+    """
+    Renderiza a aba principal de Tarefas do Dia
+    Inclui: Dashboard de métricas + 3 modos de atendimento (Suporte, Agendamentos, Check-in)
+    """
     with aba:
+        # ==========================================
+        # INICIALIZAÇÃO
+        # ==========================================
         if "card_counter" not in st.session_state:
             st.session_state["card_counter"] = 0
         
         usuario_atual = obter_usuario_atual()
         
         if not usuario_atual or usuario_atual.strip() == "":
-            st.warning("⚠️ **Por favor, identifique-se na barra lateral**")
+            st.warning("⚠️ **Por favor, identifique-se na barra lateral antes de continuar**")
+            st.info("👈 Digite seu nome no campo 'Seu nome' na sidebar")
             st.stop()
         
-        # Auto-refresh
+        # ==========================================
+        # AUTO-REFRESH (30 segundos)
+        # ==========================================
         if "last_refresh" not in st.session_state:
             st.session_state.last_refresh = datetime.now()
         
         tempo_decorrido = (datetime.now() - st.session_state.last_refresh).total_seconds()
+        
         if tempo_decorrido > 30:
             load_em_atendimento.clear()
             load_agendamentos_hoje.clear()
+            load_casos_suporte.clear()
             st.session_state.last_refresh = datetime.now()
+            logger.info("Auto-refresh de dados executado (30s)")
         
+        # ==========================================
+        # CABEÇALHO
+        # ==========================================
         st.header("📋 Tarefas do Dia")
         st.markdown("---")
         
         # ==========================================
-        # ✅ NOVO: DASHBOARD DE MÉTRICAS NO TOPO
+        # CARREGAR DADOS
         # ==========================================
-        df_aghoje = load_agendamentos_hoje()
-        df_suporte = load_casos_suporte()
-        
-        # Calcular totais
-        total_checkin = len(df_dia)
-        total_agendamentos = len(df_aghoje)
-        total_suporte = len(df_suporte)
-        total_geral = total_checkin + total_agendamentos + total_suporte
-        
-        # Calcular concluídos
-        telefones_do_dia = set()
-        if not df_dia.empty:
-            telefones_do_dia.update(df_dia["Telefone"].astype(str).tolist())
-        if not df_aghoje.empty:
-            telefones_do_dia.update(df_aghoje["Telefone"].astype(str).tolist())
-        if not df_suporte.empty:
-            telefones_do_dia.update(df_suporte["Telefone"].astype(str).tolist())
-        
-        concluidos_hoje = len(st.session_state["concluidos"].intersection(telefones_do_dia))
-        
-        # Barra de progresso
-        if total_geral > 0:
-            progresso = concluidos_hoje / total_geral
-            st.progress(progresso)
-            st.write(f"**{concluidos_hoje} de {total_geral} tarefas concluídas** ({progresso*100:.0f}%)")
-        else:
-            st.info("Nenhuma tarefa para hoje")
-        
-        st.markdown("---")
-        
-        # ✅ CARDS DE MÉTRICAS (4 colunas)
-        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        
-        with col_m1:
-            st.metric(
-                "🛠️ Suporte",
-                total_suporte,
-                delta=f"-{len([t for t in df_suporte['Telefone'] if str(t) in st.session_state['concluidos']])} concluídos" if total_suporte > 0 else None,
-                delta_color="off"
-            )
-        
-        with col_m2:
-            st.metric(
-                "📅 Agendamentos",
-                total_agendamentos,
-                delta=f"{metas.get('meta_prom', 0)+metas.get('meta_leais', 0)} meta",
-                delta_color="off"
-            )
-        
-        with col_m3:
-            st.metric(
-                "📞 Check-ins",
-                total_checkin,
-                delta=f"{metas.get('meta_novos', 0)+metas.get('meta_risco', 0)} meta",
-                delta_color="off"
-            )
-        
-        with col_m4:
-            st.metric(
-                "✅ Concluídos",
-                concluidos_hoje,
-                delta=f"{len(st.session_state.get('pulados', set()))} pulados",
-                delta_color="off"
-            )
-        
-        st.markdown("---")
-        
-        # ==========================================
-        # ✅ SELETOR DE MODO (3 OPÇÕES)
-        # ==========================================
-        modo = st.selectbox(
-            "Escolha o modo de atendimento:",
-            ["🛠️ Acompanhamento de Suporte", "📅 Agendamentos Ativos", "📞 Check-in de Clientes"],
-            key="modo_atendimento_aba1"
-        )
-        
-        st.markdown("---")
-        
-        # ... (continua nas próximas partes)
-
-
-        # =========================================================
-        # 🔍 Carregar agendamentos e fazer JOIN com base principal
-        # =========================================================
         df_ag_hoje = load_agendamentos_hoje()
+        df_suporte = load_casos_suporte()
         df_base_completa = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
-
-    
+        
+        # JOIN de agendamentos com base principal
         if not df_ag_hoje.empty and not df_base_completa.empty:
             df_ag_hoje["Telefone_limpo"] = df_ag_hoje["Telefone"].apply(limpar_telefone)
             df_ag_hoje = df_ag_hoje.merge(
@@ -1301,95 +1234,146 @@ def render_aba1(aba, df_dia, metas):
                 suffixes=("", "_base")
             )
             logger.info(f"✅ Join realizado: {len(df_ag_hoje)} agendamentos com dados da base")
-
-        qtd_checkin = len(df_dia)
-        qtd_agendamentos = len(df_ag_hoje)
-        total_dia = qtd_checkin + qtd_agendamentos
-
-        # Contar concluídos
+        
+        # ==========================================
+        # CALCULAR TOTAIS
+        # ==========================================
+        total_checkin = len(df_dia)
+        total_agendamentos = len(df_ag_hoje)
+        total_suporte = len(df_suporte)
+        total_geral = total_checkin + total_agendamentos + total_suporte
+        
+        # Reunir todos os telefones do dia
         telefones_do_dia = set()
         if not df_dia.empty:
             telefones_do_dia.update(df_dia["Telefone"].astype(str).tolist())
         if not df_ag_hoje.empty:
             telefones_do_dia.update(df_ag_hoje["Telefone"].astype(str).tolist())
+        if not df_suporte.empty:
+            telefones_do_dia.update(df_suporte["Telefone"].astype(str).tolist())
         
         concluidos_hoje = len(st.session_state["concluidos"].intersection(telefones_do_dia))
-
-        # Progresso
-        if total_dia > 0:
-            progresso = min(concluidos_hoje / total_dia, 1.0)
-        else:
-            progresso = 0.0
-
-        # Barra de progresso
-        st.markdown("### Progresso do Dia")
-        st.progress(progresso)
-        st.write(f"**{concluidos_hoje} de {total_dia} contatos concluídos** ({progresso*100:.1f}%)")
-
-        if "baloes_mostrados" not in st.session_state:
-            st.session_state["baloes_mostrados"] = False
-
-        if progresso == 0:
-            st.info("🚀 Começando agora! Vamos iniciar os atendimentos.")
-        elif progresso < 0.25:
-            st.info("🔥 Bom começo! Continue nesse ritmo.")
-        elif progresso < 0.50:
-            st.success("💪 Rumo à metade!")
-        elif progresso < 0.75:
-            st.success("🟩 Ótimo! Mais da metade concluída!")
-        elif progresso < 1:
-            st.success("🏁 Quase lá!")
-        else:
-            if not st.session_state["baloes_mostrados"]:
-                st.balloons()
-                st.session_state["baloes_mostrados"] = True
-            st.success("🎉 Dia concluído!")
-
-        colA, colB, colC = st.columns(3)
-
-        with colA:
-            st.metric("📅 Total do Dia", total_dia, f"{qtd_checkin} Check-in + {qtd_agendamentos} Agend.")
-
-        with colB:
-            st.metric(
-                "🟦 Check-in Programados",
-                qtd_checkin,
-                f"Meta: {metas['meta_novos'] + metas['meta_prom'] + metas['meta_leais'] + metas['meta_risco']}"
-            )
-
-        with colC:
-            st.metric("🟧 Agendamentos de Hoje", qtd_agendamentos)
-
-        st.markdown("---")
-
-               # ==========================================
-        # RENDERIZAR MODO SELECIONADO
-        # ==========================================
         
+        # ==========================================
+        # BARRA DE PROGRESSO GLOBAL
+        # ==========================================
+        st.markdown("### 📊 Progresso do Dia")
+        
+        if total_geral > 0:
+            progresso = min(concluidos_hoje / total_geral, 1.0)
+            st.progress(progresso)
+            st.write(f"**{concluidos_hoje} de {total_geral} tarefas concluídas** ({progresso*100:.0f}%)")
+            
+            # Mensagens motivacionais
+            if "baloes_mostrados" not in st.session_state:
+                st.session_state["baloes_mostrados"] = False
+            
+            if progresso == 0:
+                st.info("🚀 Começando agora! Vamos iniciar os atendimentos.")
+            elif progresso < 0.25:
+                st.info("🔥 Bom começo! Continue nesse ritmo.")
+            elif progresso < 0.50:
+                st.success("💪 Rumo à metade!")
+            elif progresso < 0.75:
+                st.success("🟩 Ótimo! Mais da metade concluída!")
+            elif progresso < 1:
+                st.success("🏁 Quase lá!")
+            else:
+                if not st.session_state["baloes_mostrados"]:
+                    st.balloons()
+                    st.session_state["baloes_mostrados"] = True
+                st.success("🎉 Dia concluído!")
+        else:
+            st.info("ℹ️ Nenhuma tarefa programada para hoje")
+        
+        st.markdown("---")
+        
+        # ==========================================
+        # CARDS DE MÉTRICAS (4 colunas)
+        # ==========================================
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+        
+        with col_m1:
+            suporte_concluidos = len([t for t in df_suporte["Telefone"] if str(t) in st.session_state["concluidos"]]) if not df_suporte.empty else 0
+            st.metric(
+                "🛠️ Suporte",
+                total_suporte,
+                delta=f"{suporte_concluidos} concluídos" if total_suporte > 0 else "Nenhum caso",
+                delta_color="off"
+            )
+        
+        with col_m2:
+            meta_agendamentos = metas.get('meta_prom', 0) + metas.get('meta_leais', 0)
+            st.metric(
+                "📅 Agendamentos",
+                total_agendamentos,
+                delta=f"Meta: {meta_agendamentos}",
+                delta_color="inverse" if total_agendamentos < meta_agendamentos else "normal"
+            )
+        
+        with col_m3:
+            meta_checkin = metas.get('meta_novos', 0) + metas.get('meta_risco', 0)
+            st.metric(
+                "📞 Check-ins",
+                total_checkin,
+                delta=f"Meta: {meta_checkin}",
+                delta_color="inverse" if total_checkin < meta_checkin else "normal"
+            )
+        
+        with col_m4:
+            total_pulados = len(st.session_state.get('pulados', set()))
+            st.metric(
+                "✅ Concluídos",
+                concluidos_hoje,
+                delta=f"{total_pulados} pulados" if total_pulados > 0 else "Ótimo!",
+                delta_color="off"
+            )
+        
+        st.markdown("---")
+        
+        # ==========================================
+        # SELETOR DE MODO DE ATENDIMENTO
+        # ==========================================
+        st.markdown("### 🎯 Modo de Atendimento")
+        
+        modo = st.selectbox(
+            "Escolha qual tipo de tarefa deseja executar:",
+            ["🛠️ Acompanhamento de Suporte", "📅 Agendamentos Ativos", "📞 Check-in de Clientes"],
+            key="modo_atendimento_aba1",
+            help="Suporte = casos prioritários | Agendamentos = contatos programados | Check-in = novos contatos da base"
+        )
+        
+        st.markdown("---")
+        
+        # ==========================================
+        # MODO 1: ACOMPANHAMENTO DE SUPORTE
+        # ==========================================
         if modo == "🛠️ Acompanhamento de Suporte":
-            # ✅ MODO 1: SUPORTE
-            st.subheader("🛠️ Casos de Suporte Prioritários")
+            st.markdown("## 🛠️ Casos de Suporte Prioritários")
+            st.info("📌 Problemas e reclamações que precisam de acompanhamento até resolução completa")
             
             if df_suporte.empty:
-                st.success("✅ Nenhum caso de suporte pendente!")
-                st.info("Quando houver problemas reportados, eles aparecerão aqui")
+                st.success("✅ Nenhum caso de suporte pendente no momento!")
+                st.info("💡 Quando houver problemas reportados pelos clientes, eles aparecerão aqui automaticamente")
             else:
-                st.info(f"📊 **{total_suporte} caso(s) aguardando resolução**")
-                
-                # Filtrar pendentes
+                # Filtrar apenas pendentes (não concluídos nem pulados)
                 df_suporte_pendente = df_suporte[
-                    ~df_suporte["Telefone"].isin(st.session_state["concluidos"]) &
-                    ~df_suporte["Telefone"].isin(st.session_state["pulados"])
+                    ~df_suporte["Telefone"].astype(str).isin(st.session_state["concluidos"]) &
+                    ~df_suporte["Telefone"].astype(str).isin(st.session_state["pulados"])
                 ]
                 
                 if df_suporte_pendente.empty:
-                    st.success("🎉 Todos os casos foram atendidos!")
+                    st.success("🎉 Todos os casos de suporte foram atendidos!")
+                    st.info(f"✅ {len(df_suporte)} caso(s) resolvido(s) hoje")
                 else:
+                    st.warning(f"⚠️ **{len(df_suporte_pendente)} caso(s) aguardando resolução**")
+                    st.markdown("---")
+                    
                     # Exibir cards (2 por linha)
                     for i in range(0, len(df_suporte_pendente), 2):
                         col1, col2 = st.columns(2)
                         
-                        # CARD 1
+                        # CARD SUPORTE 1
                         row1 = df_suporte_pendente.iloc[i]
                         with col1:
                             st.session_state["card_counter"] += 1
@@ -1398,17 +1382,25 @@ def render_aba1(aba, df_dia, metas):
                             acao, motivo, resumo, proxima, vendedor = card_suporte(id_fix, row1, usuario_atual)
                             
                             if acao == "concluir":
-                                registrar_agendamento(row1, resumo, motivo, proxima.strftime("%d/%m/%Y") if proxima else "", vendedor, tipo_atendimento="Suporte")
+                                registrar_agendamento(
+                                    row1, 
+                                    resumo, 
+                                    motivo, 
+                                    proxima.strftime("%d/%m/%Y") if proxima else "", 
+                                    vendedor, 
+                                    tipo_atendimento="Suporte"
+                                )
                                 remover_card(row1["Telefone"], concluido=True)
                                 remover_lock(row1["Telefone"])
                                 limpar_caches_volateis()
                                 st.rerun()
+                            
                             elif acao == "pular":
                                 remover_card(row1["Telefone"], concluido=False)
                                 remover_lock(row1["Telefone"])
                                 st.rerun()
                         
-                        # CARD 2
+                        # CARD SUPORTE 2
                         if i + 1 < len(df_suporte_pendente):
                             row2 = df_suporte_pendente.iloc[i + 1]
                             with col2:
@@ -1418,29 +1410,173 @@ def render_aba1(aba, df_dia, metas):
                                 acao2, motivo2, resumo2, proxima2, vendedor2 = card_suporte(id_fix, row2, usuario_atual)
                                 
                                 if acao2 == "concluir":
-                                    registrar_agendamento(row2, resumo2, motivo2, proxima2.strftime("%d/%m/%Y") if proxima2 else "", vendedor2, tipo_atendimento="Suporte")
+                                    registrar_agendamento(
+                                        row2, 
+                                        resumo2, 
+                                        motivo2, 
+                                        proxima2.strftime("%d/%m/%Y") if proxima2 else "", 
+                                        vendedor2, 
+                                        tipo_atendimento="Suporte"
+                                    )
                                     remover_card(row2["Telefone"], concluido=True)
                                     remover_lock(row2["Telefone"])
                                     limpar_caches_volateis()
                                     st.rerun()
+                                
                                 elif acao2 == "pular":
                                     remover_card(row2["Telefone"], concluido=False)
                                     remover_lock(row2["Telefone"])
                                     st.rerun()
         
+        # ==========================================
+        # MODO 2: AGENDAMENTOS ATIVOS
+        # ==========================================
         elif modo == "📅 Agendamentos Ativos":
-            # ✅ MODO 2: AGENDAMENTOS
-            st.subheader("📅 Agendamentos Programados para Hoje")
+            st.markdown("## 📅 Agendamentos Programados para Hoje")
+            st.info("📌 Contatos que você agendou previamente para serem feitos hoje")
             
-            # ... (seu código existente de agendamentos ativos)
-            # Copie todo o bloco que já existe
+            if df_ag_hoje.empty:
+                st.success("✅ Nenhum agendamento para hoje!")
+                st.info("💡 Use a aba 'Histórico/Pesquisa' para criar novos agendamentos")
+            else:
+                # Filtrar pendentes
+                df_ag_pendente = df_ag_hoje[
+                    ~df_ag_hoje["Telefone"].astype(str).isin(st.session_state["concluidos"]) &
+                    ~df_ag_hoje["Telefone"].astype(str).isin(st.session_state["pulados"])
+                ]
+                
+                if df_ag_pendente.empty:
+                    st.success("🎉 Todos os agendamentos foram concluídos!")
+                    st.info(f"✅ {len(df_ag_hoje)} agendamento(s) realizado(s)")
+                else:
+                    st.warning(f"📋 **{len(df_ag_pendente)} agendamento(s) pendente(s)**")
+                    st.markdown("---")
+                    
+                    # Exibir cards (2 por linha)
+                    for i in range(0, len(df_ag_pendente), 2):
+                        col1, col2 = st.columns(2)
+                        
+                        # CARD AGENDAMENTO 1
+                        row1 = df_ag_pendente.iloc[i]
+                        with col1:
+                            st.session_state["card_counter"] += 1
+                            id_fix = f"agend_{limpar_telefone(row1['Telefone'])}_{st.session_state['card_counter']}"
+                            
+                            ac, mot, res, prox, vend = card_component(id_fix, row1, usuario_atual)
+                            
+                            if ac == "concluir":
+                                registrar_agendamento(
+                                    row1, 
+                                    res, 
+                                    mot, 
+                                    prox.strftime("%d/%m/%Y") if prox else "", 
+                                    vend,
+                                    tipo_atendimento=row1.get("Tipo de atendimento", "Experiência")
+                                )
+                                remover_card(row1["Telefone"], True)
+                                st.rerun()
+                            elif ac == "pular":
+                                remover_card(row1["Telefone"], False)
+                                st.rerun()
+                        
+                        # CARD AGENDAMENTO 2
+                        if i + 1 < len(df_ag_pendente):
+                            row2 = df_ag_pendente.iloc[i + 1]
+                            with col2:
+                                st.session_state["card_counter"] += 1
+                                id_fix = f"agend_{limpar_telefone(row2['Telefone'])}_{st.session_state['card_counter']}"
+                                
+                                ac2, mot2, res2, prox2, vend2 = card_component(id_fix, row2, usuario_atual)
+                                
+                                if ac2 == "concluir":
+                                    registrar_agendamento(
+                                        row2, 
+                                        res2, 
+                                        mot2, 
+                                        prox2.strftime("%d/%m/%Y") if prox2 else "", 
+                                        vend2,
+                                        tipo_atendimento=row2.get("Tipo de atendimento", "Experiência")
+                                    )
+                                    remover_card(row2["Telefone"], True)
+                                    st.rerun()
+                                elif ac2 == "pular":
+                                    remover_card(row2["Telefone"], False)
+                                    st.rerun()
         
+        # ==========================================
+        # MODO 3: CHECK-IN DE CLIENTES
+        # ==========================================
         elif modo == "📞 Check-in de Clientes":
-            # ✅ MODO 3: CHECK-IN
-            st.subheader("📞 Check-in de Clientes da Base")
+            st.markdown("## 📞 Check-in de Clientes da Base")
+            st.info("📌 Novos clientes e clientes em risco que precisam de contato proativo")
             
-            # ... (seu código existente de check-in)
-            # Copie todo o bloco que já existe
+            if df_dia.empty:
+                st.success("✅ Nenhum check-in programado para hoje!")
+                st.info("💡 A lista é atualizada automaticamente com base nas regras de classificação")
+            else:
+                # Filtrar pendentes
+                df_checkin = df_dia[
+                    ~df_dia["Telefone"].astype(str).isin(st.session_state["concluidos"]) &
+                    ~df_dia["Telefone"].astype(str).isin(st.session_state["pulados"])
+                ]
+                
+                if df_checkin.empty:
+                    st.success("🎉 Todos os check-ins foram concluídos!")
+                    st.info(f"✅ {len(df_dia)} cliente(s) contatado(s)")
+                else:
+                    st.warning(f"📋 **{len(df_checkin)} check-in(s) pendente(s)**")
+                    st.markdown("---")
+                    
+                    # Exibir cards (2 por linha)
+                    for i in range(0, len(df_checkin), 2):
+                        col1, col2 = st.columns(2)
+                        
+                        # CARD CHECK-IN 1
+                        row1 = df_checkin.iloc[i]
+                        with col1:
+                            st.session_state["card_counter"] += 1
+                            id_fix = f"checkin_{limpar_telefone(row1['Telefone'])}_{st.session_state['card_counter']}"
+                            
+                            ac, mot, res, prox, vend = card_component(id_fix, row1, usuario_atual)
+                            
+                            if ac == "concluir":
+                                registrar_agendamento(
+                                    row1, 
+                                    res, 
+                                    mot, 
+                                    prox.strftime("%d/%m/%Y") if prox else "", 
+                                    vend,
+                                    tipo_atendimento="Experiência"
+                                )
+                                remover_card(row1["Telefone"], True)
+                                st.rerun()
+                            elif ac == "pular":
+                                remover_card(row1["Telefone"], False)
+                                st.rerun()
+                        
+                        # CARD CHECK-IN 2
+                        if i + 1 < len(df_checkin):
+                            row2 = df_checkin.iloc[i + 1]
+                            with col2:
+                                st.session_state["card_counter"] += 1
+                                id_fix = f"checkin_{limpar_telefone(row2['Telefone'])}_{st.session_state['card_counter']}"
+                                
+                                ac2, mot2, res2, prox2, vend2 = card_component(id_fix, row2, usuario_atual)
+                                
+                                if ac2 == "concluir":
+                                    registrar_agendamento(
+                                        row2, 
+                                        res2, 
+                                        mot2, 
+                                        prox2.strftime("%d/%m/%Y") if prox2 else "", 
+                                        vend2,
+                                        tipo_atendimento="Experiência"
+                                    )
+                                    remover_card(row2["Telefone"], True)
+                                    st.rerun()
+                                elif ac2 == "pular":
+                                    remover_card(row2["Telefone"], False)
+                                    st.rerun()
 
 
 def render_aba2(aba, base, total_tarefas):
