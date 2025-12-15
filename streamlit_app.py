@@ -1914,20 +1914,282 @@ def render_aba2(aba, base, total_tarefas):
 
 
 def render_aba3(aba):
+    """Aba de Pesquisa de Cliente e Histórico Completo"""
+    
     with aba:
-        st.header("🔎 Pesquisa no Histórico")
-
-        df = load_historico()
-        termo = st.text_input("Buscar no histórico")
-
-        if termo:
-            filt = df[df.apply(lambda x: termo.lower() in str(x).lower(), axis=1)]
-            if not filt.empty:
-                st.dataframe(filt, use_container_width=True)
-            else:
-                st.warning("Nenhum resultado encontrado")
+        st.header("🔎 Pesquisa de Cliente")
+        
+        st.markdown("""
+        **💡 Pesquise por telefone para ver:**
+        - 📋 Histórico completo de atendimentos
+        - 📊 Classificação e dados atuais
+        - 📅 Próximos agendamentos
+        - ➕ Criar novo agendamento
+        """)
+        
+        st.markdown("---")
+        
+        # =========================================================
+        # 🔍 CAMPO DE PESQUISA
+        # =========================================================
+        col_pesquisa, col_btn = st.columns([3, 1])
+        
+        with col_pesquisa:
+            telefone_busca = st.text_input(
+                "Digite o telefone do cliente:",
+                placeholder="Ex: (11) 98765-4321 ou 11987654321",
+                key="telefone_busca_aba3",
+                help="Pode digitar com ou sem formatação"
+            )
+        
+        with col_btn:
+            st.markdown("<br>", unsafe_allow_html=True)
+            buscar = st.button("🔍 Buscar", use_container_width=True, type="primary")
+        
+        # Limpar telefone para busca
+        if telefone_busca and telefone_busca.strip():
+            telefone_limpo = limpar_telefone(telefone_busca)
         else:
-            st.info("Digite um termo para pesquisar no histórico de atendimentos")
+            telefone_limpo = None
+        
+        # =========================================================
+        # 📊 RESULTADOS DA BUSCA
+        # =========================================================
+        if buscar and telefone_limpo:
+            st.markdown("---")
+            st.markdown(f"### 📱 Resultados para: **{telefone_busca}**")
+            
+            # Carregar dados
+            base = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
+            df_historico = load_historico()
+            df_agendamentos = load_df_agendamentos()
+            
+            # Buscar cliente na base principal
+            cliente_encontrado = base[base["Telefone_limpo"] == telefone_limpo]
+            
+            if not cliente_encontrado.empty:
+                # =====================================================
+                # 📋 SEÇÃO 1: DADOS ATUAIS DO CLIENTE
+                # =====================================================
+                st.markdown("### 👤 Dados do Cliente")
+                
+                cliente = cliente_encontrado.iloc[0]
+                
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric(
+                        "👤 Nome",
+                        cliente.get("Cliente", "—")
+                    )
+                
+                with col2:
+                    st.metric(
+                        "🏷️ Classificação",
+                        cliente.get("Classificação", "—")
+                    )
+                
+                with col3:
+                    valor_formatado = safe_valor(cliente.get("Valor", "—"))
+                    st.metric(
+                        "💰 Último Valor",
+                        valor_formatado
+                    )
+                
+                with col4:
+                    dias = cliente.get("Dias_num", "—")
+                    if pd.notna(dias):
+                        st.metric(
+                            "📅 Dias desde compra",
+                            f"{int(dias)} dias"
+                        )
+                    else:
+                        st.metric("📅 Dias desde compra", "—")
+                
+                # Informações adicionais
+                with st.expander("📄 Informações Detalhadas", expanded=False):
+                    col_a, col_b = st.columns(2)
+                    
+                    with col_a:
+                        st.write(f"**📱 Telefone:** {cliente.get('Telefone', '—')}")
+                        st.write(f"**🛒 Compras:** {cliente.get('Compras', '—')}")
+                        st.write(f"**📅 Data última compra:** {cliente.get('Data', '—')}")
+                    
+                    with col_b:
+                        st.write(f"**🎯 Status:** {cliente.get('Classificação', '—')}")
+                        st.write(f"**💵 Valor:** {cliente.get('Valor', '—')}")
+                
+                st.markdown("---")
+                
+                # =====================================================
+                # 📅 SEÇÃO 2: PRÓXIMOS AGENDAMENTOS
+                # =====================================================
+                st.markdown("### 📅 Próximos Agendamentos")
+                
+                if not df_agendamentos.empty:
+                    # Buscar agendamentos deste telefone
+                    agendamentos_cliente = df_agendamentos[
+                        df_agendamentos["Telefone"].astype(str).apply(limpar_telefone) == telefone_limpo
+                    ].copy()
+                    
+                    if not agendamentos_cliente.empty:
+                        # Converter próxima data
+                        colunas_data_possiveis = ["Próxima data", "Data de chamada", "Proxima data", "Data"]
+                        coluna_data = None
+                        
+                        for col in colunas_data_possiveis:
+                            if col in agendamentos_cliente.columns:
+                                coluna_data = col
+                                break
+                        
+                        if coluna_data:
+                            agendamentos_cliente["Data_convertida"] = pd.to_datetime(
+                                agendamentos_cliente[coluna_data],
+                                format="%d/%m/%Y",
+                                errors="coerce"
+                            )
+                            
+                            # Filtrar agendamentos futuros
+                            hoje = datetime.now()
+                            agendamentos_futuros = agendamentos_cliente[
+                                agendamentos_cliente["Data_convertida"] >= hoje
+                            ].sort_values("Data_convertida")
+                            
+                            if not agendamentos_futuros.empty:
+                                st.success(f"✅ **{len(agendamentos_futuros)} agendamento(s) futuro(s)**")
+                                
+                                # Mostrar próximos agendamentos
+                                for idx, agd in agendamentos_futuros.head(5).iterrows():
+                                    data_agd = agd.get(coluna_data, "—")
+                                    motivo = agd.get("Follow up", agd.get("Motivo", "—"))
+                                    vendedor = agd.get("Vendedor", "—")
+                                    
+                                    st.info(f"📅 **{data_agd}** | {motivo} | 👤 {vendedor}")
+                            else:
+                                st.warning("📭 Nenhum agendamento futuro")
+                        else:
+                            st.warning("⚠️ Não foi possível identificar a coluna de data nos agendamentos")
+                    else:
+                        st.info("📭 Nenhum agendamento encontrado para este cliente")
+                else:
+                    st.info("📭 Nenhum agendamento na base")
+                
+                st.markdown("---")
+                
+                # =====================================================
+                # 📋 SEÇÃO 3: HISTÓRICO DE ATENDIMENTOS
+                # =====================================================
+                st.markdown("### 📋 Histórico de Atendimentos")
+                
+                if not df_historico.empty:
+                    # Buscar histórico deste telefone
+                    historico_cliente = df_historico[
+                        df_historico["Telefone"].astype(str).apply(limpar_telefone) == telefone_limpo
+                    ].copy()
+                    
+                    if not historico_cliente.empty:
+                        # Ordenar por data (mais recente primeiro)
+                        if "Data_de_contato" in historico_cliente.columns:
+                            historico_cliente["Data_convertida"] = pd.to_datetime(
+                                historico_cliente["Data_de_contato"],
+                                format="%d/%m/%Y %H:%M",
+                                errors="coerce"
+                            )
+                            historico_cliente = historico_cliente.sort_values("Data_convertida", ascending=False)
+                        
+                        st.success(f"📊 **Total de atendimentos:** {len(historico_cliente)}")
+                        
+                        # Exibir tabela
+                        colunas_exibir = []
+                        mapeamento_colunas = {
+                            "Data_de_contato": "Data/Hora",
+                            "Classificação": "Classificação",
+                            "Relato da conversa": "Resumo",
+                            "Follow up": "Próximos Passos",
+                            "Vendedor": "Atendente",
+                            "Valor": "Valor"
+                        }
+                        
+                        for col_original, col_nova in mapeamento_colunas.items():
+                            if col_original in historico_cliente.columns:
+                                colunas_exibir.append((col_original, col_nova))
+                        
+                        df_exibir = historico_cliente[[c[0] for c in colunas_exibir]].copy()
+                        df_exibir.columns = [c[1] for c in colunas_exibir]
+                        
+                        st.dataframe(
+                            df_exibir,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                        
+                        # Download histórico
+                        csv_historico = df_exibir.to_csv(index=False).encode("utf-8-sig")
+                        st.download_button(
+                            "📥 Baixar Histórico (CSV)",
+                            csv_historico,
+                            f"historico_{telefone_limpo}.csv",
+                            use_container_width=True
+                        )
+                    else:
+                        st.info("📭 Nenhum atendimento registrado para este cliente")
+                else:
+                    st.info("📭 Histórico vazio")
+                
+                st.markdown("---")
+                
+                # =====================================================
+                # ➕ SEÇÃO 4: CRIAR NOVO AGENDAMENTO
+                # =====================================================
+                st.markdown("### ➕ Criar Novo Agendamento")
+                
+                with st.form(key=f"novo_agendamento_{telefone_limpo}", clear_on_submit=True):
+                    st.info("💡 Use este formulário para criar um agendamento adicional para este cliente")
+                    
+                    col_form1, col_form2 = st.columns(2)
+                    
+                    with col_form1:
+                        vendedor_novo = st.selectbox("Responsável:", Config.VENDEDORES, key=f"vend_novo_{telefone_limpo}")
+                        motivo_novo = st.text_input("Motivo do contato:", key=f"mot_novo_{telefone_limpo}")
+                    
+                    with col_form2:
+                        proxima_data_novo = st.date_input("Próxima data:", key=f"dt_novo_{telefone_limpo}")
+                        resumo_novo = st.text_area("Observações:", key=f"res_novo_{telefone_limpo}", height=100)
+                    
+                    submeter = st.form_submit_button("✅ Criar Agendamento", use_container_width=True, type="primary")
+                    
+                    if submeter:
+                        if not motivo_novo.strip():
+                            st.error("⚠️ O campo 'Motivo do contato' é obrigatório")
+                        elif not proxima_data_novo:
+                            st.error("⚠️ Selecione uma data para o agendamento")
+                        else:
+                            # Criar registro de agendamento
+                            registrar_agendamento(
+                                cliente,
+                                resumo_novo if resumo_novo.strip() else "Agendamento criado via pesquisa",
+                                motivo_novo,
+                                proxima_data_novo.strftime("%d/%m/%Y"),
+                                vendedor_novo
+                            )
+                            
+                            st.success(f"✅ Agendamento criado para {proxima_data_novo.strftime('%d/%m/%Y')}!")
+                            st.balloons()
+                            
+                            # Aguardar 2 segundos e recarregar
+                            import time
+                            time.sleep(2)
+                            st.rerun()
+            
+            else:
+                st.warning(f"❌ Nenhum cliente encontrado com o telefone: **{telefone_busca}**")
+                st.info("💡 **Dicas:**")
+                st.write("- Verifique se o telefone está correto")
+                st.write("- Tente sem formatação (apenas números)")
+                st.write("- Verifique se o cliente está cadastrado na base")
+        
+        elif buscar and not telefone_limpo:
+            st.warning("⚠️ Digite um telefone válido para pesquisar")
 
 # =========================================================
 # (10) 🚀 MAIN FLOW
