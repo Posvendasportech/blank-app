@@ -2220,16 +2220,9 @@ def render_aba3(aba):
                 key="buscar_telefone",
                 placeholder="Ex: (11) 98765-4321 ou 11987654321"
             )
-                
-        with col_busca2:
-            st.write("")  
-            st.write("")  
-            # ✅ Não usar botão - usar auto-busca quando digitar
-    
-            # ✅ BUSCAR AUTOMATICAMENTE quando tiver pelo menos 8 dígitos
-            if telefone_para_buscar.strip() and len(limpar_telefone(telefone_para_buscar)) >= 8:
-
-
+        
+        # ✅ BUSCAR AUTOMATICAMENTE quando tiver pelo menos 8 dígitos
+        if telefone_para_buscar.strip() and len(limpar_telefone(telefone_para_buscar)) >= 8:
             telefone_limpo = limpar_telefone(telefone_para_buscar)
             
             # Carregar base de dados
@@ -2241,6 +2234,14 @@ def render_aba3(aba):
             
             if not cliente_encontrado.empty:
                 row = cliente_encontrado.iloc[0]
+                
+                # ✅ SALVAR NO SESSION STATE
+                st.session_state["cliente_selecionado"] = {
+                    "nome": row["Cliente"],
+                    "telefone": str(row["Telefone"]),
+                    "classificacao": row.get("Classificação", "Novo"),
+                    "valor": row.get("Valor", 0)
+                }
                 
                 # Exibir informações do cliente
                 st.success(f"✅ Cliente encontrado: **{row['Cliente']}**")
@@ -2254,6 +2255,7 @@ def render_aba3(aba):
                     st.metric("Nº Compras", row.get("Compras", 0))
                 
                 st.markdown("---")
+
                 
                 # ==========================================
                 # SEÇÃO 2: HISTÓRICO DO CLIENTE
