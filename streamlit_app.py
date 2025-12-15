@@ -1166,20 +1166,20 @@ if modo == "Clientes para Check-in (Base de Leitura)":
 
         df_checkin = df_checkin.reset_index(drop=True)
 
-            if df_checkin.empty:
-                st.balloons()
-                st.success("🎉 **Parabéns!** Todos os check-ins foram concluídos!")
-                st.info("💡 **Próximos passos:**")
-                st.write("- Ajuste os filtros na barra lateral para ver mais clientes")
-                st.write("- Verifique a aba 'Agendamentos Ativos'")
-                st.write("- Confira os indicadores na aba 'Indicadores'")
+    if df_checkin.empty:
+        st.balloons()
+        st.success("🎉 **Parabéns!** Todos os check-ins foram concluídos!")
+        st.info("💡 **Próximos passos:**")
+        st.write("- Ajuste os filtros na barra lateral para ver mais clientes")
+        st.write("- Verifique a aba 'Agendamentos Ativos'")
+        st.write("- Confira os indicadores na aba 'Indicadores'")
                 
-                col1, col2 = st.columns(2)
-                col1.metric("✅ Concluídos hoje", concluidos_hoje)
-                col2.metric("⏭ Pulados hoje", len(st.session_state["pulados"]))
-                return
+        col1, col2 = st.columns(2)
+        col1.metric("✅ Concluídos hoje", concluidos_hoje)
+        col2.metric("⏭ Pulados hoje", len(st.session_state["pulados"]))
+        return
 
-            st.subheader("📌 Atendimentos do dia (Check-in)")
+        st.subheader("📌 Atendimentos do dia (Check-in)")
 
             # CSV
             csv = df_checkin.drop(columns=["Telefone_limpo", "ID"], errors="ignore").to_csv(index=False).encode("utf-8-sig")
