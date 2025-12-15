@@ -1541,17 +1541,32 @@ def render_aba2(aba, base, total_tarefas):
         st.markdown("---")
 
         
-              # =========================================================
+        # =========================================================
         # 🍰 SEÇÃO 4: GRÁFICO DE PIZZA - CLASSIFICAÇÕES
         # =========================================================
         st.markdown("### 🍰 Proporção de Classificações Selecionadas")
         
         if not base_filtrada.empty:
+            # ✅ LIMPEZA: Remover duplicados antes de contar
+            base_pizza = base_filtrada.copy()
+            
+            # Remover linhas vazias
+            base_pizza = base_pizza[base_pizza["Cliente"].notna()]
+            base_pizza = base_pizza[base_pizza["Cliente"].astype(str).str.strip() != ""]
+            
+            # Remover duplicados por telefone (garantir clientes únicos)
+            if "Telefone_limpo" in base_pizza.columns:
+                base_pizza = base_pizza.drop_duplicates(subset=["Telefone_limpo"], keep="first")
+            elif "Telefone" in base_pizza.columns:
+                base_pizza = base_pizza.drop_duplicates(subset=["Telefone"], keep="first")
+            
+            logger.info(f"🍰 Pizza - Base filtrada: {len(base_filtrada)} | Após limpeza: {len(base_pizza)}")
+            
             col_pizza, col_legenda = st.columns([2, 1])
             
             with col_pizza:
-                # Contar classificações
-                dist_pizza = base_filtrada["Classificação"].value_counts()
+                # Contar classificações (usando base limpa)
+                dist_pizza = base_pizza["Classificação"].value_counts()
                 
                 # Calcular percentuais
                 total = dist_pizza.sum()
@@ -1589,11 +1604,17 @@ def render_aba2(aba, base, total_tarefas):
                     st.write("")
                 
                 st.markdown("---")
-                st.info(f"**Total analisado:** {total:,} clientes".replace(",", "."))
+                st.info(f"**Total analisado:** {total:,} clientes únicos".replace(",", "."))
+                
+                # Mostrar se houve duplicados
+                duplicados_pizza = len(base_filtrada) - len(base_pizza)
+                if duplicados_pizza > 0:
+                    st.warning(f"⚠️ {duplicados_pizza} duplicados removidos")
         else:
             st.warning("⚠️ Nenhuma classificação selecionada")
         
         st.markdown("---")
+
 
         
         # =========================================================
