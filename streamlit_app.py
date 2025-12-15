@@ -2528,7 +2528,7 @@ else:
                         "Telefone": telefone_novo,
                         "Compras": 0
                     }
-                                try:
+                    try:
                         registrar_agendamento(
                             row_ficticia,
                             resumo_novo if resumo_novo.strip() else "Agendamento criado via pesquisa",
@@ -2542,7 +2542,6 @@ else:
                         load_agendamentos_ativos.clear()
                         load_df_agendamentos.clear()
                         load_casos_suporte.clear()
-
 
 # =========================================================
 # (10) 🚀 MAIN FLOW
