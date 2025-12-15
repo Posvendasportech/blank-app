@@ -1052,20 +1052,7 @@ def render_aba1(aba, df_dia, metas):
         df_ag_hoje = load_agendamentos_hoje()
         df_base_completa = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
 
-        # Logo após: df_ag_hoje = load_agendamentos_hoje()
-        
-        # ✅ DEBUG TEMPORÁRIO
-        st.write("🔍 **DEBUG: Agendamentos carregados**")
-        st.write(f"Total de agendamentos hoje: {len(df_ag_hoje)}")
-        
-        if not df_ag_hoje.empty:
-            st.write("Colunas disponíveis:", df_ag_hoje.columns.tolist())
-            st.write("Primeiros registros:")
-            st.dataframe(df_ag_hoje.head())
-        else:
-            st.warning("df_ag_hoje está vazio!")
-
-        
+    
         if not df_ag_hoje.empty and not df_base_completa.empty:
             df_ag_hoje["Telefone_limpo"] = df_ag_hoje["Telefone"].apply(limpar_telefone)
             df_ag_hoje = df_ag_hoje.merge(
