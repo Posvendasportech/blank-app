@@ -1234,15 +1234,16 @@ def render_aba2(aba, base, total_tarefas):
         
         st.header("📊 Indicadores & Performance")
         
-       
-                # =========================================================
+        # =========================================================
         # 🎛️ SEÇÃO 1: FILTROS DE DATA
         # =========================================================
-                st.markdown("### 🎛️ Filtros de Período e Classificações")
+        st.markdown("### 🎛️ Filtros de Período e Classificações")
         
         # ✅ USAR FORM para evitar reruns constantes
         with st.form(key="filtros_aba2", clear_on_submit=False):
             col_filtro1, col_filtro2, col_filtro3 = st.columns([2, 2, 2])
+
+
             
             with col_filtro1:
                 periodo = st.selectbox(
