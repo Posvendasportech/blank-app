@@ -1147,22 +1147,23 @@ if modo == "Clientes para Check-in (Base de Leitura)" and not df_ag_hoje.empty:
     
     st.markdown("### 🟦 Check-ins do Dia")
 
-        # =========================================================
-        # 🟦 MODO CHECK-IN — EXIBE CARDS
-        # =========================================================
-        if modo == "Clientes para Check-in (Base de Leitura)":
+# =========================================================
+# 🟦 MODO CHECK-IN — EXIBE CARDS
+# =========================================================
+if modo == "Clientes para Check-in (Base de Leitura)":
 
-            class_filter = st.radio(
-                "Filtrar por classificação:",
-                Config.CLASSIFICACOES,
-                horizontal=True,
-            )
+    class_filter = st.radio(
+        "Filtrar por classificação:",
+        Config.CLASSIFICACOES,
+        horizontal=True,
+    )
 
-            df_checkin = df_dia.copy()
-            if class_filter != "Todos":
-                df_checkin = df_checkin[df_checkin["Classificação"] == class_filter]
+    df_checkin = df_dia.copy()
+    if class_filter != "Todos":
+        df_checkin = df_checkin[df_checkin["Classificação"] == class_filter]
 
-            # Reset de índices para evitar problemas
+    # Reset de índices para evitar problemas
+
             df_checkin = df_checkin.reset_index(drop=True)
 
             if df_checkin.empty:
