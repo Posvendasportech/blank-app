@@ -256,12 +256,24 @@ def valor_num(v):
         logger.warning(f"Erro ao converter valor numérico '{v}': {e}")
         return None
 
-def limpar_telefone(v):
-    try:
-        return re.sub(r"\D", "", str(v))
-    except (TypeError, AttributeError) as e:
-        logger.warning(f"Erro ao limpar telefone '{v}': {e}")
+def limpar_telefone(tel):
+    """Limpa telefone removendo TUDO exceto dígitos, incluindo +55"""
+    if pd.isna(tel):
         return ""
+    
+    tel_str = str(tel).strip()
+    
+    # Remover +55 do início
+    if tel_str.startswith("+55"):
+        tel_str = tel_str[3:]
+    elif tel_str.startswith("55") and len(tel_str) > 11:
+        tel_str = tel_str[2:]
+    
+    # Remover tudo exceto números
+    numeros = re.sub(r'\D', '', tel_str)
+    
+    return numeros
+
 
 # =========================================================
 # (3) 💾 FUNÇÕES DE CARREGAMENTO (BASES)
