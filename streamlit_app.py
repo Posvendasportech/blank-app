@@ -497,7 +497,7 @@ if lock_key not in st.session_state:
     df_locks = load_em_atendimento()
     telefone_limpo = limpar_telefone(telefone)
     
-        lock_existente = df_locks[
+    lock_existente = df_locks[
         (df_locks["Telefone"].astype(str) == str(telefone)) | 
         (df_locks["Telefone"].apply(limpar_telefone) == telefone_limpo)
     ]
