@@ -843,8 +843,8 @@ def _salvar_no_sheets_com_retry(ws_hist, ws_ag, dados, proxima_data):
         logger.info(f"✅ Agendamento salvo")
 
 
-def registrar_agendamento(row_ficticia, resumo, motivo, proxima_data, vendedor, tipo_atendimento=tipo_atendimento):
-
+def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor, tipo_atendimento="Experiência"):
+    """Registra agendamento com tipo de atendimento"""
     logger.info(f"Iniciando registro para: {row.get('Cliente', 'N/A')} - Tel: {row.get('Telefone', 'N/A')}")
     
     with st.spinner("💾 Salvando no Google Sheets..."):
@@ -856,6 +856,7 @@ def registrar_agendamento(row_ficticia, resumo, motivo, proxima_data, vendedor, 
 
             agora = datetime.now().strftime("%d/%m/%Y %H:%M")
             
+
             # Converter valores para tipos nativos
             dados = [
                 agora,
