@@ -1964,7 +1964,7 @@ def render_aba3(aba):
         else:
             telefone_limpo = None
         
-        # =========================================================
+             # =========================================================
         # 📊 RESULTADOS DA BUSCA
         # =========================================================
         if buscar and telefone_limpo:
@@ -1976,10 +1976,63 @@ def render_aba3(aba):
             df_historico = load_historico()
             df_agendamentos = load_df_agendamentos()
             
-            # Buscar cliente na base principal
+            # ✅ GARANTIR que coluna Telefone_limpo existe em todas as bases
+            if "Telefone_limpo" not in base.columns and "Telefone" in base.columns:
+                base["Telefone_limpo"] = base["Telefone"].astype(str).apply(limpar_telefone)
+                logger.info(f"✅ Coluna Telefone_limpo criada na base principal: {len(base)} registros")
+            
+            if not df_historico.empty and "Telefone_limpo" not in df_historico.columns and "Telefone" in df_historico.columns:
+                df_historico["Telefone_limpo"] = df_historico["Telefone"].astype(str).apply(limpar_telefone)
+                logger.info(f"✅ Coluna Telefone_limpo criada no histórico: {len(df_historico)} registros")
+            
+            if not df_agendamentos.empty and "Telefone_limpo" not in df_agendamentos.columns and "Telefone" in df_agendamentos.columns:
+                df_agendamentos["Telefone_limpo"] = df_agendamentos["Telefone"].astype(str).apply(limpar_telefone)
+                logger.info(f"✅ Coluna Telefone_limpo criada nos agendamentos: {len(df_agendamentos)} registros")
+            
+            # ✅ DEBUG: Mostrar dados da busca
+            with st.expander("🔍 DEBUG - Informações da Busca", expanded=False):
+                st.write(f"**Telefone digitado:** `{telefone_busca}`")
+                st.write(f"**Telefone limpo (busca):** `{telefone_limpo}`")
+                st.write(f"**Total de registros na base:** {len(base)}")
+                
+                # Mostrar amostra de telefones da base
+                if not base.empty and "Telefone" in base.columns:
+                    st.write("---")
+                    st.write("**📋 Amostra de telefones na base (primeiros 5):**")
+                    
+                    amostra = base[["Cliente", "Telefone"]].head(5).copy()
+                    amostra["Telefone_limpo"] = amostra["Telefone"].apply(limpar_telefone)
+                    st.dataframe(amostra, use_container_width=True)
+                    
+                    # Verificar se existe algum telefone similar
+                    similares = base[base["Telefone_limpo"].str.contains(telefone_limpo[-8:], na=False)]
+                    if not similares.empty:
+                        st.write(f"**🔍 Telefones similares encontrados (últimos 8 dígitos):** {len(similares)}")
+                        st.dataframe(
+                            similares[["Cliente", "Telefone", "Telefone_limpo"]].head(3),
+                            use_container_width=True
+                        )
+            
+            # ✅ Buscar cliente na base principal (coluna E = Telefone)
+            logger.info(f"🔍 Buscando telefone limpo: {telefone_limpo}")
             cliente_encontrado = base[base["Telefone_limpo"] == telefone_limpo]
+            logger.info(f"📊 Clientes encontrados: {len(cliente_encontrado)}")
+            
+            # ✅ Fallback: Se não encontrar, tentar busca parcial (últimos 9 dígitos)
+            if cliente_encontrado.empty and len(telefone_limpo) >= 9:
+                st.warning("⚠️ Busca exata não encontrou resultados. Tentando busca por últimos 9 dígitos...")
+                ultimos_9 = telefone_limpo[-9:]
+                cliente_encontrado = base[base["Telefone_limpo"].str.endswith(ultimos_9, na=False)]
+                logger.info(f"📊 Busca parcial (9 dígitos): {len(cliente_encontrado)} resultados")
+                
+                if len(cliente_encontrado) > 1:
+                    st.info(f"💡 Encontrados {len(cliente_encontrado)} clientes com final {ultimos_9}. Mostrando o mais recente.")
+                    # Pegar o mais recente
+                    if "Data" in cliente_encontrado.columns:
+                        cliente_encontrado = cliente_encontrado.sort_values("Data", ascending=False).head(1)
             
             if not cliente_encontrado.empty:
+
                 # =====================================================
                 # 📋 SEÇÃO 1: DADOS ATUAIS DO CLIENTE
                 # =====================================================
