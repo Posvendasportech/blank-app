@@ -7,6 +7,10 @@ from datetime import datetime
 import time
 import re
 import logging
+# ========== ADICIONAR APÓS: import logging ==========
+# ✅ NOVO: Biblioteca para retry automático
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+import gspread.exceptions
 
 # =========================================================
 # (0) 🔧 CONFIGURAÇÕES GLOBAIS
@@ -25,9 +29,9 @@ class Config:
     CLASSIFICACOES = ["Todos", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
     
     # Cache e Performance
-    CACHE_BASE_TTL = 600  # ✅ ALTERADO: 60 → 300 (5 minutos para dados estáveis)
-    CACHE_VOLATILE_TTL = 10  # ✅ NOVO: 10 segundos para dados que mudam frequentemente
-    LOCK_TIMEOUT_MINUTES = 15  # ✅ NOVO: Timeout para locks de atendimento
+    CACHE_BASE_TTL = 180  # ✅ ALTERADO: 60 → 300 (5 minutos para dados estáveis)
+    CACHE_VOLATILE_TTL = 0  # ✅ NOVO: 10 segundos para dados que mudam frequentemente
+    LOCK_TIMEOUT_MINUTES = 10  # ✅ NOVO: Timeout para locks de atendimento
     
     # Valores padrão
     DIAS_MINIMO_NOVOS = 15
@@ -155,8 +159,9 @@ def load_em_atendimento():
         return pd.DataFrame(columns=["Telefone", "Usuario", "Timestamp", "Cliente"])
 
 
+# ✅ NOVA VERSÃO COM VERIFICAÇÃO ATÔMICA
 def criar_lock(telefone, usuario, cliente):
-    """Cria um lock quando um card é exibido (bloqueia para outros usuários)"""
+    """Cria um lock quando um card é exibido - com verificação atômica"""
     try:
         client = get_gsheet_client()
         sh = client.open_by_key(Config.SHEET_ID)
@@ -166,16 +171,39 @@ def criar_lock(telefone, usuario, cliente):
         except gspread.exceptions.WorksheetNotFound:
             ws = sh.add_worksheet("EM_ATENDIMENTO", rows=1000, cols=4)
             ws.append_row(["Telefone", "Usuario", "Timestamp", "Cliente"])
+            logger.info("✅ Aba EM_ATENDIMENTO criada")
         
+        # ✅ NOVO: Verificar se já existe lock ANTES de criar
+        try:
+            cell = ws.find(str(telefone))
+            if cell:
+                # Já existe lock - verificar se é de outro usuário
+                usuario_existente = ws.cell(cell.row, 2).value
+                
+                if usuario_existente != usuario:
+                    logger.warning(f"⚠️ Lock já existe para {telefone} por {usuario_existente}")
+                    return False  # ✅ Retorna False = não conseguiu criar lock
+                else:
+                    logger.info(f"🔄 Atualizando lock existente de {usuario}")
+                    # Atualizar timestamp
+                    agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    ws.update_cell(cell.row, 3, agora)
+                    return True
+        except gspread.exceptions.CellNotFound:
+            pass  # Não existe, pode criar
+        
+        # Criar novo lock
         agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ws.append_row([str(telefone), str(usuario), agora, str(cliente)])
         
-        # Limpar cache para outros usuários verem imediatamente
+        # Limpar cache
         load_em_atendimento.clear()
         logger.info(f"🔒 Lock criado: {telefone} por {usuario}")
+        return True  # ✅ Retorna True = lock criado com sucesso
         
     except Exception as e:
         logger.error(f"❌ Erro ao criar lock: {e}")
+        return False
 
 
 def remover_lock(telefone):
@@ -321,8 +349,8 @@ def load_sheet(sheet_id, sheet_name):
         logger.error(f"Erro ao carregar {sheet_name}: {e}", exc_info=True)
         st.stop()
 
-@st.cache_data(ttl=Config.CACHE_BASE_TTL)
-@st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)  # ✅ Mudou para 10 segundos (antes era 300)
+# ✅ Usar apenas CACHE_VOLATILE_TTL (sem cache para dados críticos)
+@st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)
 def load_agendamentos_ativos():
     """Carrega TODOS os telefones que já têm agendamento (independente da data)"""
     try:
@@ -425,6 +453,14 @@ def init_session_state():
     
     if "rerun_necessario" not in st.session_state:
         st.session_state["rerun_necessario"] = False
+def limpar_caches_volateis():
+    """Limpa apenas caches de dados que mudam frequentemente"""
+    load_em_atendimento.clear()
+    load_agendamentos_ativos.clear()
+    load_agendamentos_hoje.clear()
+    load_df_agendamentos.clear()
+    logger.info("🔄 Caches voláteis limpos")
+
 
 # =========================================================
 # (5) 🎨 COMPONENTE CARD DE ATENDIMENTO
@@ -435,12 +471,20 @@ def card_component(id_fix, row, usuario_atual):
     
     telefone = str(row.get("Telefone", ""))
     
-    # Criar lock ao exibir card
-    lock_key = f"lock_criado_{id_fix}"
-    if lock_key not in st.session_state:
-        criar_lock(telefone, usuario_atual, row.get("Cliente", "—"))
-        st.session_state[lock_key] = True
-        logger.info(f"🔒 Card exibido e travado para {usuario_atual}: {telefone}")
+# ✅ NOVO: Criar lock com verificação de sucesso
+lock_key = f"lock_criado_{id_fix}"
+if lock_key not in st.session_state:
+    sucesso_lock = criar_lock(telefone, usuario_atual, row.get("Cliente", "—"))
+    
+    if not sucesso_lock:
+        # ✅ Lock falhou (outro usuário já está atendendo)
+        st.error("⚠️ Este cliente está sendo atendido por outro usuário agora!")
+        st.info("🔄 Clique em 'Atualizar agora' na sidebar para ver atendimentos disponíveis")
+        st.stop()  # Para de renderizar o card
+    
+    st.session_state[lock_key] = True
+    logger.info(f"🔒 Card exibido e travado para {usuario_atual}: {telefone}")
+
 
     with st.container():
         st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -577,6 +621,25 @@ def remover_card(telefone, concluido=True):
     
     st.session_state["historico_stack"].append(telefone)
 
+# ✅ NOVO: Decorador de retry - tenta até 3x com espera exponencial
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type((gspread.exceptions.APIError, TimeoutError)),
+    reraise=True
+)
+def _salvar_no_sheets_com_retry(ws_hist, ws_ag, dados, proxima_data):
+    """Função interna que faz o salvamento real (com retry)"""
+    # Registrar no histórico
+    ws_hist.append_row(dados, value_input_option="USER_ENTERED")
+    logger.info(f"✅ Histórico salvo")
+    
+    # Registrar agendamento se houver próxima data
+    if proxima_data:
+        ws_ag.append_row(dados, value_input_option="USER_ENTERED")
+        logger.info(f"✅ Agendamento salvo")
+
+
 def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
     logger.info(f"Iniciando registro para: {row.get('Cliente', 'N/A')} - Tel: {row.get('Telefone', 'N/A')}")
     
@@ -589,42 +652,21 @@ def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
 
             agora = datetime.now().strftime("%d/%m/%Y %H:%M")
             
-            # ✅ CORREÇÃO: Converter TODOS os valores para tipos nativos do Python
-            cliente = str(row.get("Cliente", "—"))
-            classificacao = str(row.get("Classificação", "—"))
-            valor = safe_valor(row.get("Valor", "—"))
-            telefone = str(row.get("Telefone", "—"))
-            comentario_str = str(comentario) if comentario else ""
-            motivo_str = str(motivo) if motivo else ""
-            proxima_str = str(proxima_data) if proxima_data else ""
-            vendedor_str = str(vendedor) if vendedor else ""
-
-            # Registrar no histórico
-            ws_hist.append_row([
+            # Converter valores para tipos nativos
+            dados = [
                 agora,
-                cliente,
-                classificacao,
-                valor,
-                telefone,
-                comentario_str,
-                motivo_str,
-                proxima_str,
-                vendedor_str
-            ], value_input_option="USER_ENTERED")
-
-            # Registrar agendamento se houver próxima data
-            if proxima_data:
-                ws_ag.append_row([
-                    agora,
-                    cliente,
-                    classificacao,
-                    valor,
-                    telefone,
-                    comentario_str,
-                    motivo_str,
-                    proxima_str,
-                    vendedor_str
-                ], value_input_option="USER_ENTERED")
+                str(row.get("Cliente", "—")),
+                str(row.get("Classificação", "—")),
+                safe_valor(row.get("Valor", "—")),
+                str(row.get("Telefone", "—")),
+                str(comentario) if comentario else "",
+                str(motivo) if motivo else "",
+                str(proxima_data) if proxima_data else "",
+                str(vendedor) if vendedor else ""
+            ]
+            
+            # ✅ USAR FUNÇÃO COM RETRY
+            _salvar_no_sheets_com_retry(ws_hist, ws_ag, dados, proxima_data)
 
             # Limpar caches
             load_agendamentos_ativos.clear()
@@ -632,28 +674,16 @@ def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
             load_historico.clear()
 
             st.success("✅ Agendamento registrado com sucesso!")
-            logger.info(f"✅ Registro concluído: {cliente}")
+            logger.info(f"✅ Registro concluído: {row.get('Cliente')}")
             time.sleep(0.5)
             
         except Exception as e:
-            st.error(f"❌ Erro ao salvar: {e}")
-            logger.error(f"❌ ERRO ao registrar: {e}", exc_info=True)
+            st.error(f"❌ Erro ao salvar após 3 tentativas: {e}")
+            logger.error(f"❌ ERRO CRÍTICO ao registrar: {e}", exc_info=True)
             
-            # ✅ ADICIONAR: Mostrar detalhes do erro para debug
             with st.expander("🔍 Detalhes do erro (para debug)", expanded=False):
                 st.write("**Tipo de erro:**", type(e).__name__)
                 st.write("**Mensagem:**", str(e))
-                st.write("**Dados que tentamos salvar:**")
-                st.json({
-                    "Cliente": cliente,
-                    "Classificação": classificacao,
-                    "Valor": valor,
-                    "Telefone": telefone,
-                    "Comentário": comentario_str[:50] + "..." if len(comentario_str) > 50 else comentario_str,
-                    "Motivo": motivo_str,
-                    "Próxima data": proxima_str,
-                    "Vendedor": vendedor_str
-                })
 
 
 def gerar_relatorio_diario():
@@ -722,12 +752,11 @@ def render_sidebar():
             </p>
         """, unsafe_allow_html=True)
         
-        if st.button("🔄 Atualizar agora", use_container_width=True):
-            # Limpar todos os caches voláteis
-            load_em_atendimento.clear()
-            load_agendamentos_hoje.clear()
-            load_agendamentos_ativos.clear()
-            st.success("✅ Dados atualizados!")
+       if st.button("🔄 Atualizar agora", use_container_width=True):
+            # ✅ Usar função otimizada
+            limpar_caches_volateis()
+            st.success("✅ Dados sincronizados!")
+            time.sleep(0.5)  # Pequena pausa para garantir que o cache foi limpo
             st.rerun()
 
 
