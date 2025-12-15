@@ -472,9 +472,12 @@ def load_agendamentos_hoje():
         
         logger.info(f"✅ Agendamentos para hoje ({hoje.strftime('%Y/%m/%d')}): {len(df_hoje)}")
         
-        if not df_hoje.empty:
-            df_hoje["Telefone_limpo"] = df_hoje["Telefone"].apply(limpar_telefone)
-            logger.info(f"📞 Telefones: {df_hoje['Telefone'].tolist()}")
+         if not df.empty:
+            # ✅ PRÉ-COMPUTAR TELEFONE LIMPO (economiza tempo depois)
+            df["Telefone_limpo"] = df["Telefone"].apply(limpar_telefone)
+            
+            logger.info(f"✅ Agendamentos de hoje carregados: {len(df)}")
+            return df
         else:
             # ✅ DEBUG: Mostrar quais datas estão na base
             datas_unicas = df['data_convertida'].dropna().dt.date.unique()
@@ -506,7 +509,7 @@ def load_casos_suporte():
             if not df_suporte.empty:
                 df_suporte["Telefone_limpo"] = df_suporte["Telefone"].apply(limpar_telefone)
             
-            logger.info(f"🛠️ Casos de suporte: {len(df_suporte)}")
+            logger.info(f"🛠️ Casos de suporte carregados: {len(df_suporte)}")
             return df_suporte
         else:
             logger.warning("⚠️ Coluna 'Tipo de atendimento' não encontrada")
@@ -1217,23 +1220,35 @@ def render_aba1(aba, df_dia, metas):
         st.header("📋 Tarefas do Dia")
         st.markdown("---")
         
+               # ==========================================
+        # CARREGAR APENAS CONTADORES (RÁPIDO)
         # ==========================================
-        # CARREGAR DADOS
-        # ==========================================
-        df_ag_hoje = load_agendamentos_hoje()
-        df_suporte = load_casos_suporte()
-        df_base_completa = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
+        # ✅ Carregar só o necessário para métricas
+        df_ag_hoje = load_agendamentos_hoje()  # Manter (é cache)
+        df_suporte = load_casos_suporte()      # Manter (é cache)
         
-        # JOIN de agendamentos com base principal
-        if not df_ag_hoje.empty and not df_base_completa.empty:
-            df_ag_hoje["Telefone_limpo"] = df_ag_hoje["Telefone"].apply(limpar_telefone)
-            df_ag_hoje = df_ag_hoje.merge(
-                df_base_completa[["Telefone_limpo", "Dias_num", "Compras", "Data"]],
-                on="Telefone_limpo",
-                how="left",
-                suffixes=("", "_base")
-            )
-            logger.info(f"✅ Join realizado: {len(df_ag_hoje)} agendamentos com dados da base")
+        # ✅ NÃO carregar base completa ainda (só quando precisar)
+        # df_base_completa = load_sheet(...)  ← REMOVER DAQUI
+        
+        # ==========================================
+        # CALCULAR TOTAIS (SEM JOIN)
+        # ==========================================
+        total_checkin = len(df_dia)
+        total_agendamentos = len(df_ag_hoje)
+        total_suporte = len(df_suporte)
+        total_geral = total_checkin + total_agendamentos + total_suporte
+        
+        # Reunir todos os telefones do dia (SIMPLES, SEM APPLY)
+        telefones_do_dia = set()
+        if not df_dia.empty:
+            telefones_do_dia.update(df_dia["Telefone"].astype(str).tolist())
+        if not df_ag_hoje.empty:
+            telefones_do_dia.update(df_ag_hoje["Telefone"].astype(str).tolist())
+        if not df_suporte.empty:
+            telefones_do_dia.update(df_suporte["Telefone"].astype(str).tolist())
+        
+        concluidos_hoje = len(st.session_state["concluidos"].intersection(telefones_do_dia))
+
         
         # ==========================================
         # CALCULAR TOTAIS
