@@ -27,7 +27,8 @@ class Config:
     # Listas de opções
     VENDEDORES = ["João", "Maria", "Patrick", "Outro"]
     CLASSIFICACOES = ["Todos", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
-    
+    # ✅ ADICIONAR ESTAS LINHAS AQUI:
+    TIPOS_ATENDIMENTO = ["Experiência", "Suporte", "Venda"]
     # Cache e Performance
     CACHE_BASE_TTL = 180  # ✅ ALTERADO: 60 → 300 (5 minutos para dados estáveis)
     CACHE_VOLATILE_TTL = 0  # ✅ NOVO: 10 segundos para dados que mudam frequentemente
@@ -486,6 +487,35 @@ def load_agendamentos_hoje():
         logger.error(f"❌ Erro ao carregar agendamentos de hoje: {e}", exc_info=True)
         return pd.DataFrame()
 
+@st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)
+def load_casos_suporte():
+    """Carrega APENAS casos marcados como 'Suporte'"""
+    try:
+        client = get_gsheet_client()
+        ws = client.open(Config.SHEET_AGENDAMENTOS).worksheet("AGENDAMENTOS_ATIVOS")
+        df = pd.DataFrame(ws.get_all_records())
+        
+        if df.empty:
+            logger.info("⚠️ Nenhum agendamento na base")
+            return pd.DataFrame()
+        
+        # Filtrar apenas "Suporte"
+        if "Tipo de atendimento" in df.columns:
+            df_suporte = df[df["Tipo de atendimento"] == "Suporte"].copy()
+            
+            if not df_suporte.empty:
+                df_suporte["Telefone_limpo"] = df_suporte["Telefone"].apply(limpar_telefone)
+            
+            logger.info(f"🛠️ Casos de suporte: {len(df_suporte)}")
+            return df_suporte
+        else:
+            logger.warning("⚠️ Coluna 'Tipo de atendimento' não encontrada")
+            return pd.DataFrame()
+            
+    except Exception as e:
+        logger.error(f"❌ Erro ao carregar suporte: {e}", exc_info=True)
+        return pd.DataFrame()
+
 # =========================================================
 # (4) 🧠 ESTADO DA SESSÃO
 # =========================================================
@@ -508,6 +538,7 @@ def limpar_caches_volateis():
     load_agendamentos_ativos.clear()
     load_agendamentos_hoje.clear()
     load_df_agendamentos.clear()
+    load_casos_suporte.clear()  # ✅ ADICIONAR ESTA LINHA
     logger.info("🔄 Caches voláteis limpos")
 
 
@@ -668,6 +699,116 @@ def agendamento_card(id_fix, row):
 
     return acao, novo_motivo, resumo, proxima, vendedor
 
+def card_suporte(id_fix, row, usuario_atual):
+    """Card específico para casos de SUPORTE"""
+    
+    telefone = str(row.get("Telefone", ""))
+    
+    # Sistema de lock
+    lock_key = f"lock_criado_{id_fix}"
+    if lock_key not in st.session_state:
+        df_locks = load_em_atendimento()
+        telefone_limpo = limpar_telefone(telefone)
+        
+        lock_existente = df_locks[
+            (df_locks["Telefone"].astype(str) == str(telefone)) | 
+            (df_locks["Telefone"].apply(limpar_telefone) == telefone_limpo)
+        ]
+        
+        if not lock_existente.empty:
+            usuario_lock = lock_existente.iloc[0]["Usuario"]
+            if usuario_lock != usuario_atual:
+                st.warning(f"⚠️ Este caso está sendo atendido por **{usuario_lock}**")
+                return None, "", "", None, ""
+        
+        criar_lock(telefone, usuario_atual, row.get("Cliente", "—"))
+        st.session_state[lock_key] = True
+
+    with st.container():
+        # Card com cor diferenciada (vermelho para suporte)
+        st.markdown("""
+            <style>
+            .card-suporte {
+                background: linear-gradient(135deg, #8B0000, #DC143C);
+                border: 2px solid #FF6347;
+                border-radius: 16px;
+                padding: 18px;
+                color: white;
+                box-shadow: 0 8px 24px rgba(220, 20, 60, 0.3);
+                margin-bottom: 18px;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+        
+        st.markdown('<div class="card-suporte">', unsafe_allow_html=True)
+        
+        # Header com informações do problema
+        header_html = f"""
+            <div style="background: rgba(0,0,0,0.3); padding: 14px; border-radius: 12px; margin-bottom: 14px;">
+                <b>🛠️ SUPORTE - {row.get('Cliente', '—')}</b><br>
+                📱 {row.get('Telefone', '—')}<br>
+                💰 {safe_valor(row.get('Valor', '—'))}<br>
+        """
+        
+        # Mostrar o problema reportado
+        follow_up = row.get("Follow up", row.get("Motivo", ""))
+        if follow_up and str(follow_up).strip():
+            header_html += f"""
+                <br><b style="color:#FFD700;">⚠️ Problema reportado:</b><br>
+                <i style="color:#FFA07A;">{follow_up}</i>
+            """
+        
+        header_html += "</div>"
+        st.markdown(header_html, unsafe_allow_html=True)
+        
+        # Formulário específico para suporte
+        with st.form(key=f"form_suporte_{id_fix}", clear_on_submit=False):
+            vendedor = st.selectbox("Responsável", Config.VENDEDORES, key=f"vend_sup_{id_fix}")
+            
+            status = st.selectbox(
+                "Status do problema",
+                ["Aguardando fornecedor", "Em análise", "Resolvido", "Escalado"],
+                key=f"status_{id_fix}"
+            )
+            
+            resumo = st.text_area(
+                "Atualização do caso",
+                key=f"res_sup_{id_fix}",
+                height=100,
+                placeholder="Descreva o andamento do problema..."
+            )
+            
+            # Se resolvido, não precisa de próxima data
+            if status != "Resolvido":
+                proxima = st.date_input("Próximo acompanhamento", key=f"dt_sup_{id_fix}")
+                motivo = f"[{status}] Acompanhamento de suporte"
+            else:
+                proxima = None
+                motivo = "[Resolvido] Caso encerrado"
+                st.success("✅ Caso será marcado como resolvido")
+            
+            col1, col2 = st.columns(2)
+            
+            concluir = col1.form_submit_button("✅ Atualizar", use_container_width=True)
+            pular = col2.form_submit_button("⏭ Pular", use_container_width=True)
+            
+            acao = None
+            
+            if concluir:
+                if not resumo.strip():
+                    st.error("⚠️ Descreva a atualização do caso")
+                else:
+                    acao = "concluir"
+                    remover_lock(telefone)
+            
+            if pular:
+                acao = "pular"
+                remover_lock(telefone)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    return acao, motivo, resumo, proxima, vendedor
+
 # =========================================================
 # (6) 🧾 AÇÕES — SALVAR, REMOVER, REGISTRAR
 # =========================================================
@@ -702,7 +843,8 @@ def _salvar_no_sheets_com_retry(ws_hist, ws_ag, dados, proxima_data):
         logger.info(f"✅ Agendamento salvo")
 
 
-def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
+registrar_agendamento(row_ficticia, resumo, motivo, proxima_data, vendedor, tipo_atendimento=tipo_atendimento):
+
     logger.info(f"Iniciando registro para: {row.get('Cliente', 'N/A')} - Tel: {row.get('Telefone', 'N/A')}")
     
     with st.spinner("💾 Salvando no Google Sheets..."):
@@ -724,8 +866,10 @@ def registrar_agendamento(row, comentario, motivo, proxima_data, vendedor):
                 str(comentario) if comentario else "",
                 str(motivo) if motivo else "",
                 str(proxima_data) if proxima_data else "",
-                str(vendedor) if vendedor else ""
+                str(vendedor) if vendedor else "",
+                str(tipo_atendimento)  # ✅ ADICIONAR ESTA LINHA
             ]
+
             
             # ✅ USAR FUNÇÃO COM RETRY
             _salvar_no_sheets_com_retry(ws_hist, ws_ag, dados, proxima_data)
@@ -1031,6 +1175,51 @@ def render_aba1(aba, df_dia, metas):
             st.warning("⚠️ **Por favor, identifique-se na barra lateral antes de continuar**")
             st.info("👈 Digite seu nome no campo 'Seu nome' na sidebar")
             st.stop()
+        # ==========================================
+        # SEÇÃO 1: ACOMPANHAMENTO DE SUPORTE
+        # ==========================================
+        st.markdown("## 🛠️ Acompanhamento de Suporte")
+        st.markdown("---")
+        
+        df_suporte = load_casos_suporte()
+        
+        if df_suporte.empty:
+            st.info("✅ Nenhum caso de suporte pendente")
+        else:
+            total_suporte = len(df_suporte)
+            concluidos_suporte = len([t for t in df_suporte["Telefone"] if str(t) in st.session_state["concluidos"]])
+            
+            st.markdown(f"**📊 Casos pendentes:** {total_suporte - concluidos_suporte}/{total_suporte}")
+            
+            if total_suporte > 0:
+                progresso = concluidos_suporte / total_suporte
+                st.progress(progresso)
+            
+            st.markdown("---")
+            
+            # Exibir cards de suporte
+            for idx, row in df_suporte.iterrows():
+                telefone = str(row.get("Telefone", ""))
+                
+                if telefone in st.session_state["concluidos"] or telefone in st.session_state["pulados"]:
+                    continue
+                
+                id_fix = f"suporte_{limpar_telefone(telefone)}"
+                
+                acao, motivo, resumo, proxima, vendedor = card_suporte(id_fix, row, usuario_atual)
+                
+                if acao == "concluir":
+                    registrar_agendamento(row, resumo, motivo, proxima.strftime("%d/%m/%Y") if proxima else "", vendedor, tipo_atendimento="Suporte")
+                    remover_card(telefone, concluido=True)
+                    limpar_caches_volateis()
+                    st.rerun()
+                
+                elif acao == "pular":
+                    remover_card(telefone, concluido=False)
+                    st.rerun()
+        
+        st.markdown("<br><br>", unsafe_allow_html=True)
+
         
         # ✅ NOVO: Auto-refresh suave a cada 30 segundos
         if 'last_refresh' not in st.session_state:
@@ -2271,6 +2460,16 @@ def render_aba3(aba):
                 # ➕ SEÇÃO 4: CRIAR NOVO AGENDAMENTO
                 # =====================================================
                 st.markdown("### ➕ Criar Novo Agendamento")
+                tipo_atendimento = st.selectbox(
+                    "Tipo de atendimento",
+                    Config.TIPOS_ATENDIMENTO,
+                    key="tipo_novo_agendamento",
+                    help="Selecione o tipo de atendimento adequado"
+                )
+
+                # Aviso visual para suporte
+                if tipo_atendimento == "Suporte":
+                    st.warning("⚠️ Este agendamento será marcado como **caso de suporte prioritário**")
                 
                 with st.form(key=f"novo_agendamento_{telefone_limpo}", clear_on_submit=True):
                     st.info("💡 Use este formulário para criar um agendamento adicional para este cliente")
