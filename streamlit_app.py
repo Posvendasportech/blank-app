@@ -471,20 +471,19 @@ def card_component(id_fix, row, usuario_atual):
     
     telefone = str(row.get("Telefone", ""))
     
-# ✅ NOVO: Criar lock com verificação de sucesso
-lock_key = f"lock_criado_{id_fix}"
-if lock_key not in st.session_state:
-    sucesso_lock = criar_lock(telefone, usuario_atual, row.get("Cliente", "—"))
-    
-    if not sucesso_lock:
-        # ✅ Lock falhou (outro usuário já está atendendo)
-        st.error("⚠️ Este cliente está sendo atendido por outro usuário agora!")
-        st.info("🔄 Clique em 'Atualizar agora' na sidebar para ver atendimentos disponíveis")
-        st.stop()  # Para de renderizar o card
-    
-    st.session_state[lock_key] = True
-    logger.info(f"🔒 Card exibido e travado para {usuario_atual}: {telefone}")
-
+    # ✅ NOVO: Criar lock com verificação de sucesso
+    lock_key = f"lock_criado_{id_fix}"
+    if lock_key not in st.session_state:
+        sucesso_lock = criar_lock(telefone, usuario_atual, row.get("Cliente", "—"))
+        
+        if not sucesso_lock:
+            # Lock falhou (outro usuário já está atendendo)
+            st.error("⚠️ Este cliente está sendo atendido por outro usuário agora!")
+            st.info("🔄 Clique em 'Atualizar agora' na sidebar para ver atendimentos disponíveis")
+            st.stop()  # Para de renderizar o card
+        
+        st.session_state[lock_key] = True
+        logger.info(f"🔒 Card exibido e travado para {usuario_atual}: {telefone}")
 
     with st.container():
         st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -510,7 +509,7 @@ if lock_key not in st.session_state:
         header_html += "</div>"
         st.markdown(header_html, unsafe_allow_html=True)
 
-        # ✅ NOVO: Usar FORM para evitar reruns ao digitar
+        # Usar FORM para evitar reruns ao digitar
         with st.form(key=f"form_{id_fix}", clear_on_submit=False):
             vendedor = st.selectbox("Responsável", Config.VENDEDORES, key=f"vend_{id_fix}")
             motivo = st.text_input("Motivo do contato", key=f"mot_{id_fix}")
@@ -519,7 +518,7 @@ if lock_key not in st.session_state:
 
             col1, col2 = st.columns(2)
             
-            # ✅ Botões dentro do form - só processa ao clicar
+            # Botões dentro do form - só processa ao clicar
             concluir = col1.form_submit_button("✅ Registrar e concluir", use_container_width=True)
             pular = col2.form_submit_button("⏭ Pular cliente", use_container_width=True)
             
