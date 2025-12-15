@@ -1347,18 +1347,6 @@ def render_aba2(aba, base, total_tarefas):
         with col_info1:
             st.info(f"🔍 **Analisando:** {', '.join(classificacoes_selecionadas)}")
         
-        with col_info2:
-            st.metric(
-                "📊 Clientes",
-                f"{total_selecionado:,}".replace(",", "."),
-                delta=f"{percentual:.1f}% do total"
-            )
-        
-        with col_info3:
-            tem_dormente = "Dormente" in classificacoes_selecionadas
-            label_dormente = "✅ Com Dormentes" if tem_dormente else "❌ Sem Dormentes"
-            st.metric("Status", label_dormente)
-        
         st.markdown("---")
 
         
