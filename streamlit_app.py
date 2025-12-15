@@ -2301,11 +2301,15 @@ def render_aba3(aba):
                 
                 # ✅ SALVAR NO SESSION STATE
                 st.session_state["cliente_selecionado"] = {
-                    "nome": row["Cliente"],
+                    "nome": str(row["Cliente"]),
                     "telefone": str(row["Telefone"]),
-                    "classificacao": row.get("Classificação", "Novo"),
+                    "classificacao": str(row.get("Classificação", "Novo")),
                     "valor": row.get("Valor", 0)
                 }
+                
+                # ✅ FORÇAR RERUN PARA ATUALIZAR O FORMULÁRIO
+                st.rerun()
+
                 
                 # Exibir informações do cliente
                 st.success(f"✅ Cliente encontrado: **{row['Cliente']}**")
@@ -2514,15 +2518,25 @@ def render_aba3(aba):
         # ==========================================
         st.subheader("➕ Criar Novo Agendamento")
         
+        # ✅ DEBUG - Ver estado do session_state
+        with st.expander("🔍 DEBUG - Dados do Cliente"):
+            dados_debug = st.session_state.get("cliente_selecionado", None)
+            if dados_debug:
+                st.success("✅ Cliente selecionado encontrado no session_state")
+                st.json(dados_debug)
+            else:
+                st.warning("⚠️ Nenhum cliente selecionado")
+                st.write("**Session state keys:**", list(st.session_state.keys()))
+        
         # ✅ LER DADOS DO SESSION STATE **ANTES** DO FORM
         dados_cliente = st.session_state.get("cliente_selecionado", None)
         
         if dados_cliente:
             col_aviso, col_limpar = st.columns([3, 1])
             with col_aviso:
-                st.info(f"📌 **Cliente selecionado:** {dados_cliente['nome']} • {dados_cliente['telefone']}")
+                st.info(f"📌 **Cliente selecionado:** {dados_cliente.get('nome', 'N/A')} • {dados_cliente.get('telefone', 'N/A')}")
             with col_limpar:
-                if st.button("🗑️ Limpar seleção"):
+                if st.button("🗑️ Limpar seleção", key="btn_limpar_selecao"):
                     st.session_state["cliente_selecionado"] = None
                     st.rerun()
         else:
@@ -2530,14 +2544,27 @@ def render_aba3(aba):
         
         st.markdown("---")
         
+        # ✅ PREPARAR VALORES PADRÃO (antes do form)
+        valor_nome = dados_cliente.get("nome", "") if dados_cliente else ""
+        valor_telefone = dados_cliente.get("telefone", "") if dados_cliente else ""
+        
+        # ✅ ÍNDICE DA CLASSIFICAÇÃO
+        opcoes_class = ["Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
+        if dados_cliente:
+            try:
+                indice_class = opcoes_class.index(dados_cliente.get("classificacao", "Novo"))
+            except (ValueError, KeyError):
+                indice_class = 0
+        else:
+            indice_class = 0
+        
         with st.form(key="form_criar_agendamento", clear_on_submit=False):
             col_form1, col_form2 = st.columns(2)
             
             with col_form1:
-                # ✅ USAR dados_cliente que foi lido ANTES do form
                 cliente_novo = st.text_input(
                     "Nome do Cliente *",
-                    value=dados_cliente["nome"] if dados_cliente else "",
+                    value=valor_nome,
                     key="cliente_novo",
                     placeholder="Digite o nome completo",
                     disabled=(dados_cliente is not None)
@@ -2545,22 +2572,11 @@ def render_aba3(aba):
                 
                 telefone_novo = st.text_input(
                     "Telefone *",
-                    value=dados_cliente["telefone"] if dados_cliente else "",
+                    value=valor_telefone,
                     key="telefone_novo",
                     placeholder="(11) 98765-4321",
                     disabled=(dados_cliente is not None)
                 )
-                
-                # ✅ SELECTBOX COM ÍNDICE CORRETO
-                opcoes_class = ["Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
-                
-                if dados_cliente:
-                    try:
-                        indice_class = opcoes_class.index(dados_cliente["classificacao"])
-                    except (ValueError, KeyError):
-                        indice_class = 0
-                else:
-                    indice_class = 0
                 
                 classificacao_nova = st.selectbox(
                     "Classificação",
@@ -2582,7 +2598,6 @@ def render_aba3(aba):
                     min_value=datetime.now().date()
                 )
                 
-                # ✅ SELETOR DE TIPO DE ATENDIMENTO
                 tipo_atendimento = st.selectbox(
                     "Tipo de Atendimento *",
                     Config.TIPOS_ATENDIMENTO,
@@ -2590,7 +2605,7 @@ def render_aba3(aba):
                     help="Selecione o tipo adequado para organizar a fila de atendimento"
                 )
             
-            # ✅ AVISO VISUAL PARA SUPORTE
+            # ✅ AVISO VISUAL
             if tipo_atendimento == "Suporte":
                 st.warning("⚠️ **ATENÇÃO:** Este agendamento será marcado como **CASO DE SUPORTE**")
             elif tipo_atendimento == "Venda":
@@ -2627,7 +2642,7 @@ def render_aba3(aba):
                     use_container_width=True
                 )
             
-            # ✅ PROCESSAR CRIAÇÃO (SEM ST.RERUN)
+            # ✅ PROCESSAR CRIAÇÃO
             if criar_agendamento:
                 if not cliente_novo.strip():
                     st.error("❌ O campo 'Nome do Cliente' é obrigatório")
@@ -2636,11 +2651,10 @@ def render_aba3(aba):
                 elif not motivo_novo.strip():
                     st.error("❌ O campo 'Motivo do Contato' é obrigatório")
                 else:
-                    # ✅ Criar row fictícia com dados corretos
                     row_ficticia = {
                         "Cliente": cliente_novo,
                         "Classificação": classificacao_nova,
-                        "Valor": dados_cliente["valor"] if dados_cliente else 0,
+                        "Valor": dados_cliente.get("valor", 0) if dados_cliente else 0,
                         "Telefone": telefone_novo,
                         "Compras": 0
                     }
@@ -2655,10 +2669,11 @@ def render_aba3(aba):
                             tipo_atendimento=tipo_atendimento
                         )
                         
-                        # Limpar caches
+                        # Limpar caches e session state
                         load_agendamentos_ativos.clear()
                         load_df_agendamentos.clear()
                         load_casos_suporte.clear()
+                        st.session_state["cliente_selecionado"] = None  # ✅ Limpar cliente após criar
                         
                         st.success(f"✅ **Agendamento criado com sucesso!**")
                         st.info(f"📅 **Data:** {proxima_data_novo.strftime('%d/%m/%Y')}")
@@ -2666,16 +2681,22 @@ def render_aba3(aba):
                         st.info(f"👤 **Responsável:** {vendedor_novo}")
                         
                         if tipo_atendimento == "Suporte":
-                            st.warning("🛠️ Este caso aparecerá na seção de **Suporte**")
+                            st.warning("🛠️ Este caso aparecerá na seção de **Suporte** na aba 'Tarefas do dia'")
                         
                         st.balloons()
+                        
+                        # ✅ Aguardar 2 segundos antes de rerun (para ver o sucesso)
+                        time.sleep(2)
+                        st.rerun()
                     
                     except Exception as e:
                         st.error(f"❌ Erro ao criar agendamento: {e}")
                         logger.error(f"Erro ao criar agendamento via aba3: {e}", exc_info=True)
             
             if limpar_form:
-                st.info("🔄 Recarregue a página (F5) para limpar o formulário")
+                st.session_state["cliente_selecionado"] = None
+                st.rerun()
+
 
 
 # =========================================================
