@@ -490,34 +490,35 @@ def card_component(id_fix, row, usuario_atual):
     
     telefone = str(row.get("Telefone", ""))
     
-# ✅ VERSÃO CORRIGIDA: Só bloqueia se REALMENTE tiver outro usuário
-lock_key = f"lock_criado_{id_fix}"
-if lock_key not in st.session_state:
-    # Verificar se OUTRO usuário já está com este cliente
-    df_locks = load_em_atendimento()
-    telefone_limpo = limpar_telefone(telefone)
-    
-    lock_existente = df_locks[
-        (df_locks["Telefone"].astype(str) == str(telefone)) | 
-        (df_locks["Telefone"].apply(limpar_telefone) == telefone_limpo)
-    ]
-    
-    if not lock_existente.empty:
-        usuario_lock = lock_existente.iloc[0]["Usuario"]
+    # ✅ VERSÃO CORRIGIDA: Só bloqueia se REALMENTE tiver outro usuário
+    lock_key = f"lock_criado_{id_fix}"
+    if lock_key not in st.session_state:
+        # Verificar se OUTRO usuário já está com este cliente
+        df_locks = load_em_atendimento()
+        telefone_limpo = limpar_telefone(telefone)
         
-        # Só bloqueia se for OUTRO usuário
-        if usuario_lock != usuario_atual:
-            st.warning(f"⚠️ Este cliente está sendo atendido por **{usuario_lock}** agora!")
-            st.info("🔄 Aguarde ou escolha outro cliente")
-            return None, "", "", None, ""  # ✅ Retorna valores vazios em vez de st.stop()
-    
-    # Criar lock para o usuário atual
-    criar_lock(telefone, usuario_atual, row.get("Cliente", "—"))
-    st.session_state[lock_key] = True
-    logger.info(f"🔒 Card exibido e travado para {usuario_atual}: {telefone}")
+        lock_existente = df_locks[
+            (df_locks["Telefone"].astype(str) == str(telefone)) | 
+            (df_locks["Telefone"].apply(limpar_telefone) == telefone_limpo)
+        ]
+        
+        if not lock_existente.empty:
+            usuario_lock = lock_existente.iloc[0]["Usuario"]
+            
+            # Só bloqueia se for OUTRO usuário
+            if usuario_lock != usuario_atual:
+                st.warning(f"⚠️ Este cliente está sendo atendido por **{usuario_lock}** agora!")
+                st.info("🔄 Aguarde ou escolha outro cliente")
+                return None, "", "", None, ""  # ✅ Retorna valores vazios em vez de st.stop()
+        
+        # Criar lock para o usuário atual
+        criar_lock(telefone, usuario_atual, row.get("Cliente", "—"))
+        st.session_state[lock_key] = True
+        logger.info(f"🔒 Card exibido e travado para {usuario_atual}: {telefone}")
 
-with st.container():
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+    with st.container():
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+
 
     dias_txt = f"{row['Dias_num']} dias desde compra" if pd.notna(row.get("Dias_num")) else "Sem informação"
     motivo_anterior = row.get("Follow up", row.get("Motivo", row.get("Relato da conversa", "")))
