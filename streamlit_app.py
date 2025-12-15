@@ -1239,7 +1239,7 @@ if modo == "Clientes para Check-in (Base de Leitura)" and not df_ag_hoje.empty:
             st.write("1. Não há agendamentos programados para hoje")
             st.write("2. Verifique se a 'Próxima data' nos agendamentos está correta")
             st.write("3. Crie novos agendamentos na aba 'Check-in'")
-            return  # ← Agora está dentro da função com 8 espaços
+        return  # ← Agora está dentro da função com 8 espaços
 
         # ✅ NORMALIZAR para formato igual ao check-in
         df_ag_normalizado = df_ag_hoje.copy()
