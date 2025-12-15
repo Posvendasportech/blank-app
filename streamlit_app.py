@@ -213,6 +213,9 @@ def remover_lock(telefone):
         sh = client.open_by_key(Config.SHEET_ID)
         ws = sh.worksheet("EM_ATENDIMENTO")
         
+        # ✅ MELHORADO: Buscar por telefone limpo também
+        telefone_limpo = limpar_telefone(str(telefone))
+        
         # Buscar a linha do telefone
         try:
             cell = ws.find(str(telefone))
@@ -220,11 +223,27 @@ def remover_lock(telefone):
                 ws.delete_rows(cell.row)
                 load_em_atendimento.clear()
                 logger.info(f"🔓 Lock removido: {telefone}")
+                return
         except gspread.exceptions.CellNotFound:
-            logger.warning(f"⚠️ Lock não encontrado para remover: {telefone}")
+            pass
+        
+        # ✅ NOVO: Se não encontrou, tentar buscar por telefone limpo
+        try:
+            all_phones = ws.col_values(1)[1:]  # Coluna 1 = Telefone, pula cabeçalho
+            for i, phone in enumerate(all_phones, start=2):  # Start=2 pois linha 1 é cabeçalho
+                if limpar_telefone(phone) == telefone_limpo:
+                    ws.delete_rows(i)
+                    load_em_atendimento.clear()
+                    logger.info(f"🔓 Lock removido (busca limpa): {telefone}")
+                    return
+        except Exception as e_inner:
+            logger.warning(f"⚠️ Erro na busca alternativa de lock: {e_inner}")
+        
+        logger.warning(f"⚠️ Lock não encontrado para remover: {telefone}")
             
     except Exception as e:
         logger.error(f"❌ Erro ao remover lock: {e}")
+
 
 
 def converte_dias(v):
@@ -471,18 +490,32 @@ def card_component(id_fix, row, usuario_atual):
     
     telefone = str(row.get("Telefone", ""))
     
-    # ✅ NOVO: Criar lock com verificação de sucesso
-    lock_key = f"lock_criado_{id_fix}"
-    if lock_key not in st.session_state:
-        sucesso_lock = criar_lock(telefone, usuario_atual, row.get("Cliente", "—"))
+# ✅ VERSÃO CORRIGIDA: Só bloqueia se REALMENTE tiver outro usuário
+lock_key = f"lock_criado_{id_fix}"
+if lock_key not in st.session_state:
+    # Verificar se OUTRO usuário já está com este cliente
+    df_locks = load_em_atendimento()
+    telefone_limpo = limpar_telefone(telefone)
+    
+    lock_existente = df_locks[
+        (df_locks["Telefone"].astype(str) == str(telefone)) | 
+        (df_locks["Telefone"].apply(limpar_telefone) == telefone_limpo)
+    ]
+    
+    if not lock_existente.empty:
+        usuario_lock = lock_existente.iloc[0]["Usuario"]
         
-        if not sucesso_lock:
-            # Lock falhou (outro usuário já está atendendo)
-            st.error("⚠️ Este cliente está sendo atendido por outro usuário agora!")
-            st.info("🔄 Clique em 'Atualizar agora' na sidebar para ver atendimentos disponíveis")
-            st.stop()  # Para de renderizar o card
-        
-        st.session_state[lock_key] = True
+        # Só bloqueia se for OUTRO usuário
+        if usuario_lock != usuario_atual:
+            st.warning(f"⚠️ Este cliente está sendo atendido por **{usuario_lock}** agora!")
+            st.info("🔄 Aguarde ou escolha outro cliente")
+            return None, "", "", None, ""  # ✅ Retorna valores vazios em vez de st.stop()
+    
+    # Criar lock para o usuário atual
+    criar_lock(telefone, usuario_atual, row.get("Cliente", "—"))
+    st.session_state[lock_key] = True
+    logger.info(f"🔒 Card exibido e travado para {usuario_atual}: {telefone}")
+
         logger.info(f"🔒 Card exibido e travado para {usuario_atual}: {telefone}")
 
     with st.container():
@@ -887,16 +920,16 @@ def build_daily_tasks_df(base, telefones_agendados, filtros, metas, usuario_atua
     logger.info(f"🔍 Telefones agendados: {len(telefones_agendados)}")
     logger.info(f"🔍 Telefones bloqueados (em atendimento): {len(telefones_bloqueados)}")
     
-       # ✅ Normalizar telefones para comparação correta
-    # Converter telefones_agendados para formato limpo
-    telefones_agendados_limpo = {limpar_telefone(t) for t in telefones_agendados}
-    
-    # Filtrar usando telefone limpo E telefone normal
+   # ✅ NOVO: Normalizar telefones para comparação correta
+    telefones_agendados_limpo = {limpar_telefone(str(t)) for t in telefones_agendados if t}
+
+# Filtrar base de check-in (remove quem já tem agendamento)
     base_ck = base[
         (~base["Telefone"].isin(telefones_agendados)) &
         (~base["Telefone_limpo"].isin(telefones_agendados_limpo)) &
         (~base["Telefone"].isin(telefones_bloqueados))
     ].copy()
+
     
     logger.info(f"✅ base_ck após filtrar: {len(base_ck)} clientes disponíveis para checkin")
 
@@ -1079,7 +1112,41 @@ def render_aba1(aba, df_dia, metas):
             key="modo_filtro_aba1"
         )
 
+       # ✅ NOVO: Mostrar agendamentos do dia SEMPRE no topo (antes do seletor)
+if modo == "Clientes para Check-in (Base de Leitura)" and not df_ag_hoje.empty:
+    st.markdown("---")
+    st.markdown("### 📅 Agendamentos para Hoje")
+    st.info(f"Você tem **{len(df_ag_hoje)} agendamento(s)** marcado(s) para hoje. Role para baixo para ver check-ins.")
+    
+    # Mostrar cards de agendamentos
+    for i, (idx, row_ag) in enumerate(df_ag_hoje.iterrows()):
+        tel_ag = str(row_ag.get("Telefone", ""))
+        
+        # ✅ Pular se já foi concluído nesta sessão
+        if tel_ag in st.session_state["concluidos"]:
+            continue
+        if tel_ag in st.session_state["pulados"]:
+            continue
+        
+        st.markdown(f"#### 🟧 Agendamento {i+1}/{len(df_ag_hoje)}")
+        
+        # ✅ Usar card específico para agendamentos
+        ac_ag, mot_ag, res_ag, prox_ag, vend_ag = agendamento_card(
+            f"ag_hoje_{idx}", 
+            row_ag
+        )
+        
+        if ac_ag == "concluir":
+            registrar_agendamento(row_ag, res_ag, mot_ag, prox_ag, vend_ag)
+            remover_card(tel_ag, True)
+            st.rerun()
+        elif ac_ag == "pular":
+            remover_card(tel_ag, False)
+            st.rerun()
+        
         st.markdown("---")
+    
+    st.markdown("### 🟦 Check-ins do Dia")
 
         # =========================================================
         # 🟦 MODO CHECK-IN — EXIBE CARDS
