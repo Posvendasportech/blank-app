@@ -2397,66 +2397,61 @@ else:
         # SEÇÃO 4: CRIAR NOVO AGENDAMENTO
         # ==========================================
         st.subheader("➕ Criar Novo Agendamento")
-
-# ✅ MOSTRAR SE TEM CLIENTE SELECIONADO
-dados_cliente = st.session_state.get("cliente_selecionado", None)
-
-if dados_cliente:
-    col_aviso, col_limpar = st.columns([3, 1])
-    with col_aviso:
-        st.info(f"📌 **Cliente selecionado:** {dados_cliente['nome']} • {dados_cliente['telefone']}")
-    with col_limpar:
-        if st.button("🗑️ Limpar seleção"):
-            st.session_state["cliente_selecionado"] = None
-            st.rerun()
-else:
-    st.info("💡 Busque um cliente acima OU preencha manualmente abaixo")
-
-st.markdown("---")
-
+        
+        # ✅ MOSTRAR SE TEM CLIENTE SELECIONADO
+        dados_cliente = st.session_state.get("cliente_selecionado", None)
+        
+        if dados_cliente:
+            col_aviso, col_limpar = st.columns([3, 1])
+            with col_aviso:
+                st.info(f"📌 **Cliente selecionado:** {dados_cliente['nome']} • {dados_cliente['telefone']}")
+            with col_limpar:
+                if st.button("🗑️ Limpar seleção"):
+                    st.session_state["cliente_selecionado"] = None
+                    st.rerun()
+        else:
+            st.info("💡 Busque um cliente acima OU preencha manualmente abaixo")
+        
+        st.markdown("---")
         
         with st.form(key="form_criar_agendamento", clear_on_submit=False):
             col_form1, col_form2 = st.columns(2)
             
             with col_form1:
-    # ✅ PEGAR VALORES DO SESSION STATE (se tiver)
-    dados_cliente = st.session_state.get("cliente_selecionado", None)
-    
-    cliente_novo = st.text_input(
-        "Nome do Cliente *",
-        value=dados_cliente["nome"] if dados_cliente else "",  # ✅ PREENCHE AUTO
-        key="cliente_novo",
-        placeholder="Digite o nome completo",
-        disabled=dados_cliente is not None  # ✅ TRAVA SE JÁ TEM CLIENTE
-    )
-    
-    telefone_novo = st.text_input(
-        "Telefone *",
-        value=dados_cliente["telefone"] if dados_cliente else "",  # ✅ PREENCHE AUTO
-        key="telefone_novo",
-        placeholder="(11) 98765-4321",
-        disabled=dados_cliente is not None  # ✅ TRAVA SE JÁ TEM CLIENTE
-    )
-    
-    # ✅ SELECTBOX COM ÍNDICE CORRETO
-    opcoes_class = ["Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
-    
-    if dados_cliente:
-        # Encontrar índice da classificação atual
-        try:
-            indice_class = opcoes_class.index(dados_cliente["classificacao"])
-        except ValueError:
-            indice_class = 0
-    else:
-        indice_class = 0
-    
-    classificacao_nova = st.selectbox(
-        "Classificação",
-        opcoes_class,
-        index=indice_class,  # ✅ PRÉ-SELECIONA A CORRETA
-        key="classificacao_nova"
-    )
-
+                # ✅ PEGAR VALORES DO SESSION STATE (se tiver)
+                cliente_novo = st.text_input(
+                    "Nome do Cliente *",
+                    value=dados_cliente["nome"] if dados_cliente else "",
+                    key="cliente_novo",
+                    placeholder="Digite o nome completo",
+                    disabled=dados_cliente is not None
+                )
+                
+                telefone_novo = st.text_input(
+                    "Telefone *",
+                    value=dados_cliente["telefone"] if dados_cliente else "",
+                    key="telefone_novo",
+                    placeholder="(11) 98765-4321",
+                    disabled=dados_cliente is not None
+                )
+                
+                # ✅ SELECTBOX COM ÍNDICE CORRETO
+                opcoes_class = ["Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
+                
+                if dados_cliente:
+                    try:
+                        indice_class = opcoes_class.index(dados_cliente["classificacao"])
+                    except ValueError:
+                        indice_class = 0
+                else:
+                    indice_class = 0
+                
+                classificacao_nova = st.selectbox(
+                    "Classificação",
+                    opcoes_class,
+                    index=indice_class,
+                    key="classificacao_nova"
+                )
             
             with col_form2:
                 vendedor_novo = st.selectbox(
@@ -2481,7 +2476,7 @@ st.markdown("---")
             
             # ✅ AVISO VISUAL PARA SUPORTE
             if tipo_atendimento == "Suporte":
-                st.warning("⚠️ **ATENÇÃO:** Este agendamento será marcado como **CASO DE SUPORTE** e aparecerá como prioridade na primeira seção da aba 'Tarefas do dia'")
+                st.warning("⚠️ **ATENÇÃO:** Este agendamento será marcado como **CASO DE SUPORTE**")
             elif tipo_atendimento == "Venda":
                 st.info("💰 Este agendamento será marcado como **oportunidade de venda**")
             elif tipo_atendimento == "Experiência":
@@ -2518,7 +2513,6 @@ st.markdown("---")
             
             # ✅ PROCESSAR CRIAÇÃO (SEM ST.RERUN)
             if criar_agendamento:
-                # Validações
                 if not cliente_novo.strip():
                     st.error("❌ O campo 'Nome do Cliente' é obrigatório")
                 elif not telefone_novo.strip():
@@ -2526,50 +2520,22 @@ st.markdown("---")
                 elif not motivo_novo.strip():
                     st.error("❌ O campo 'Motivo do Contato' é obrigatório")
                 else:
-                    # Criar row fictícia para o registrar_agendamento
+                    # ✅ Criar row fictícia com dados corretos
                     row_ficticia = {
                         "Cliente": cliente_novo,
                         "Classificação": classificacao_nova,
-                        "Valor": 0,
+                        "Valor": dados_cliente["valor"] if dados_cliente else 0,
                         "Telefone": telefone_novo,
                         "Compras": 0
                     }
                     
-                    # ✅ REGISTRAR SEM FAZER RERUN
                     try:
                         registrar_agendamento(
                             row_ficticia,
                             resumo_novo if resumo_novo.strip() else "Agendamento criado via pesquisa",
                             motivo_novo,
-                            proxima_data_novo.strftime("%d/%m/%Y"),
-                            vendedor_novo,
-                            tipo_atendimento=tipo_atendimento  # ✅ PASSA O TIPO
-                        )
-                        
-                        # Limpar caches
-                        load_agendamentos_ativos.clear()
-                        load_df_agendamentos.clear()
-                        load_casos_suporte.clear()
-                        
-                        # ✅ MENSAGEM DE SUCESSO (SEM RERUN)
-                        st.success(f"✅ **Agendamento criado com sucesso!**")
-                        st.info(f"📅 **Data:** {proxima_data_novo.strftime('%d/%m/%Y')}")
-                        st.info(f"🏷️ **Tipo:** {tipo_atendimento}")
-                        st.info(f"👤 **Responsável:** {vendedor_novo}")
-                        
-                        if tipo_atendimento == "Suporte":
-                            st.warning("🛠️ Este caso aparecerá na seção de **Suporte** da aba 'Tarefas do dia'")
-                        
-                        st.balloons()
-                        
-                        # ✅ NÃO FAZ st.rerun() - usuário permanece na Aba 3
-                        
-                    except Exception as e:
-                        st.error(f"❌ Erro ao criar agendamento: {e}")
-                        logger.error(f"Erro ao criar agendamento via aba3: {e}", exc_info=True)
-            
-            if limpar_form:
-                st.info("🔄 Recarregue a página (F5) para limpar o formulário")
+                            proxima_data_novo
+
 
 # =========================================================
 # (10) 🚀 MAIN FLOW
