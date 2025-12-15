@@ -1944,7 +1944,7 @@ def render_aba3(aba):
         # =========================================================
         # 🔍 CAMPO DE PESQUISA
         # =========================================================
-        col_pesquisa, col_btn = st.columns([3, 1])
+        col_pesquisa, col_btn, col_limpar = st.columns([3, 1, 1])
         
         with col_pesquisa:
             telefone_busca = st.text_input(
@@ -1956,20 +1956,31 @@ def render_aba3(aba):
         
         with col_btn:
             st.markdown("<br>", unsafe_allow_html=True)
-            buscar = st.button("🔍 Buscar", use_container_width=True, type="primary")
+            if st.button("🔍 Buscar", use_container_width=True, type="primary"):
+                # ✅ Salvar busca no session_state ao invés de recarregar
+                if telefone_busca and telefone_busca.strip():
+                    st.session_state["ultima_busca"] = telefone_busca.strip()
+                else:
+                    st.warning("⚠️ Digite um telefone para buscar")
         
-        # Limpar telefone para busca
-        if telefone_busca and telefone_busca.strip():
-            telefone_limpo = limpar_telefone(telefone_busca)
-        else:
-            telefone_limpo = None
+        with col_limpar:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("🔄 Limpar", use_container_width=True):
+                st.session_state["ultima_busca"] = None
+                st.rerun()
         
-             # =========================================================
+        # ✅ Usar telefone do session_state se existir
+        telefone_para_buscar = st.session_state.get("ultima_busca", None)
+        
+        # =========================================================
         # 📊 RESULTADOS DA BUSCA
         # =========================================================
-        if buscar and telefone_limpo:
+        if telefone_para_buscar:
+            # Limpar telefone para busca
+            telefone_limpo = limpar_telefone(telefone_para_buscar)
+            
             st.markdown("---")
-            st.markdown(f"### 📱 Resultados para: **{telefone_busca}**")
+            st.markdown(f"### 📱 Resultados para: **{telefone_para_buscar}**")
             
             # Carregar dados
             base = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
@@ -1991,7 +2002,7 @@ def render_aba3(aba):
             
             # ✅ DEBUG: Mostrar dados da busca
             with st.expander("🔍 DEBUG - Informações da Busca", expanded=False):
-                st.write(f"**Telefone digitado:** `{telefone_busca}`")
+                st.write(f"**Telefone digitado:** `{telefone_para_buscar}`")
                 st.write(f"**Telefone limpo (busca):** `{telefone_limpo}`")
                 st.write(f"**Total de registros na base:** {len(base)}")
                 
@@ -2005,15 +2016,16 @@ def render_aba3(aba):
                     st.dataframe(amostra, use_container_width=True)
                     
                     # Verificar se existe algum telefone similar
-                    similares = base[base["Telefone_limpo"].str.contains(telefone_limpo[-8:], na=False)]
-                    if not similares.empty:
-                        st.write(f"**🔍 Telefones similares encontrados (últimos 8 dígitos):** {len(similares)}")
-                        st.dataframe(
-                            similares[["Cliente", "Telefone", "Telefone_limpo"]].head(3),
-                            use_container_width=True
-                        )
+                    if len(telefone_limpo) >= 8:
+                        similares = base[base["Telefone_limpo"].str.contains(telefone_limpo[-8:], na=False)]
+                        if not similares.empty:
+                            st.write(f"**🔍 Telefones similares encontrados (últimos 8 dígitos):** {len(similares)}")
+                            st.dataframe(
+                                similares[["Cliente", "Telefone", "Telefone_limpo"]].head(3),
+                                use_container_width=True
+                            )
             
-            # ✅ Buscar cliente na base principal (coluna E = Telefone)
+            # ✅ Buscar cliente na base principal
             logger.info(f"🔍 Buscando telefone limpo: {telefone_limpo}")
             cliente_encontrado = base[base["Telefone_limpo"] == telefone_limpo]
             logger.info(f"📊 Clientes encontrados: {len(cliente_encontrado)}")
@@ -2027,11 +2039,15 @@ def render_aba3(aba):
                 
                 if len(cliente_encontrado) > 1:
                     st.info(f"💡 Encontrados {len(cliente_encontrado)} clientes com final {ultimos_9}. Mostrando o mais recente.")
-                    # Pegar o mais recente
                     if "Data" in cliente_encontrado.columns:
                         cliente_encontrado = cliente_encontrado.sort_values("Data", ascending=False).head(1)
             
             if not cliente_encontrado.empty:
+                # =====================================================
+                # 📋 SEÇÃO 1: DADOS ATUAIS DO CLIENTE
+                # =====================================================
+                # ... TODO O RESTO DO CÓDIGO CONTINUA AQUI ...
+                # (mantenha tudo igual das seções 1, 2, 3 e 4)
 
                 # =====================================================
                 # 📋 SEÇÃO 1: DADOS ATUAIS DO CLIENTE
