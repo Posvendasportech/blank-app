@@ -3,107 +3,153 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-st.set_page_config(
-    page_title="CRM Pós-Vendas",
-    page_icon="📊",
-    layout="wide"
-)
+st.set_page_config(page_title="CRM Pós-Vendas", page_icon="📊", layout="wide")
 
 # Função para carregar dados
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def load_data(worksheet):
     conn = st.connection("gsheets", type=GSheetsConnection)
-    df = conn.read(worksheet=worksheet, ttl=300)
+    df = conn.read(worksheet=worksheet, ttl=60)
     return df
+
+# Função para adicionar linha em uma aba
+def add_to_worksheet(worksheet_name, data_row):
+    """Adiciona uma linha na planilha especificada"""
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    
+    # Carrega dados atuais
+    df_atual = conn.read(worksheet=worksheet_name)
+    
+    # Adiciona nova linha
+    df_novo = pd.concat([df_atual, pd.DataFrame([data_row])], ignore_index=True)
+    
+    # Atualiza a planilha
+    conn.update(worksheet=worksheet_name, data=df_novo)
+    st.cache_data.clear()
+    return True
 
 # Sidebar
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/000000/customer-support.png", width=100)
     st.title("📋 Menu")
-    
-    page = st.radio(
-        "Navegação:",
-        ["🏠 Dashboard", "✅ Check-in", "📞 Em Atendimento", "🆘 Suporte", "📜 Histórico"]
-    )
-    
-    st.markdown("---")
-    st.caption("CRM Pós-Vendas v1.0")
-
-# ===== DASHBOARD =====
-if page == "🏠 Dashboard":
-    st.title("🏠 Dashboard - Visão Geral")
-    
-    # Carregar dados
-    df_total = load_data("Total")
-    df_agendamentos = load_data("AGENDAMENTOS_ATIVOS")
-    df_suporte = load_data("SUPORTE")
-    
-    # Métricas principais
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("📊 Total de Clientes", len(df_total))
-    with col2:
-        agendamentos_count = len(df_agendamentos) if not df_agendamentos.empty else 0
-        st.metric("📅 Agendamentos Ativos", agendamentos_count)
-    with col3:
-        suporte_count = len(df_suporte) if not df_suporte.empty else 0
-        st.metric("🆘 Casos de Suporte", suporte_count)
-    with col4:
-        if 'Classificação ' in df_total.columns:
-            em_risco = len(df_total[df_total['Classificação '].str.contains('risco', case=False, na=False)])
-            st.metric("⚠️ Clientes em Risco", em_risco)
-    
-    # Gráfico de classificação
-    st.markdown("### 📊 Clientes por Classificação")
-    if 'Classificação ' in df_total.columns:
-        classificacao_counts = df_total['Classificação '].value_counts()
-        st.bar_chart(classificacao_counts)
-    
-    # Tabela dos últimos clientes
-    st.markdown("### 🔍 Últimos Clientes Cadastrados")
-    if 'Data' in df_total.columns:
-        df_display = df_total.sort_values('Data', ascending=False).head(10)
-        st.dataframe(df_display, use_container_width=True)
+    page = st.radio("Navegação:", ["✅ Check-in", "📞 Em Atendimento", "🆘 Suporte", "📜 Histórico"])
 
 # ===== CHECK-IN =====
-elif page == "✅ Check-in":
-    st.title("✅ Check-in - Iniciar Atendimento")
+if page == "✅ Check-in":
+    st.title("✅ Check-in de Clientes")
+    st.markdown("Selecione clientes para iniciar o fluxo de atendimento personalizado")
     
-    df_total = load_data("Total")
-    df_agendamentos = load_data("AGENDAMENTOS_ATIVOS")
+    # Seleção de classificação
+    col1, col2 = st.columns([1, 3])
     
-    st.info("💡 Selecione clientes para iniciar o processo de agendamento")
-    
-    # Filtros
-    col1, col2 = st.columns(2)
     with col1:
-        if 'Classificação ' in df_total.columns:
-            classificacoes = ['Todos'] + list(df_total['Classificação '].unique())
-            filtro_class = st.selectbox("Filtrar por Classificação:", classificacoes)
+        classificacao_selecionada = st.selectbox(
+            "📂 Selecione a Classificação:",
+            ["Total", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"],
+            help="Escolha qual grupo de clientes deseja visualizar"
+        )
     
     with col2:
-        if 'Dias desde a compra' in df_total.columns:
-            filtro_dias = st.slider("Dias desde a última compra:", 0, 365, (30, 365))
+        st.info(f"💡 Visualizando clientes: **{classificacao_selecionada}**")
     
-    # Aplicar filtros
-    df_filtrado = df_total.copy()
-    
-    if filtro_class != 'Todos':
-        df_filtrado = df_filtrado[df_filtrado['Classificação '] == filtro_class]
-    
-    if 'Dias desde a compra' in df_filtrado.columns:
-        df_filtrado = df_filtrado[
-            (df_filtrado['Dias desde a compra'] >= filtro_dias[0]) &
-            (df_filtrado['Dias desde a compra'] <= filtro_dias[1])
-        ]
-    
-    st.dataframe(df_filtrado, use_container_width=True)
-    st.caption(f"Total: {len(df_filtrado)} clientes")
+    # Carregar dados da aba selecionada
+    try:
+        df_clientes = load_data(classificacao_selecionada)
+        
+        if df_clientes.empty:
+            st.warning(f"Nenhum cliente encontrado na categoria '{classificacao_selecionada}'")
+        else:
+            # Filtros adicionais
+            st.markdown("### 🔍 Filtros")
+            col_f1, col_f2, col_f3 = st.columns(3)
+            
+            with col_f1:
+                busca_nome = st.text_input("🔎 Buscar por nome:", "")
+            
+            with col_f2:
+                if 'Dias desde a compra' in df_clientes.columns:
+                    max_dias = int(df_clientes['Dias desde a compra'].max()) if df_clientes['Dias desde a compra'].max() > 0 else 365
+                    filtro_dias = st.slider("Dias desde última compra:", 0, max_dias, (0, max_dias))
+            
+            with col_f3:
+                if 'Valor' in df_clientes.columns:
+                    ordenar = st.selectbox("Ordenar por:", ["Nome", "Valor (maior)", "Dias (maior)"])
+            
+            # Aplicar filtros
+            df_filtrado = df_clientes.copy()
+            
+            if busca_nome:
+                if 'Nome' in df_filtrado.columns:
+                    df_filtrado = df_filtrado[df_filtrado['Nome'].str.contains(busca_nome, case=False, na=False)]
+            
+            if 'Dias desde a compra' in df_filtrado.columns:
+                df_filtrado = df_filtrado[
+                    (df_filtrado['Dias desde a compra'] >= filtro_dias[0]) &
+                    (df_filtrado['Dias desde a compra'] <= filtro_dias[1])
+                ]
+            
+            # Ordenação
+            if ordenar == "Valor (maior)" and 'Valor' in df_filtrado.columns:
+                df_filtrado = df_filtrado.sort_values('Valor', ascending=False)
+            elif ordenar == "Dias (maior)" and 'Dias desde a compra' in df_filtrado.columns:
+                df_filtrado = df_filtrado.sort_values('Dias desde a compra', ascending=False)
+            
+            st.markdown(f"### 📋 Clientes Disponíveis ({len(df_filtrado)})")
+            
+            # Exibir cards de clientes
+            for idx, cliente in df_filtrado.iterrows():
+                with st.container():
+                    col_info, col_metrics, col_action = st.columns([2, 3, 1])
+                    
+                    with col_info:
+                        st.markdown(f"**👤 {cliente.get('Nome', 'N/A')}**")
+                        st.caption(f"📧 {cliente.get('Email', 'N/A')}")
+                        st.caption(f"📱 {cliente.get('Telefone', 'N/A')}")
+                    
+                    with col_metrics:
+                        met1, met2, met3 = st.columns(3)
+                        with met1:
+                            valor = cliente.get('Valor', 0)
+                            st.metric("💰 Gasto Total", f"R$ {valor:,.2f}" if pd.notna(valor) else "R$ 0,00")
+                        with met2:
+                            compras = cliente.get('Compras', 0)
+                            st.metric("🛒 Compras", int(compras) if pd.notna(compras) else 0)
+                        with met3:
+                            dias = cliente.get('Dias desde a compra', 0)
+                            st.metric("📅 Dias", int(dias) if pd.notna(dias) else 0)
+                    
+                    with col_action:
+                        if st.button(f"✅ Check-in", key=f"checkin_{idx}", type="primary"):
+                            # Preparar dados para agendamento
+                            data_agendamento = {
+                                'Data de contato': datetime.now().strftime('%d/%m/%Y'),
+                                'Nome': cliente.get('Nome', ''),
+                                'Classificação': cliente.get('Classificação ', classificacao_selecionada),
+                                'Valor': cliente.get('Valor', 0),
+                                'Telefone': cliente.get('Telefone', ''),
+                                'Relato da conversa': '',
+                                'Follow up': 'Pendente',
+                                'Data de chamada': '',
+                                'Observação': 'Check-in realizado'
+                            }
+                            
+                            try:
+                                add_to_worksheet('AGENDAMENTOS_ATIVOS', data_agendamento)
+                                st.success(f"✅ Check-in realizado para {cliente.get('Nome', 'cliente')}!")
+                                st.balloons()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro ao realizar check-in: {e}")
+                    
+                    st.markdown("---")
+            
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {e}")
 
 # ===== EM ATENDIMENTO =====
 elif page == "📞 Em Atendimento":
     st.title("📞 Em Atendimento - Agendamentos Ativos")
+    st.info("Aqui ficam os clientes que já fizeram check-in e aguardam contato")
     
     df_agendamentos = load_data("AGENDAMENTOS_ATIVOS")
     
@@ -112,36 +158,3 @@ elif page == "📞 Em Atendimento":
         st.metric("Total de Agendamentos", len(df_agendamentos))
     else:
         st.info("✅ Nenhum agendamento ativo no momento")
-
-# ===== SUPORTE =====
-elif page == "🆘 Suporte":
-    st.title("🆘 Suporte - Casos Problemáticos")
-    
-    df_suporte = load_data("SUPORTE")
-    
-    if not df_suporte.empty:
-        st.dataframe(df_suporte, use_container_width=True)
-        st.metric("Total de Casos", len(df_suporte))
-    else:
-        st.info("✅ Nenhum caso de suporte ativo")
-
-# ===== HISTÓRICO =====
-elif page == "📜 Histórico":
-    st.title("📜 Histórico de Contatos")
-    
-    df_historico = load_data("HISTORICO")
-    
-    if not df_historico.empty:
-        # Barra de busca
-        busca = st.text_input("🔍 Buscar por nome:", "")
-        
-        if busca:
-            if 'Nome' in df_historico.columns:
-                df_filtrado = df_historico[df_historico['Nome'].str.contains(busca, case=False, na=False)]
-                st.dataframe(df_filtrado, use_container_width=True)
-        else:
-            st.dataframe(df_historico, use_container_width=True)
-        
-        st.metric("Total de Interações", len(df_historico))
-    else:
-        st.info("Nenhum histórico registrado ainda")
