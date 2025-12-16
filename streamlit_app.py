@@ -192,48 +192,38 @@ if pagina == "✅ Check-in":
                     st.caption(f"📱 {telefone}")
                 
                                 # --- COLUNA 2: MÉTRICAS ---
+                                # --- COLUNA 2: MÉTRICAS ---
                 with col_metricas:
                     met1, met2, met3 = st.columns(3)
                     
                     with met1:
-                        # Tentar pegar valor com ou sem espaços
-                        valor = cliente.get('Valor', None)
-                        if valor is None:
-                            valor = cliente.get('Valor ', None)  # Com espaço
-                        
+                        valor = cliente.get('Valor', 0)
                         if pd.notna(valor) and valor != '':
                             try:
                                 st.metric("💰 Gasto Total", f"R$ {float(valor):,.2f}")
                             except:
-                                st.metric("💰 Gasto Total", f"R$ {valor}")
+                                st.metric("💰 Gasto Total", "R$ 0,00")
                         else:
                             st.metric("💰 Gasto Total", "R$ 0,00")
                     
                     with met2:
-                        # Tentar pegar compras com ou sem espaços
-                        compras = cliente.get('Compras', None)
-                        if compras is None:
-                            compras = cliente.get('Compras ', None)  # Com espaço
-                        
+                        compras = cliente.get('Compras', 0)
                         if pd.notna(compras) and compras != '':
                             try:
                                 st.metric("🛒 Compras", int(float(compras)))
                             except:
-                                st.metric("🛒 Compras", str(compras))
+                                st.metric("🛒 Compras", "0")
                         else:
                             st.metric("🛒 Compras", "0")
                     
                     with met3:
-                        # Tentar pegar dias com ou sem espaços
-                        dias = cliente.get('Dias desde a compra', None)
-                        if dias is None:
-                            dias = cliente.get('Dias desde a compra ', None)  # Com espaço
-                        
+                        dias = cliente.get('Dias desde a compra', 0)
                         if pd.notna(dias) and dias != '':
                             try:
+                                # Arredondar para número inteiro
                                 st.metric("📅 Dias", int(round(float(dias))))
                             except:
-                                st.metric("📅 Dias", str(dias))
+                                st.metric("📅 Dias", "0")
                         else:
                             st.metric("📅 Dias", "0")
 
