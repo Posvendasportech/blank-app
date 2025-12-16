@@ -1362,18 +1362,9 @@ def diagnostico_planilha():
 
 def render_aba1(aba, df_dia, metas):
     with aba:
-        # ✅ THROTTLE: Evitar múltiplas cargas em menos de 5 segundos
-        if "last_load_time" not in st.session_state:
-            st.session_state.last_load_time = 0
-        
-        tempo_desde_ultima_carga = time.time() - st.session_state.last_load_time
-        
-        if tempo_desde_ultima_carga < 5:  # Menos de 5 segundos
-            st.info(f"⏳ Aguarde {5 - int(tempo_desde_ultima_carga)} segundos antes de recarregar...")
-            time.sleep(5 - tempo_desde_ultima_carga)
-        
-        st.session_state.last_load_time = time.time()
-
+        # 1. Diagnóstico
+        diagnostico_planilha()
+        st.markdown("---")
         
         # 2. Inicialização
         if "card_counter" not in st.session_state:
@@ -1650,7 +1641,7 @@ def render_aba1(aba, df_dia, metas):
 def enriquecer_com_base(df_trabalho, df_base_completa):
     """
     Faz JOIN com base completa para adicionar dados do cliente
-    ✅ Evita duplicatas pegando apenas a compra mais recente
+    ✅ Centraliza a lógica que estava repetida 3x
     """
     if df_base_completa.empty:
         logger.warning("⚠️ Base principal vazia - cards sem dados complementares")
@@ -1663,39 +1654,18 @@ def enriquecer_com_base(df_trabalho, df_base_completa):
     if "Telefone_limpo" not in df_base_completa.columns:
         df_base_completa["Telefone_limpo"] = df_base_completa["Telefone"].apply(limpar_telefone)
     
-    # ✅ PEGAR APENAS O REGISTRO MAIS RECENTE DE CADA TELEFONE
-    # Converter Data para datetime
-    df_base_completa["_data_conv"] = pd.to_datetime(df_base_completa["Data"], errors="coerce")
-    
-    # Ordenar por data (mais recente primeiro) e pegar o primeiro de cada telefone
-    df_base_unica = (
-        df_base_completa
-        .sort_values("_data_conv", ascending=False)
-        .groupby("Telefone_limpo", as_index=False)
-        .first()
-    )
-    
-    logger.info(f"📋 Base completa: {len(df_base_completa)} registros → {len(df_base_unica)} únicos")
-    
     # JOIN: Adicionar colunas relevantes
     colunas_necessarias = ["Telefone_limpo", "Dias_num", "Compras", "Data", "Valor", "Classificação"]
-    colunas_disponiveis = [col for col in colunas_necessarias if col in df_base_unica.columns]
+    colunas_disponiveis = [col for col in colunas_necessarias if col in df_base_completa.columns]
     
     df_enriquecido = df_trabalho.merge(
-        df_base_unica[colunas_disponiveis],
+        df_base_completa[colunas_disponiveis],
         on="Telefone_limpo",
         how="left",
         suffixes=("", "_base")
     )
     
-    logger.info(f"✅ JOIN realizado - {len(df_trabalho)} registros → {len(df_enriquecido)} enriquecidos")
-    
-    # ✅ GARANTIR que não duplicou
-    if len(df_enriquecido) != len(df_trabalho):
-        logger.warning(f"⚠️ ATENÇÃO: JOIN duplicou registros! {len(df_trabalho)} → {len(df_enriquecido)}")
-        df_enriquecido = df_enriquecido.drop_duplicates(subset=["Telefone_limpo"], keep="first")
-        logger.info(f"✅ Duplicatas removidas: {len(df_enriquecido)} registros finais")
-    
+    logger.info(f"✅ JOIN realizado - {len(df_enriquecido)} registros enriquecidos")
     return df_enriquecido
 
 
