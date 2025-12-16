@@ -659,8 +659,8 @@ if 'Data de chamada' in df_agendamentos.columns:
     
     st.markdown("---")
     
-        # ========== LISTA DE AGENDAMENTOS ==========
-    st.subheader(f"📋 Atendimentos ({len(df_filt)})")
+     # ========== LISTA DE AGENDAMENTOS ==========
+    st.subheader(f"📋 Atendamentos ({len(df_filt)})")
     
     if df_filt.empty:
         if visualizar == "Hoje":
@@ -670,7 +670,6 @@ if 'Data de chamada' in df_agendamentos.columns:
         else:
             st.info("Nenhum agendamento encontrado")
         return
-
     
     # Cards de agendamentos
     for idx, agend in df_filt.iterrows():
@@ -678,6 +677,7 @@ if 'Data de chamada' in df_agendamentos.columns:
         # Verificar se está vencido
         esta_vencido = False
         data_chamada_str = agend.get('Data de chamada', '')
+
         if data_chamada_str and data_chamada_str != '':
             try:
                 # Tentar múltiplos formatos de data
