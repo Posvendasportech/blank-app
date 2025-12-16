@@ -657,7 +657,7 @@ if 'Data de chamada' in df_agendamentos.columns:
     
     st.markdown("---")
     
-    # ========== LISTA DE AGENDAMENTOS ==========
+        # ========== LISTA DE AGENDAMENTOS ==========
     st.subheader(f"📋 Atendimentos ({len(df_filt)})")
     
     if df_filt.empty:
@@ -677,7 +677,35 @@ if 'Data de chamada' in df_agendamentos.columns:
         data_chamada_str = agend.get('Data de chamada', '')
         if data_chamada_str and data_chamada_str != '':
             try:
-                data_chamada_dt = datetime.strptime(data_chamada_str, '%d/%m/%Y')
+                # Tentar múltiplos formatos de data
+                data_chamada_dt = None
+                
+                # Formato brasileiro DD/MM/YYYY
+                try:
+                    data_chamada_dt = datetime.strptime(data_chamada_str, '%d/%m/%Y')
+                except:
+                    pass
+                
+                # Formato ISO YYYY/MM/DD
+                if not data_chamada_dt:
+                    try:
+                        data_chamada_dt = datetime.strptime(data_chamada_str, '%Y/%m/%d')
+                    except:
+                        pass
+                
+                # Formato ISO com hífen YYYY-MM-DD
+                if not data_chamada_dt:
+                    try:
+                        data_chamada_dt = datetime.strptime(data_chamada_str, '%Y-%m-%d')
+                    except:
+                        pass
+                
+                # Verificar se está vencido
+                if data_chamada_dt and data_chamada_dt.date() < hoje_dt.date():
+                    esta_vencido = True
+            except:
+                pass
+
                 if data_chamada_dt < hoje_dt:
                     esta_vencido = True
             except:
