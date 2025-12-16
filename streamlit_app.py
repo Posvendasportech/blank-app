@@ -238,16 +238,16 @@ def render_checkin():
             help="Selecione o grupo de clientes que deseja visualizar"
         )
     
-    with col_config2:
-    # Vincular com o planejamento de metas
-    metas_por_classificacao = {
-        "Novo": meta_novo,
-        "Promissor": meta_promissor,
-        "Leal": meta_leal,
-        "Campeão": meta_campeao,
-        "Em risco": meta_risco,
-        "Dormente": meta_dormente
-    }
+        with col_config2:
+        # Vincular com o planejamento de metas
+        metas_por_classificacao = {
+            "Novo": meta_novo,
+            "Promissor": meta_promissor,
+            "Leal": meta_leal,
+            "Campeão": meta_campeao,
+            "Em risco": meta_risco,
+            "Dormente": meta_dormente
+        }
     
     # Pegar limite baseado na meta definida
     limite_clientes = metas_por_classificacao.get(classificacao_selecionada, 10)
