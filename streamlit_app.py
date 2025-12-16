@@ -511,20 +511,21 @@ def render_em_atendimento():
         return
     
    # ========== FILTRAR APENAS ATENDIMENTOS DO DIA ==========
+    # ========== FILTRAR APENAS ATENDIMENTOS DO DIA ==========
     hoje_dt = datetime.now()
     hoje_str_br = hoje_dt.strftime('%d/%m/%Y')  # Formato brasileiro
     hoje_str_iso = hoje_dt.strftime('%Y/%m/%d')  # Formato ISO
     hoje_str_iso2 = hoje_dt.strftime('%Y-%m-%d')  # Formato ISO com hífen
 
-
-# Filtrar apenas agendamentos para hoje (aceita múltiplos formatos)
-df_hoje = pd.DataFrame()
+    # Filtrar apenas agendamentos para hoje (aceita múltiplos formatos)
+    df_hoje = pd.DataFrame()
     if 'Data de chamada' in df_agendamentos.columns:
         df_hoje = df_agendamentos[
             (df_agendamentos['Data de chamada'] == hoje_str_br) |
             (df_agendamentos['Data de chamada'] == hoje_str_iso) |
             (df_agendamentos['Data de chamada'] == hoje_str_iso2)
         ].copy()
+
 
 # Calcular vencidos (datas anteriores a hoje)
 df_vencidos = pd.DataFrame()
