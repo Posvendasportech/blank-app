@@ -315,7 +315,7 @@ with col_dias:
         filtro_dias = None
     
     
-    # Aplicar filtros
+        # Aplicar filtros
     df_filtrado = df_clientes.copy()
     if busca_nome and 'Nome' in df_filtrado.columns:
         df_filtrado = df_filtrado[df_filtrado['Nome'].str.contains(busca_nome, case=False, na=False)]
@@ -344,6 +344,7 @@ with col_dias:
                 valor_formatado = "R$ 0,00"
         else:
             valor_formatado = "R$ 0,00"
+
         
         # Card expansível com tema azul
         with st.expander(
