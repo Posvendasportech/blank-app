@@ -122,6 +122,109 @@ def render_checkin():
     st.markdown("Selecione clientes para iniciar o fluxo de atendimento")
     st.markdown("---")
     
+    # ========== PAINEL DE PLANEJAMENTO DIÁRIO ==========
+    st.subheader("📊 Planejamento de Check-ins do Dia")
+    
+    # Carregar agendamentos para contar check-ins de hoje
+    df_agendamentos_hoje = carregar_dados("AGENDAMENTOS_ATIVOS")
+    hoje = datetime.now().strftime('%d/%m/%Y')
+    
+    # Contar check-ins de hoje
+    if not df_agendamentos_hoje.empty and 'Data de contato' in df_agendamentos_hoje.columns:
+        checkins_hoje = len(df_agendamentos_hoje[df_agendamentos_hoje['Data de contato'] == hoje])
+    else:
+        checkins_hoje = 0
+    
+    # Painel de metas diárias
+    with st.expander("🎯 Definir Metas de Check-in por Classificação", expanded=True):
+        st.write("**Defina quantos clientes de cada grupo você quer contatar hoje:**")
+        
+        col_meta1, col_meta2, col_meta3 = st.columns(3)
+        
+        with col_meta1:
+            meta_novo = st.number_input("🆕 Novo", min_value=0, max_value=50, value=5, step=1)
+            meta_promissor = st.number_input("⭐ Promissor", min_value=0, max_value=50, value=5, step=1)
+        
+        with col_meta2:
+            meta_leal = st.number_input("💙 Leal", min_value=0, max_value=50, value=5, step=1)
+            meta_campeao = st.number_input("🏆 Campeão", min_value=0, max_value=50, value=3, step=1)
+        
+        with col_meta3:
+            meta_risco = st.number_input("⚠️ Em risco", min_value=0, max_value=50, value=5, step=1)
+            meta_dormente = st.number_input("😴 Dormente", min_value=0, max_value=50, value=5, step=1)
+        
+        # Calcular meta total
+        meta_total = meta_novo + meta_promissor + meta_leal + meta_campeao + meta_risco + meta_dormente
+        
+        st.markdown("---")
+        st.info(f"🎯 **Meta Total do Dia:** {meta_total} check-ins")
+    
+    st.markdown("---")
+    
+    # ========== BARRA DE PROGRESSO E MOTIVAÇÃO ==========
+    st.subheader("📈 Progresso do Dia")
+    
+    # Calcular progresso
+    if meta_total > 0:
+        progresso = min(checkins_hoje / meta_total, 1.0)
+        percentual = int(progresso * 100)
+    else:
+        progresso = 0
+        percentual = 0
+    
+    # Frases motivacionais baseadas no progresso
+    frases_motivacao = {
+        0: "🚀 Vamos começar! Todo grande resultado começa com o primeiro passo!",
+        25: "💪 Ótimo começo! Continue assim e você vai longe!",
+        50: "🔥 Você está no meio do caminho! Não pare agora!",
+        75: "⭐ Incrível! Você está quase lá, finalize com chave de ouro!",
+        100: "🎉 PARABÉNS! Meta do dia alcançada! Você é CAMPEÃO! 🏆"
+    }
+    
+    # Selecionar frase baseada no percentual
+    if percentual >= 100:
+        frase = frases_motivacao[100]
+    elif percentual >= 75:
+        frase = frases_motivacao[75]
+    elif percentual >= 50:
+        frase = frases_motivacao[50]
+    elif percentual >= 25:
+        frase = frases_motivacao[25]
+    else:
+        frase = frases_motivacao[0]
+    
+    # Exibir métricas e progresso
+    col_prog1, col_prog2, col_prog3 = st.columns([1, 2, 1])
+    
+    with col_prog1:
+        st.metric(
+            label="✅ Check-ins Hoje",
+            value=checkins_hoje,
+            delta=f"{checkins_hoje - meta_total} da meta" if meta_total > 0 else None
+        )
+    
+    with col_prog2:
+        st.progress(progresso)
+        st.markdown(f"**{percentual}% da meta alcançada**")
+        
+        # Frase motivacional
+        if percentual >= 100:
+            st.success(frase)
+        elif percentual >= 50:
+            st.info(frase)
+        else:
+            st.warning(frase)
+    
+    with col_prog3:
+        st.metric(
+            label="🎯 Meta do Dia",
+            value=meta_total,
+            delta=f"Faltam {max(0, meta_total - checkins_hoje)}"
+        )
+    
+    st.markdown("---")
+
+    
     # Configurações de filtros
     col_config1, col_config2 = st.columns([2, 1])
     
