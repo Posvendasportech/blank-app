@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 from urllib.parse import quote
@@ -1524,20 +1525,6 @@ def render_aba1(aba, df_dia, metas):
         
         st.markdown("---")
         
-    # ==========================================
-    # SELETOR DE MODO DE ATENDIMENTO
-    # ==========================================
-    st.markdown("### 🎯 Modo de Atendimento")
-    
-    modo = st.selectbox(
-        "Escolha qual tipo de tarefa deseja executar:",
-        ["🛠️ Acompanhamento de Suporte", "📅 Agendamentos Ativos", "📞 Check-in de Clientes"],
-        key="modo_atendimento_aba1",
-        help="Suporte = casos prioritários | Agendamentos = contatos programados | Check-in = novos contatos da base"
-    )
-    
-        st.markdown("---")
-        
         # ==========================================
         # SELETOR DE MODO DE ATENDIMENTO
         # ==========================================
@@ -1563,7 +1550,7 @@ def render_aba1(aba, df_dia, metas):
                 st.success("✅ Nenhum caso de suporte pendente no momento!")
                 st.info("💡 Quando houver problemas reportados pelos clientes, eles aparecerão aqui automaticamente")
             else:
-                # ✅ ENRIQUECER APENAS OS CASOS DE SUPORTE (NÃO TODA A BASE)
+                # ✅ ENRIQUECER APENAS OS CASOS DE SUPORTE
                 df_suporte_enriquecido = enriquecer_com_base(df_suporte.copy(), df_base_completa)
                 
                 # Filtrar apenas pendentes
@@ -1576,15 +1563,13 @@ def render_aba1(aba, df_dia, metas):
                     st.success("🎉 Todos os casos de suporte foram atendidos!")
                     st.info(f"✅ {len(df_suporte)} caso(s) resolvido(s) hoje")
                 else:
-                    # ✅ CONTAGEM CORRETA (só os 3 casos pendentes)
                     st.warning(f"⚠️ **{len(df_suporte_pendente)} caso(s) aguardando resolução**")
                     st.markdown("---")
                     
-                    # Renderizar cards
                     renderizar_cards_modo(
                         df_suporte_pendente, 
                         "suporte", 
-                        True,  # usar_card_suporte
+                        True,
                         usuario_atual,
                         "Suporte"
                     )
@@ -1597,10 +1582,8 @@ def render_aba1(aba, df_dia, metas):
                 st.success("✅ Nenhum agendamento para hoje!")
                 st.info("💡 Use a aba 'Histórico/Pesquisa' para criar novos agendamentos")
             else:
-                # Enriquecer
                 df_ag_enriquecido = enriquecer_com_base(df_ag_hoje.copy(), df_base_completa)
                 
-                # Filtrar pendentes
                 df_ag_pendente = df_ag_enriquecido[
                     ~df_ag_enriquecido["Telefone"].astype(str).isin(st.session_state["concluidos"]) &
                     ~df_ag_enriquecido["Telefone"].astype(str).isin(st.session_state["pulados"])
@@ -1616,12 +1599,12 @@ def render_aba1(aba, df_dia, metas):
                     renderizar_cards_modo(
                         df_ag_pendente,
                         "agend",
-                        False,  # usar_card_suporte
+                        False,
                         usuario_atual,
                         "Experiência"
                     )
         
-        else:  # Check-in de Clientes
+        else:
             st.markdown("## 📞 Check-in de Clientes da Base")
             st.info("📌 Novos clientes e clientes em risco que precisam de contato proativo")
             
@@ -1629,7 +1612,6 @@ def render_aba1(aba, df_dia, metas):
                 st.success("✅ Nenhum check-in programado para hoje!")
                 st.info("💡 A lista é atualizada automaticamente com base nas regras de classificação")
             else:
-                # Check-in NÃO precisa de JOIN (df_dia já vem da base principal)
                 df_checkin = df_dia[
                     ~df_dia["Telefone"].astype(str).isin(st.session_state["concluidos"]) &
                     ~df_dia["Telefone"].astype(str).isin(st.session_state["pulados"])
@@ -1645,7 +1627,7 @@ def render_aba1(aba, df_dia, metas):
                     renderizar_cards_modo(
                         df_checkin,
                         "checkin",
-                        False,  # usar_card_suporte
+                        False,
                         usuario_atual,
                         "Experiência"
                     )
