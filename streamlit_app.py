@@ -912,7 +912,7 @@ def render_historico():
             if not df_total.empty:
                 # Buscar por telefone (exato ou contém)
                 if 'Telefone' in df_total.columns:
-                    mask_telefone = df_total['Telefone'].astype(str).str.contains(termo_limpo, case=False, na=False)
+                    mask_telefone = df_total['Telefone'].astype(str).str.contains(termo_limpo, case=False, na=False, regex=False)
                     resultado_telefone = df_total[mask_telefone]
                     
                     if not resultado_telefone.empty:
@@ -920,7 +920,7 @@ def render_historico():
                 
                 # Se não encontrou por telefone, buscar por nome
                 if cliente_encontrado is None and 'Nome' in df_total.columns:
-                    mask_nome = df_total['Nome'].astype(str).str.contains(termo_limpo, case=False, na=False)
+                    mask_nome = df_total['Nome'].astype(str).str.contains(termo_limpo, case=False, na=False, regex=False)
                     resultado_nome = df_total[mask_nome]
                     
                     if not resultado_nome.empty:
@@ -1210,7 +1210,6 @@ def render_historico():
     
     elif btn_buscar and not termo_busca:
         st.warning("⚠️ Digite um telefone ou nome para buscar")
-
 # ============================================================================
 # SIDEBAR E NAVEGAÇÃO
 # ============================================================================
