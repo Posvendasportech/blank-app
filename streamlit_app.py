@@ -481,7 +481,7 @@ def load_agendamentos_hoje():
     try:
         client = get_gsheet_client()
         sh = client.open(Config.SHEET_AGENDAMENTOS)
-        ws = sh.worksheet("AGENDAMENTOS ATIVOS")
+        ws = sh.worksheet("AGENDAMENTOS_ATIVOS")
         
         data = ws.get_all_values()
         
@@ -581,7 +581,7 @@ def load_casos_suporte():
     try:
         client = get_gsheet_client()
         sh = client.open(Config.SHEET_AGENDAMENTOS)
-        ws = sh.worksheet("AGENDAMENTOS ATIVOS")
+        ws = sh.worksheet("AGENDAMENTOS_ATIVOS")
         
         data = ws.get_all_values()
         
