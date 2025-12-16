@@ -879,6 +879,10 @@ def render_historico():
     st.markdown("Busque clientes e visualize todo o histórico de atendimentos")
     st.markdown("---")
     
+    # Inicializar session_state
+    if 'cliente_encontrado' not in st.session_state:
+        st.session_state.cliente_encontrado = None
+    
     # ========== BARRA DE BUSCA ==========
     st.subheader("🔍 Buscar Cliente")
     
@@ -904,18 +908,15 @@ def render_historico():
         with st.spinner("🔎 Buscando em todas as bases..."):
             # Carregar todas as abas necessárias
             df_total = carregar_dados("Total")
-            df_historico = carregar_dados("HISTORICO")
-            df_agendamentos = carregar_dados("AGENDAMENTOS_ATIVOS")
-            df_suporte = carregar_dados("SUPORTE")
             
-            # Limpar termo de busca (remover caracteres especiais para telefone)
+            # Limpar termo de busca
             termo_limpo = termo_busca.strip()
             
             # Buscar na aba Total (dados cadastrais)
             cliente_encontrado = None
             
             if not df_total.empty:
-                # Buscar por telefone (exato ou contém)
+                # Buscar por telefone
                 if 'Telefone' in df_total.columns:
                     mask_telefone = df_total['Telefone'].astype(str).str.contains(termo_limpo, case=False, na=False, regex=False)
                     resultado_telefone = df_total[mask_telefone]
@@ -930,300 +931,311 @@ def render_historico():
                     
                     if not resultado_nome.empty:
                         cliente_encontrado = resultado_nome.iloc[0]
-        
-        # ========== RESULTADO DA BUSCA ==========
-        if cliente_encontrado is not None:
             
-            st.success(f"✅ Cliente encontrado: **{cliente_encontrado.get('Nome', 'N/D')}**")
-            st.markdown("---")
-            
-            # Pegar telefone para buscar histórico
-            telefone_cliente = cliente_encontrado.get('Telefone', '')
-            nome_cliente = cliente_encontrado.get('Nome', 'N/D')
-            
-            # ========== DADOS CADASTRAIS ==========
-            st.subheader("📊 Dados Cadastrais")
-            
-            col_info1, col_info2, col_info3 = st.columns(3)
-            
-            with col_info1:
-                st.write(f"**👤 Nome:** {nome_cliente}")
-                st.write(f"**📱 Telefone:** {telefone_cliente}")
-                st.write(f"**📧 E-mail:** {cliente_encontrado.get('Email', 'N/D')}")
-            
-            with col_info2:
-                st.write(f"**🏷️ Classificação:** {cliente_encontrado.get('Classificação ', 'N/D')}")
-                
-                valor = cliente_encontrado.get('Valor', 0)
-                if pd.notna(valor) and valor != '':
-                    try:
-                        st.write(f"**💰 Valor Total:** R$ {float(valor):,.2f}")
-                    except:
-                        st.write(f"**💰 Valor Total:** {valor}")
-                else:
-                    st.write("**💰 Valor Total:** R$ 0,00")
-                
-                compras = cliente_encontrado.get('Compras', 0)
-                if pd.notna(compras) and compras != '':
-                    try:
-                        st.write(f"**🛒 Total de Compras:** {int(float(compras))}")
-                    except:
-                        st.write(f"**🛒 Total de Compras:** {compras}")
-                else:
-                    st.write("**🛒 Total de Compras:** 0")
-            
-            with col_info3:
-                dias = cliente_encontrado.get('Dias desde a compra', 0)
-                if pd.notna(dias) and dias != '':
-                    try:
-                        st.write(f"**📅 Dias desde última compra:** {int(round(float(dias)))}")
-                    except:
-                        st.write(f"**📅 Dias desde última compra:** {dias}")
-                else:
-                    st.write("**📅 Dias desde última compra:** N/D")
-            
-            st.markdown("---")
-            
-            # ========== BUSCAR HISTÓRICO POR TELEFONE ==========
-                        # ========== BUSCAR HISTÓRICO POR TELEFONE ==========
-            historico_cliente = []
-            agendamentos_ativos = []
-            tickets_suporte = []
-            
-            # Limpar telefone do cliente para comparação
-            telefone_limpo = limpar_telefone(telefone_cliente)
-            
-            # Histórico de atendimentos finalizados
-            if not df_historico.empty and 'Telefone' in df_historico.columns:
-                # Criar coluna temporária com telefone limpo
-                df_historico['Telefone_Limpo'] = df_historico['Telefone'].apply(limpar_telefone)
-                historico_cliente = df_historico[
-                    df_historico['Telefone_Limpo'].str.contains(telefone_limpo, case=False, na=False, regex=False)
-                ].to_dict('records')
-            
-            # Agendamentos ativos
-            if not df_agendamentos.empty and 'Telefone' in df_agendamentos.columns:
-                df_agendamentos['Telefone_Limpo'] = df_agendamentos['Telefone'].apply(limpar_telefone)
-                agendamentos_ativos = df_agendamentos[
-                    df_agendamentos['Telefone_Limpo'].str.contains(telefone_limpo, case=False, na=False, regex=False)
-                ].to_dict('records')
-            
-            # Tickets de suporte
-            if not df_suporte.empty and 'Telefone' in df_suporte.columns:
-                df_suporte['Telefone_Limpo'] = df_suporte['Telefone'].apply(limpar_telefone)
-                tickets_suporte = df_suporte[
-                    df_suporte['Telefone_Limpo'].str.contains(telefone_limpo, case=False, na=False, regex=False)
-                ].to_dict('records')
-
-            
-            # ========== MÉTRICAS DE HISTÓRICO ==========
-            st.subheader("📈 Resumo de Atendimentos")
-            
-            col_m1, col_m2, col_m3 = st.columns(3)
-            
-            with col_m1:
-                st.metric("📜 Histórico", len(historico_cliente), help="Atendimentos finalizados")
-            
-            with col_m2:
-                st.metric("📞 Agendamentos Ativos", len(agendamentos_ativos), help="Atendimentos em andamento")
-            
-            with col_m3:
-                st.metric("🆘 Tickets de Suporte", len(tickets_suporte), help="Chamados de suporte")
-            
-            st.markdown("---")
-            
-            # ========== EXIBIR HISTÓRICO ==========
-            if historico_cliente:
-                st.subheader(f"📜 Histórico de Atendimentos ({len(historico_cliente)})")
-                
-                for i, hist in enumerate(historico_cliente):
-                    with st.expander(f"📅 {hist.get('Data de contato', 'N/D')} - {hist.get('Follow up', 'Atendimento')}"):
-                        col_h1, col_h2 = st.columns(2)
-                        
-                        with col_h1:
-                            st.write(f"**📅 Data:** {hist.get('Data de contato', 'N/D')}")
-                            st.write(f"**🏷️ Classificação:** {hist.get('Classificação', 'N/D')}")
-                            st.write(f"**🎯 Follow-up:** {hist.get('Follow up', 'N/D')}")
-                        
-                        with col_h2:
-                            st.write(f"**📅 Data da chamada:** {hist.get('Data de chamada', 'N/D')}")
-                            st.write(f"**✅ Finalizado em:** {hist.get('Data de conclusão', 'N/D')}")
-                        
-                        st.markdown("---")
-                        st.write(f"**📝 Relato:**")
-                        st.info(hist.get('Relato da conversa', 'Sem relato'))
-                        
-                        if hist.get('Observação'):
-                            st.write(f"**💬 Observação:** {hist.get('Observação')}")
-                
-                st.markdown("---")
+            # Salvar no session_state
+            if cliente_encontrado is not None:
+                st.session_state.cliente_encontrado = cliente_encontrado.to_dict()
             else:
-                st.info("📜 Nenhum histórico de atendimento encontrado para este cliente")
-                st.markdown("---")
-            
-            # ========== AGENDAMENTOS ATIVOS ==========
-            if agendamentos_ativos:
-                st.subheader(f"📞 Agendamentos Ativos ({len(agendamentos_ativos)})")
-                
-                for agend in agendamentos_ativos:
-                    with st.expander(f"📅 {agend.get('Data de chamada', 'N/D')} - {agend.get('Follow up', 'Atendimento')}"):
-                        st.write(f"**📅 Agendado para:** {agend.get('Data de chamada', 'N/D')}")
-                        st.write(f"**🎯 Motivo:** {agend.get('Follow up', 'N/D')}")
-                        st.write(f"**📝 Último contato:** {agend.get('Data de contato', 'N/D')}")
-                        
-                        if agend.get('Relato da conversa'):
-                            st.info(f"**Relato:** {agend.get('Relato da conversa')}")
-                
-                st.markdown("---")
-            
-            # ========== TICKETS DE SUPORTE ==========
-            if tickets_suporte:
-                st.subheader(f"🆘 Tickets de Suporte ({len(tickets_suporte)})")
-                
-                for ticket in tickets_suporte:
-                    with st.expander(f"🎫 {ticket.get('Data de abertura', 'N/D')} - {ticket.get('Assunto', 'Suporte')}"):
-                        st.write(f"**📅 Aberto em:** {ticket.get('Data de abertura', 'N/D')}")
-                        st.write(f"**🏷️ Status:** {ticket.get('Status', 'N/D')}")
-                        st.write(f"**📝 Problema:** {ticket.get('Descrição', 'N/D')}")
-                
-                st.markdown("---")
-            
-            # ========== CRIAR NOVO ATENDIMENTO ==========
-            st.subheader("➕ Criar Novo Atendimento")
-            
-            col_acao1, col_acao2 = st.columns(2)
-            
-            with col_acao1:
-                with st.expander("📞 Criar Agendamento (Vendas/Pós-vendas)", expanded=False):
-                    st.info("💡 Use para vendas, follow-ups comerciais ou satisfação do cliente")
-                    
-                    with st.form(key=f"form_novo_agendamento_{telefone_cliente}"):
-                        
-                        motivo_agend = st.text_input(
-                            "🎯 Motivo do contato:",
-                            placeholder="Ex: Oferta de novo produto, Follow-up de satisfação..."
-                        )
-                        
-                        data_agend = st.date_input(
-                            "📅 Data do agendamento:",
-                            value=None
-                        )
-                        
-                        obs_agend = st.text_area(
-                            "💬 Observações:",
-                            height=100,
-                            placeholder="Informações relevantes sobre este agendamento..."
-                        )
-                        
-                        btn_criar_agend = st.form_submit_button(
-                            "✅ Criar Agendamento",
-                            type="primary",
-                            use_container_width=True
-                        )
-                        
-                        if btn_criar_agend:
-                            if not motivo_agend:
-                                st.error("❌ Defina o motivo do contato!")
-                            elif not data_agend:
-                                st.error("❌ Selecione a data do agendamento!")
-                            else:
-                                with st.spinner("Criando agendamento..."):
-                                    try:
-                                        conn = st.connection("gsheets", type=GSheetsConnection)
-                                        df_agend_atual = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
-                                        
-                                        novo_agend = {
-                                            'Data de contato': datetime.now().strftime('%d/%m/%Y'),
-                                            'Nome': nome_cliente,
-                                            'Classificação': cliente_encontrado.get('Classificação ', 'N/D'),
-                                            'Valor': cliente_encontrado.get('Valor', ''),
-                                            'Telefone': telefone_cliente,
-                                            'Relato da conversa': '',
-                                            'Follow up': motivo_agend,
-                                            'Data de chamada': data_agend.strftime('%d/%m/%Y'),
-                                            'Observação': obs_agend if obs_agend else 'Agendamento criado via Histórico'
-                                        }
-                                        
-                                        df_novo = pd.concat([df_agend_atual, pd.DataFrame([novo_agend])], ignore_index=True)
-                                        conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_novo)
-                                        
-                                        st.cache_data.clear()
-                                        st.success(f"✅ Agendamento criado para {data_agend.strftime('%d/%m/%Y')}!")
-                                        time.sleep(1)
-                                        st.rerun()
-                                        
-                                    except Exception as e:
-                                        st.error(f"❌ Erro: {e}")
-            
-            with col_acao2:
-                with st.expander("🆘 Abrir Ticket de Suporte", expanded=False):
-                    st.warning("⚠️ Use para problemas técnicos, reclamações ou suporte")
-                    
-                    with st.form(key=f"form_novo_suporte_{telefone_cliente}"):
-                        
-                        assunto_suporte = st.text_input(
-                            "📌 Assunto:",
-                            placeholder="Ex: Produto com defeito, Problema na entrega..."
-                        )
-                        
-                        prioridade = st.selectbox(
-                            "🚨 Prioridade:",
-                            ["Baixa", "Média", "Alta", "Urgente"]
-                        )
-                        
-                        descricao_suporte = st.text_area(
-                            "📝 Descrição do problema:",
-                            height=100,
-                            placeholder="Descreva detalhadamente o problema..."
-                        )
-                        
-                        btn_criar_suporte = st.form_submit_button(
-                            "🆘 Abrir Ticket",
-                            type="secondary",
-                            use_container_width=True
-                        )
-                        
-                        if btn_criar_suporte:
-                            if not assunto_suporte:
-                                st.error("❌ Informe o assunto do ticket!")
-                            elif not descricao_suporte:
-                                st.error("❌ Descreva o problema!")
-                            else:
-                                with st.spinner("Abrindo ticket de suporte..."):
-                                    try:
-                                        conn = st.connection("gsheets", type=GSheetsConnection)
-                                        df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
-                                        
-                                        novo_ticket = {
-                                            'Data de abertura': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                                            'Nome': nome_cliente,
-                                            'Telefone': telefone_cliente,
-                                            'Assunto': assunto_suporte,
-                                            'Prioridade': prioridade,
-                                            'Status': 'Aberto',
-                                            'Descrição': descricao_suporte,
-                                            'Data de atualização': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                                            'Solução': '',
-                                            'Data de resolução': ''
-                                        }
-                                        
-                                        df_novo = pd.concat([df_suporte_atual, pd.DataFrame([novo_ticket])], ignore_index=True)
-                                        conn.update(worksheet="SUPORTE", data=df_novo)
-                                        
-                                        st.cache_data.clear()
-                                        st.success(f"✅ Ticket de suporte aberto com sucesso!")
-                                        time.sleep(1)
-                                        st.rerun()
-                                        
-                                    except Exception as e:
-                                        st.error(f"❌ Erro: {e}")
+                st.session_state.cliente_encontrado = None
+    
+    # ========== EXIBIR RESULTADO ==========
+    if st.session_state.cliente_encontrado is not None:
         
+        cliente = st.session_state.cliente_encontrado
+        nome_cliente = cliente.get('Nome', 'N/D')
+        telefone_cliente = cliente.get('Telefone', '')
+        
+        st.success(f"✅ Cliente encontrado: **{nome_cliente}**")
+        
+        # Botão para limpar busca
+        if st.button("🔄 Nova Busca"):
+            st.session_state.cliente_encontrado = None
+            st.rerun()
+        
+        st.markdown("---")
+        
+        # ========== DADOS CADASTRAIS ==========
+        st.subheader("📊 Dados Cadastrais")
+        
+        col_info1, col_info2, col_info3 = st.columns(3)
+        
+        with col_info1:
+            st.write(f"**👤 Nome:** {nome_cliente}")
+            st.write(f"**📱 Telefone:** {telefone_cliente}")
+            st.write(f"**📧 E-mail:** {cliente.get('Email', 'N/D')}")
+        
+        with col_info2:
+            st.write(f"**🏷️ Classificação:** {cliente.get('Classificação ', 'N/D')}")
+            
+            valor = cliente.get('Valor', 0)
+            if pd.notna(valor) and valor != '':
+                try:
+                    st.write(f"**💰 Valor Total:** R$ {float(valor):,.2f}")
+                except:
+                    st.write(f"**💰 Valor Total:** {valor}")
+            else:
+                st.write("**💰 Valor Total:** R$ 0,00")
+            
+            compras = cliente.get('Compras', 0)
+            if pd.notna(compras) and compras != '':
+                try:
+                    st.write(f"**🛒 Total de Compras:** {int(float(compras))}")
+                except:
+                    st.write(f"**🛒 Total de Compras:** {compras}")
+            else:
+                st.write("**🛒 Total de Compras:** 0")
+        
+        with col_info3:
+            dias = cliente.get('Dias desde a compra', 0)
+            if pd.notna(dias) and dias != '':
+                try:
+                    st.write(f"**📅 Dias desde última compra:** {int(round(float(dias)))}")
+                except:
+                    st.write(f"**📅 Dias desde última compra:** {dias}")
+            else:
+                st.write("**📅 Dias desde última compra:** N/D")
+        
+        st.markdown("---")
+        
+        # ========== BUSCAR HISTÓRICO POR TELEFONE ==========
+        df_historico = carregar_dados("HISTORICO")
+        df_agendamentos = carregar_dados("AGENDAMENTOS_ATIVOS")
+        df_suporte = carregar_dados("SUPORTE")
+        
+        historico_cliente = []
+        agendamentos_ativos = []
+        tickets_suporte = []
+        
+        # Limpar telefone do cliente para comparação
+        telefone_limpo = limpar_telefone(telefone_cliente)
+        
+        # Histórico de atendimentos finalizados
+        if not df_historico.empty and 'Telefone' in df_historico.columns:
+            df_historico['Telefone_Limpo'] = df_historico['Telefone'].apply(limpar_telefone)
+            historico_cliente = df_historico[
+                df_historico['Telefone_Limpo'].str.contains(telefone_limpo, case=False, na=False, regex=False)
+            ].to_dict('records')
+        
+        # Agendamentos ativos
+        if not df_agendamentos.empty and 'Telefone' in df_agendamentos.columns:
+            df_agendamentos['Telefone_Limpo'] = df_agendamentos['Telefone'].apply(limpar_telefone)
+            agendamentos_ativos = df_agendamentos[
+                df_agendamentos['Telefone_Limpo'].str.contains(telefone_limpo, case=False, na=False, regex=False)
+            ].to_dict('records')
+        
+        # Tickets de suporte
+        if not df_suporte.empty and 'Telefone' in df_suporte.columns:
+            df_suporte['Telefone_Limpo'] = df_suporte['Telefone'].apply(limpar_telefone)
+            tickets_suporte = df_suporte[
+                df_suporte['Telefone_Limpo'].str.contains(telefone_limpo, case=False, na=False, regex=False)
+            ].to_dict('records')
+        
+        # ========== MÉTRICAS DE HISTÓRICO ==========
+        st.subheader("📈 Resumo de Atendimentos")
+        
+        col_m1, col_m2, col_m3 = st.columns(3)
+        
+        with col_m1:
+            st.metric("📜 Histórico", len(historico_cliente), help="Atendimentos finalizados")
+        
+        with col_m2:
+            st.metric("📞 Agendamentos Ativos", len(agendamentos_ativos), help="Atendimentos em andamento")
+        
+        with col_m3:
+            st.metric("🆘 Tickets de Suporte", len(tickets_suporte), help="Chamados de suporte")
+        
+        st.markdown("---")
+        
+        # ========== EXIBIR HISTÓRICO ==========
+        if historico_cliente:
+            st.subheader(f"📜 Histórico de Atendimentos ({len(historico_cliente)})")
+            
+            for i, hist in enumerate(historico_cliente):
+                with st.expander(f"📅 {hist.get('Data de contato', 'N/D')} - {hist.get('Follow up', 'Atendimento')}"):
+                    col_h1, col_h2 = st.columns(2)
+                    
+                    with col_h1:
+                        st.write(f"**📅 Data:** {hist.get('Data de contato', 'N/D')}")
+                        st.write(f"**🏷️ Classificação:** {hist.get('Classificação', 'N/D')}")
+                        st.write(f"**🎯 Follow-up:** {hist.get('Follow up', 'N/D')}")
+                    
+                    with col_h2:
+                        st.write(f"**📅 Data da chamada:** {hist.get('Data de chamada', 'N/D')}")
+                        st.write(f"**✅ Finalizado em:** {hist.get('Data de conclusão', 'N/D')}")
+                    
+                    st.markdown("---")
+                    st.write(f"**📝 Relato:**")
+                    st.info(hist.get('Relato da conversa', 'Sem relato'))
+                    
+                    if hist.get('Observação'):
+                        st.write(f"**💬 Observação:** {hist.get('Observação')}")
+            
+            st.markdown("---")
         else:
-            st.error("❌ Nenhum cliente encontrado com esse telefone ou nome")
-            st.info("💡 **Dica:** Verifique se digitou corretamente ou tente buscar apenas parte do nome/telefone")
+            st.info("📜 Nenhum histórico de atendimento encontrado para este cliente")
+            st.markdown("---")
+        
+        # ========== AGENDAMENTOS ATIVOS ==========
+        if agendamentos_ativos:
+            st.subheader(f"📞 Agendamentos Ativos ({len(agendamentos_ativos)})")
+            
+            for agend in agendamentos_ativos:
+                with st.expander(f"📅 {agend.get('Data de chamada', 'N/D')} - {agend.get('Follow up', 'Atendimento')}"):
+                    st.write(f"**📅 Agendado para:** {agend.get('Data de chamada', 'N/D')}")
+                    st.write(f"**🎯 Motivo:** {agend.get('Follow up', 'N/D')}")
+                    st.write(f"**📝 Último contato:** {agend.get('Data de contato', 'N/D')}")
+                    
+                    if agend.get('Relato da conversa'):
+                        st.info(f"**Relato:** {agend.get('Relato da conversa')}")
+            
+            st.markdown("---")
+        
+        # ========== TICKETS DE SUPORTE ==========
+        if tickets_suporte:
+            st.subheader(f"🆘 Tickets de Suporte ({len(tickets_suporte)})")
+            
+            for ticket in tickets_suporte:
+                with st.expander(f"🎫 {ticket.get('Data de abertura', 'N/D')} - {ticket.get('Assunto', 'Suporte')}"):
+                    st.write(f"**📅 Aberto em:** {ticket.get('Data de abertura', 'N/D')}")
+                    st.write(f"**🏷️ Status:** {ticket.get('Status', 'N/D')}")
+                    st.write(f"**📝 Problema:** {ticket.get('Descrição', 'N/D')}")
+            
+            st.markdown("---")
+        
+        # ========== CRIAR NOVO ATENDIMENTO ==========
+        st.subheader("➕ Criar Novo Atendimento")
+        
+        col_acao1, col_acao2 = st.columns(2)
+        
+        with col_acao1:
+            st.markdown("### 📞 Criar Agendamento")
+            st.info("💡 Use para vendas, follow-ups comerciais ou satisfação")
+            
+            with st.form(key="form_novo_agendamento"):
+                
+                motivo_agend = st.text_input(
+                    "🎯 Motivo do contato:",
+                    placeholder="Ex: Oferta de novo produto..."
+                )
+                
+                data_agend = st.date_input(
+                    "📅 Data do agendamento:",
+                    value=None
+                )
+                
+                obs_agend = st.text_area(
+                    "💬 Observações:",
+                    height=100,
+                    placeholder="Informações relevantes..."
+                )
+                
+                btn_criar_agend = st.form_submit_button(
+                    "✅ Criar Agendamento",
+                    type="primary",
+                    use_container_width=True
+                )
+                
+                if btn_criar_agend:
+                    if not motivo_agend:
+                        st.error("❌ Defina o motivo do contato!")
+                    elif not data_agend:
+                        st.error("❌ Selecione a data do agendamento!")
+                    else:
+                        try:
+                            conn = st.connection("gsheets", type=GSheetsConnection)
+                            df_agend_atual = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
+                            
+                            novo_agend = {
+                                'Data de contato': datetime.now().strftime('%d/%m/%Y'),
+                                'Nome': nome_cliente,
+                                'Classificação': cliente.get('Classificação ', 'N/D'),
+                                'Valor': cliente.get('Valor', ''),
+                                'Telefone': telefone_cliente,
+                                'Relato da conversa': '',
+                                'Follow up': motivo_agend,
+                                'Data de chamada': data_agend.strftime('%d/%m/%Y'),
+                                'Observação': obs_agend if obs_agend else 'Agendamento criado via Histórico'
+                            }
+                            
+                            df_novo = pd.concat([df_agend_atual, pd.DataFrame([novo_agend])], ignore_index=True)
+                            conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_novo)
+                            
+                            st.cache_data.clear()
+                            st.success(f"✅ Agendamento criado!")
+                            time.sleep(1)
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"❌ Erro: {str(e)}")
+        
+        with col_acao2:
+            st.markdown("### 🆘 Abrir Ticket de Suporte")
+            st.warning("⚠️ Use para problemas técnicos ou reclamações")
+            
+            with st.form(key="form_novo_suporte"):
+                
+                assunto_suporte = st.text_input(
+                    "📌 Assunto:",
+                    placeholder="Ex: Produto com defeito..."
+                )
+                
+                prioridade = st.selectbox(
+                    "🚨 Prioridade:",
+                    ["Baixa", "Média", "Alta", "Urgente"]
+                )
+                
+                descricao_suporte = st.text_area(
+                    "📝 Descrição do problema:",
+                    height=100,
+                    placeholder="Descreva o problema..."
+                )
+                
+                btn_criar_suporte = st.form_submit_button(
+                    "🆘 Abrir Ticket",
+                    type="secondary",
+                    use_container_width=True
+                )
+                
+                if btn_criar_suporte:
+                    if not assunto_suporte:
+                        st.error("❌ Informe o assunto!")
+                    elif not descricao_suporte:
+                        st.error("❌ Descreva o problema!")
+                    else:
+                        try:
+                            conn = st.connection("gsheets", type=GSheetsConnection)
+                            df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
+                            
+                            novo_ticket = {
+                                'Data de abertura': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                                'Nome': nome_cliente,
+                                'Telefone': telefone_cliente,
+                                'Assunto': assunto_suporte,
+                                'Prioridade': prioridade,
+                                'Status': 'Aberto',
+                                'Descrição': descricao_suporte,
+                                'Data de atualização': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                                'Solução': '',
+                                'Data de resolução': ''
+                            }
+                            
+                            df_novo = pd.concat([df_suporte_atual, pd.DataFrame([novo_ticket])], ignore_index=True)
+                            conn.update(worksheet="SUPORTE", data=df_novo)
+                            
+                            st.cache_data.clear()
+                            st.success(f"✅ Ticket aberto!")
+                            time.sleep(1)
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"❌ Erro: {str(e)}")
     
     elif btn_buscar and not termo_busca:
         st.warning("⚠️ Digite um telefone ou nome para buscar")
+    
+    elif st.session_state.cliente_encontrado is None and not btn_buscar:
+        st.info("👆 Digite o telefone ou nome do cliente acima e clique em Buscar")
+
 
 # ============================================================================
 # SIDEBAR E NAVEGAÇÃO
