@@ -191,8 +191,7 @@ if pagina == "✅ Check-in":
                     st.caption(f"📧 {email}")
                     st.caption(f"📱 {telefone}")
                 
-                                # --- COLUNA 2: MÉTRICAS ---
-                                # --- COLUNA 2: MÉTRICAS ---
+                              # --- COLUNA 2: MÉTRICAS ---
                 with col_metricas:
                     met1, met2, met3 = st.columns(3)
                     
