@@ -677,8 +677,7 @@ if 'Data de chamada' in df_agendamentos.columns:
         # Verificar se está vencido
         esta_vencido = False
         data_chamada_str = agend.get('Data de chamada', '')
-
-
+        
         if data_chamada_str and data_chamada_str != '':
             try:
                 # Tentar múltiplos formatos de data
@@ -709,16 +708,12 @@ if 'Data de chamada' in df_agendamentos.columns:
                     esta_vencido = True
             except:
                 pass
-
-                if data_chamada_dt < hoje_dt:
-                    esta_vencido = True
-            except:
-                pass
         
         # Badge de status
         nome_cliente = agend.get('Nome', 'N/D')
         classificacao = agend.get('Classificação', 'N/D')
         status_badge = "🔥 VENCIDO" if esta_vencido else "📅 HOJE"
+
         
         # Título do expander com status visual
         titulo_card = f"{status_badge} | 👤 {nome_cliente} | 🏷️ {classificacao}"
