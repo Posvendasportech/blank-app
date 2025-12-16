@@ -472,11 +472,11 @@ def load_historico():
         return pd.DataFrame()
 
 # Cache de 10 segundos (muda frequentemente)
-@st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)
+@st.cache_data(ttl=Config.CACHE_VOLATIL_TTL)
 def load_agendamentos_hoje():
     """
-    Carrega agendamentos de HOJE (Experiência + Venda + vazios)
-    EXCLUI casos de Suporte
+    Carrega agendamentos de HOJE (Experiência + Venda + VAZIOS)
+    EXCLUI apenas casos de Suporte
     """
     try:
         client = get_gsheet_client()
@@ -495,37 +495,36 @@ def load_agendamentos_hoje():
         
         logger.info(f"📋 Total de registros na base: {len(df)}")
         
-         # ==========================================
-        # FILTRAR POR TIPO: Experiência, Venda e vazios (EXCLUI Suporte)
+        # ==========================================
+        # FILTRAR: TUDO exceto "Suporte"
         # ==========================================
         if "Tipo de atendimento" in df.columns:
-            # Criar coluna normalizada
-            df["_tipo_lower"] = df["Tipo de atendimento"].str.lower().str.strip()
+            # Normalizar valores (minúsculas e sem espaços)
+            df["_tipo_lower"] = df["Tipo de atendimento"].astype(str).str.lower().str.strip()
             
-            # FILTRAR: tudo que NÃO é "suporte"
-            df_filtrado = df[
-                (df["_tipo_lower"] != "suporte") &  # Excluir suporte
-                (df["_tipo_lower"].notna())          # Excluir nulos
-            ].copy()
+            # INCLUIR: Experiência, Venda, vazios e qualquer outro valor
+            # EXCLUIR: apenas "suporte"
+            df_filtrado = df[df["_tipo_lower"] != "suporte"].copy()
             
             # Remover coluna auxiliar
             df_filtrado = df_filtrado.drop(columns=["_tipo_lower"])
             
             logger.info(f"✅ Agendamentos (sem Suporte): {len(df_filtrado)} registros")
-            logger.info(f"   Tipos encontrados: {df['Tipo de atendimento'].unique().tolist()}")
+            
+            # Debug: mostrar distribuição
+            tipos_incluidos = df[df["_tipo_lower"] != "suporte"]["Tipo de atendimento"].value_counts()
+            logger.info(f"   Tipos incluídos: {tipos_incluidos.to_dict()}")
             
             df = df_filtrado
         else:
             logger.error("❌ Coluna 'Tipo de atendimento' NÃO existe!")
-            logger.info(f"   Colunas disponíveis: {df.columns.tolist()}")
             return pd.DataFrame()
         
-        # ✅ CONVERTER DATA usando "Data de chamada"
         # ==========================================
         # FILTRAR POR DATA DE HOJE
         # ==========================================
         if "Data de chamada" in df.columns:
-            # Converter data
+            # Converter data (tentar formato YYYY-MM-DD primeiro)
             df["data_convertida"] = pd.to_datetime(
                 df["Data de chamada"], 
                 format="%Y-%m-%d", 
@@ -547,12 +546,11 @@ def load_agendamentos_hoje():
             if not df_hoje.empty:
                 df_hoje["Telefone_limpo"] = df_hoje["Telefone"].apply(limpar_telefone)
                 logger.info(f"📅 Agendamentos para HOJE ({hoje}): {len(df_hoje)}")
-                logger.info(f"   Exemplos: {df_hoje[['Nome', 'Telefone', 'Tipo de atendimento']].head(3).to_dict('records')}")
             else:
                 datas_unicas = df["data_convertida"].dropna().dt.date.unique()
                 logger.warning(f"⚠️ Nenhum agendamento para hoje ({hoje})")
                 if len(datas_unicas) > 0:
-                    logger.warning(f"   Datas na base: {sorted(datas_unicas)[:5]}")
+                    logger.warning(f"   Datas disponíveis: {sorted(datas_unicas)[:5]}")
             
             return df_hoje
         else:
@@ -562,12 +560,14 @@ def load_agendamentos_hoje():
     except Exception as e:
         logger.error(f"Erro ao carregar agendamentos: {e}", exc_info=True)
         return pd.DataFrame()
-        
-@st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)
+
+
+@st.cache_data(ttl=Config.CACHE_VOLATIL_TTL)
 def load_casos_suporte():
     """
-    Carrega APENAS casos de Suporte da planilha Agendamentos Ativos
-    Filtra pela coluna J: "Tipo de atendimento" == "Suporte"
+    Carrega APENAS casos de Suporte
+    Filtra pela coluna "Tipo de atendimento" == "Suporte"
+    NÃO filtra por data (mostra todos os casos pendentes)
     """
     try:
         client = get_gsheet_client()
@@ -585,11 +585,13 @@ def load_casos_suporte():
         df = pd.DataFrame(rows, columns=headers)
         
         logger.info(f"📋 Total de registros: {len(df)}")
-
-        # ✅ FILTRAR APENAS "Suporte"
+        
+        # ==========================================
+        # FILTRAR: apenas "Suporte"
+        # ==========================================
         if "Tipo de atendimento" in df.columns:
-            # Criar coluna normalizada
-            df["_tipo_lower"] = df["Tipo de atendimento"].str.lower().str.strip()
+            # Normalizar valores
+            df["_tipo_lower"] = df["Tipo de atendimento"].astype(str).str.lower().str.strip()
             
             # FILTRAR: apenas "suporte"
             df_suporte = df[df["_tipo_lower"] == "suporte"].copy()
@@ -597,19 +599,18 @@ def load_casos_suporte():
             # Remover coluna auxiliar
             df_suporte = df_suporte.drop(columns=["_tipo_lower"])
             
-            logger.info(f"🛠️ Casos de SUPORTE: {len(df_suporte)}")
+            logger.info(f"🛠️ Casos de SUPORTE encontrados: {len(df_suporte)}")
             
             if not df_suporte.empty:
                 df_suporte["Telefone_limpo"] = df_suporte["Telefone"].apply(limpar_telefone)
-                logger.info(f"   Exemplos: {df_suporte[['Nome', 'Telefone', 'Follow up']].head(3).to_dict('records')}")
+                logger.info(f"   Clientes: {df_suporte['Nome'].tolist()}")
             else:
                 valores = df["Tipo de atendimento"].unique()
-                logger.warning(f"⚠️ Nenhum caso de suporte. Tipos na base: {valores}")
+                logger.warning(f"⚠️ Nenhum caso de suporte. Tipos disponíveis: {valores}")
             
             return df_suporte
         else:
             logger.error("❌ Coluna 'Tipo de atendimento' NÃO existe!")
-            logger.info(f"   Colunas disponíveis: {df.columns.tolist()}")
             return pd.DataFrame()
             
     except Exception as e:
