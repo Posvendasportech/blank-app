@@ -912,7 +912,7 @@ def render_historico():
             if not df_total.empty:
                 # Buscar por telefone (exato ou contém)
                 if 'Telefone' in df_total.columns:
-                    mask_telefone = df_total['Telefone'].astype(str).str.contains(termo_limpo, case=False, na=False)
+                    mask_telefone = df_total['Telefone'].astype(str).str.contains(termo_limpo, case=False, na=False, regex=False)
                     resultado_telefone = df_total[mask_telefone]
                     
                     if not resultado_telefone.empty:
@@ -920,7 +920,7 @@ def render_historico():
                 
                 # Se não encontrou por telefone, buscar por nome
                 if cliente_encontrado is None and 'Nome' in df_total.columns:
-                    mask_nome = df_total['Nome'].astype(str).str.contains(termo_limpo, case=False, na=False)
+                    mask_nome = df_total['Nome'].astype(str).str.contains(termo_limpo, case=False, na=False, regex=False)
                     resultado_nome = df_total[mask_nome]
                     
                     if not resultado_nome.empty:
@@ -987,19 +987,19 @@ def render_historico():
             # Histórico de atendimentos finalizados
             if not df_historico.empty and 'Telefone' in df_historico.columns:
                 historico_cliente = df_historico[
-                    df_historico['Telefone'].astype(str).str.contains(str(telefone_cliente), case=False, na=False)
+                    df_historico['Telefone'].astype(str).str.contains(str(telefone_cliente), case=False, na=False, regex=False)
                 ].to_dict('records')
             
             # Agendamentos ativos
             if not df_agendamentos.empty and 'Telefone' in df_agendamentos.columns:
                 agendamentos_ativos = df_agendamentos[
-                    df_agendamentos['Telefone'].astype(str).str.contains(str(telefone_cliente), case=False, na=False)
+                    df_agendamentos['Telefone'].astype(str).str.contains(str(telefone_cliente), case=False, na=False, regex=False)
                 ].to_dict('records')
             
             # Tickets de suporte
             if not df_suporte.empty and 'Telefone' in df_suporte.columns:
                 tickets_suporte = df_suporte[
-                    df_suporte['Telefone'].astype(str).str.contains(str(telefone_cliente), case=False, na=False)
+                    df_suporte['Telefone'].astype(str).str.contains(str(telefone_cliente), case=False, na=False, regex=False)
                 ].to_dict('records')
             
             # ========== MÉTRICAS DE HISTÓRICO ==========
