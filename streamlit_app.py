@@ -498,7 +498,7 @@ def render_em_atendimento():
     """Renderiza a página de Em Atendimento - Versão Otimizada"""
     
     st.title("📞 Em Atendimento")
-    st.markdown("Gerencie seus atendimentos ativos e finalize conversas")
+    st.markdown("Gerencie os atendimentos agendados para hoje")
     st.markdown("---")
     
     # Carregar dados
@@ -510,70 +510,74 @@ def render_em_atendimento():
         st.write("👉 Faça check-in de clientes na página **Check-in** para começar!")
         return
     
-    # ========== DASHBOARD DE MÉTRICAS ==========
-    st.subheader("📊 Resumo Geral")
-    
-    # Calcular métricas avançadas
+    # ========== FILTRAR APENAS ATENDIMENTOS DO DIA ==========
     hoje = datetime.now().strftime('%d/%m/%Y')
     hoje_dt = datetime.now()
     
-    # Contar pendentes e com follow-up vencido
-    pendentes = 0
-    vencidos = 0
-    com_relato = 0
-    checkins_hoje = 0
-    
-    if 'Follow up' in df_agendamentos.columns:
-        pendentes = len(df_agendamentos[df_agendamentos['Follow up'] == 'Pendente'])
-    
+    # Filtrar apenas agendamentos para hoje
     if 'Data de chamada' in df_agendamentos.columns:
+        df_hoje = df_agendamentos[df_agendamentos['Data de chamada'] == hoje].copy()
+    else:
+        df_hoje = pd.DataFrame()
+    
+    # Calcular vencidos (datas anteriores a hoje)
+    df_vencidos = pd.DataFrame()
+    if 'Data de chamada' in df_agendamentos.columns:
+        vencidos_lista = []
         for idx, row in df_agendamentos.iterrows():
-            data_chamada = row.get('Data de chamada', '')
-            if data_chamada and data_chamada != '':
+            data_chamada_str = row.get('Data de chamada', '')
+            if data_chamada_str and data_chamada_str != '':
                 try:
-                    data_chamada_dt = datetime.strptime(data_chamada, '%d/%m/%Y')
+                    data_chamada_dt = datetime.strptime(data_chamada_str, '%d/%m/%Y')
                     if data_chamada_dt < hoje_dt:
-                        vencidos += 1
+                        vencidos_lista.append(idx)
                 except:
                     pass
+        if vencidos_lista:
+            df_vencidos = df_agendamentos.loc[vencidos_lista].copy()
     
-    if 'Relato da conversa' in df_agendamentos.columns:
-        com_relato = len(df_agendamentos[df_agendamentos['Relato da conversa'].notna() & (df_agendamentos['Relato da conversa'] != '')])
+    # ========== DASHBOARD DE MÉTRICAS ==========
+    st.subheader("📊 Resumo do Dia")
     
-    if 'Data de contato' in df_agendamentos.columns:
-        checkins_hoje = len(df_agendamentos[df_agendamentos['Data de contato'] == hoje])
+    total_hoje = len(df_hoje)
+    total_vencidos = len(df_vencidos)
+    pendentes_hoje = total_hoje  # Todos os de hoje são pendentes até serem finalizados
     
     # Exibir métricas
-    col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
+    col_m1, col_m2, col_m3 = st.columns(3)
     
     with col_m1:
-        st.metric("📊 Total", len(df_agendamentos), help="Total de atendimentos ativos")
+        st.metric("📊 Total do Dia", total_hoje, help="Total de atendimentos agendados para hoje")
     
     with col_m2:
-        st.metric("⏳ Pendentes", pendentes, help="Atendimentos com status Pendente")
+        st.metric("⏳ Pendentes", pendentes_hoje, help="Atendimentos que faltam finalizar hoje")
     
     with col_m3:
-        st.metric("🔥 Vencidos", vencidos, delta=f"-{vencidos}" if vencidos > 0 else "0", 
-                  delta_color="inverse", help="Follow-ups com data vencida")
-    
-    with col_m4:
-        st.metric("📅 Hoje", checkins_hoje, help="Check-ins feitos hoje")
-    
-    with col_m5:
-        st.metric("✅ Com Relato", com_relato, help="Atendimentos com relato preenchido")
+        st.metric("🔥 Vencidos", total_vencidos, 
+                  delta=f"-{total_vencidos}" if total_vencidos > 0 else "0",
+                  delta_color="inverse", 
+                  help="Atendimentos de dias anteriores não concluídos")
     
     # Alerta de vencidos
-    if vencidos > 0:
-        st.error(f"⚠️ **ATENÇÃO:** Você tem {vencidos} atendimento(s) com follow-up vencido! Priorize-os.")
+    if total_vencidos > 0:
+        st.error(f"⚠️ **ATENÇÃO:** Você tem {total_vencidos} atendimento(s) vencido(s) de dias anteriores! Priorize-os.")
     
     st.markdown("---")
     
-    # ========== FILTROS AVANÇADOS ==========
-    st.subheader("🔍 Filtros e Ordenação")
+    # ========== FILTROS ==========
+    st.subheader("🔍 Filtros")
     
-    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+    col_f1, col_f2, col_f3 = st.columns(3)
     
     with col_f1:
+        # Escolher se quer ver hoje ou vencidos
+        visualizar = st.selectbox(
+            "Visualizar:",
+            ["Hoje", "Vencidos", "Todos"],
+            help="Escolha qual grupo de atendimentos deseja ver"
+        )
+    
+    with col_f2:
         busca = st.text_input(
             "Buscar cliente:",
             "",
@@ -581,58 +585,42 @@ def render_em_atendimento():
             key="busca_atend"
         )
     
-    with col_f2:
-        if 'Follow up' in df_agendamentos.columns:
-            status_opts = ['Todos'] + sorted(list(df_agendamentos['Follow up'].dropna().unique()))
-            filtro_status = st.selectbox("Status:", status_opts)
-        else:
-            filtro_status = 'Todos'
-    
     with col_f3:
-        if 'Classificação' in df_agendamentos.columns:
-            class_opts = ['Todos'] + sorted(list(df_agendamentos['Classificação'].dropna().unique()))
+        # Selecionar dataset baseado na visualização
+        if visualizar == "Hoje":
+            df_trabalho = df_hoje.copy()
+        elif visualizar == "Vencidos":
+            df_trabalho = df_vencidos.copy()
+        else:  # Todos
+            df_trabalho = pd.concat([df_hoje, df_vencidos]).drop_duplicates()
+        
+        if 'Classificação' in df_trabalho.columns and not df_trabalho.empty:
+            class_opts = ['Todos'] + sorted(list(df_trabalho['Classificação'].dropna().unique()))
             filtro_class = st.selectbox("Classificação:", class_opts)
         else:
             filtro_class = 'Todos'
     
-    with col_f4:
-        ordenar_por = st.selectbox(
-            "Ordenar por:",
-            ["Mais recentes", "Mais antigos", "Vencidos primeiro", "Alfabético"]
-        )
-    
     # Aplicar filtros
-    df_filt = df_agendamentos.copy()
+    df_filt = df_trabalho.copy()
     
     if busca and 'Nome' in df_filt.columns:
         df_filt = df_filt[df_filt['Nome'].str.contains(busca, case=False, na=False)]
     
-    if filtro_status != 'Todos' and 'Follow up' in df_filt.columns:
-        df_filt = df_filt[df_filt['Follow up'] == filtro_status]
-    
     if filtro_class != 'Todos' and 'Classificação' in df_filt.columns:
         df_filt = df_filt[df_filt['Classificação'] == filtro_class]
-    
-    # Aplicar ordenação
-    if ordenar_por == "Mais recentes" and 'Data de contato' in df_filt.columns:
-        df_filt = df_filt.sort_values('Data de contato', ascending=False)
-    elif ordenar_por == "Mais antigos" and 'Data de contato' in df_filt.columns:
-        df_filt = df_filt.sort_values('Data de contato', ascending=True)
-    elif ordenar_por == "Alfabético" and 'Nome' in df_filt.columns:
-        df_filt = df_filt.sort_values('Nome', ascending=True)
-    elif ordenar_por == "Vencidos primeiro" and 'Data de chamada' in df_filt.columns:
-        # Ordenar por data de chamada vencida primeiro
-        df_filt['_data_temp'] = pd.to_datetime(df_filt['Data de chamada'], format='%d/%m/%Y', errors='coerce')
-        df_filt = df_filt.sort_values('_data_temp', ascending=True, na_position='last')
-        df_filt = df_filt.drop('_data_temp', axis=1)
     
     st.markdown("---")
     
     # ========== LISTA DE AGENDAMENTOS ==========
-    st.subheader(f"📋 Agendamentos Filtrados ({len(df_filt)})")
+    st.subheader(f"📋 Atendimentos ({len(df_filt)})")
     
     if df_filt.empty:
-        st.info("Nenhum agendamento encontrado com os filtros aplicados")
+        if visualizar == "Hoje":
+            st.info("✅ Nenhum atendimento agendado para hoje!")
+        elif visualizar == "Vencidos":
+            st.success("✅ Você não tem atendimentos vencidos! Parabéns!")
+        else:
+            st.info("Nenhum agendamento encontrado")
         return
     
     # Cards de agendamentos
@@ -652,7 +640,7 @@ def render_em_atendimento():
         # Badge de status
         nome_cliente = agend.get('Nome', 'N/D')
         classificacao = agend.get('Classificação', 'N/D')
-        status_badge = "🔥 VENCIDO" if esta_vencido else "✅ OK"
+        status_badge = "🔥 VENCIDO" if esta_vencido else "📅 HOJE"
         
         # Título do expander com status visual
         titulo_card = f"{status_badge} | 👤 {nome_cliente} | 🏷️ {classificacao}"
@@ -679,151 +667,138 @@ def render_em_atendimento():
                 else:
                     st.write("**💰 Valor Total:** R$ 0,00")
                 
-                # Datas
-                st.write(f"**📅 Check-in:** {agend.get('Data de contato', 'N/D')}")
-                
-                # Calcular dias desde o check-in
-                data_contato = agend.get('Data de contato', '')
-                if data_contato:
-                    try:
-                        data_contato_dt = datetime.strptime(data_contato, '%d/%m/%Y')
-                        dias_desde = (hoje_dt - data_contato_dt).days
-                        st.write(f"**⏰ Tempo decorrido:** {dias_desde} dia(s)")
-                    except:
-                        pass
-                
                 st.markdown("---")
                 
-                # Histórico atual
-                st.markdown("### 📝 Histórico do Atendimento")
+                # Histórico do último atendimento
+                st.markdown("### 📝 Último Atendimento")
+                
+                data_contato = agend.get('Data de contato', 'N/D')
+                st.write(f"**📅 Data:** {data_contato}")
                 
                 rel_at = agend.get('Relato da conversa', '')
                 if rel_at and rel_at != '':
-                    st.info(f"**Relato:**\n\n{rel_at}")
+                    st.info(f"**Relato anterior:**\n\n{rel_at}")
                 else:
-                    st.warning("_⚠️ Sem relato registrado_")
+                    st.caption("_Sem relato anterior_")
                 
                 fol_at = agend.get('Follow up', '')
-                if fol_at and fol_at != 'Pendente':
-                    st.info(f"**Follow-up:** {fol_at}")
+                if fol_at and fol_at != '':
+                    st.info(f"**Motivo deste contato:** {fol_at}")
                 else:
-                    st.warning("_⚠️ Follow-up pendente_")
+                    st.caption("_Sem motivo registrado_")
                 
                 if data_chamada_str and data_chamada_str != '':
                     if esta_vencido:
-                        st.error(f"**Data agendada:** {data_chamada_str} ⚠️ VENCIDA")
+                        st.error(f"**Agendado para:** {data_chamada_str} ⚠️ VENCIDA")
                     else:
-                        st.success(f"**Data agendada:** {data_chamada_str}")
-                else:
-                    st.caption("_Sem data agendada_")
+                        st.success(f"**Agendado para:** {data_chamada_str} ✅ HOJE")
                 
                 obs_at = agend.get('Observação', '')
                 if obs_at and obs_at != '':
-                    st.info(f"**Observações:** {obs_at}")
+                    st.info(f"**Obs anterior:** {obs_at}")
             
-            # ========== COLUNA DIREITA: FORMULÁRIO ==========
+            # ========== COLUNA DIREITA: NOVO AGENDAMENTO ==========
             with col_dir:
-                st.markdown("### ✏️ Atualizar Atendimento")
+                st.markdown("### ✏️ Registrar Novo Atendimento")
                 
                 with st.form(key=f"form_atend_{idx}"):
                     
+                    st.info("💡 Preencha como foi a conversa de hoje e agende o próximo contato")
+                    
                     # Campos do formulário
-                    n_relato = st.text_area(
-                        "📝 Relato da Conversa:",
-                        value=rel_at if rel_at else "",
+                    novo_relato = st.text_area(
+                        "📝 Como foi a conversa de hoje?",
                         height=120,
-                        placeholder="Descreva como foi a conversa...",
-                        help="Registre detalhes importantes da conversa"
+                        placeholder="Descreva os principais pontos da conversa...",
+                        help="Registre o que foi conversado neste atendimento"
                     )
                     
-                    n_follow = st.text_input(
+                    novo_follow = st.text_input(
                         "🎯 Motivo do Próximo Contato:",
-                        value=fol_at if fol_at else "",
                         placeholder="Ex: Enviar proposta, Confirmar interesse...",
                         help="Defina o próximo passo"
                     )
                     
-                    # Data com valor padrão se já existir
-                    valor_data_inicial = None
-                    if data_chamada_str and data_chamada_str != '':
-                        try:
-                            valor_data_inicial = datetime.strptime(data_chamada_str, '%d/%m/%Y').date()
-                        except:
-                            pass
-                    
-                    n_data = st.date_input(
+                    nova_data = st.date_input(
                         "📅 Data do Próximo Contato:",
-                        value=valor_data_inicial,
+                        value=None,
                         help="Quando será o próximo follow-up?"
                     )
                     
-                    n_obs = st.text_area(
+                    nova_obs = st.text_area(
                         "💬 Observações Adicionais:",
-                        value=obs_at if obs_at else "",
                         height=80,
                         placeholder="Informações extras relevantes..."
                     )
                     
                     st.markdown("---")
                     
-                    # Botões de ação
-                    col_btn1, col_btn2 = st.columns(2)
+                    # Botão único: Realizar Novo Agendamento
+                    btn_novo_agendamento = st.form_submit_button(
+                        "✅ Realizar Novo Agendamento",
+                        type="primary",
+                        use_container_width=True
+                    )
                     
-                    with col_btn1:
-                        btn_salvar = st.form_submit_button(
-                            "💾 Salvar Alterações",
-                            type="primary",
-                            use_container_width=True
-                        )
+                    # ========== AÇÃO DO BOTÃO ==========
                     
-                    with col_btn2:
-                        btn_finalizar = st.form_submit_button(
-                            "✅ Finalizar",
-                            use_container_width=True
-                        )
-                    
-                    # ========== AÇÕES DOS BOTÕES ==========
-                    
-                    if btn_salvar:
-                        if not n_relato and not n_follow:
-                            st.warning("⚠️ Preencha ao menos o Relato ou o Follow-up antes de salvar")
+                    if btn_novo_agendamento:
+                        # Validação
+                        if not novo_relato:
+                            st.error("❌ Preencha como foi a conversa de hoje!")
+                        elif not novo_follow:
+                            st.error("❌ Defina o motivo do próximo contato!")
+                        elif not nova_data:
+                            st.error("❌ Selecione a data do próximo contato!")
                         else:
-                            with st.spinner("Salvando alterações..."):
-                                dados_atualizacao = {
-                                    'Relato da conversa': n_relato,
-                                    'Follow up': n_follow,
-                                    'Data de chamada': n_data.strftime('%d/%m/%Y') if n_data else '',
-                                    'Observação': n_obs
-                                }
-                                
-                                if atualizar_agendamento(idx, dados_atualizacao):
+                            with st.spinner("Processando novo agendamento..."):
+                                try:
+                                    conn = st.connection("gsheets", type=GSheetsConnection)
+                                    
+                                    # 1. Mover agendamento atual para HISTORICO
+                                    df_historico = conn.read(worksheet="HISTORICO", ttl=0)
+                                    
+                                    # Preparar linha para histórico com data de conclusão
+                                    linha_historico = agend.to_dict()
+                                    linha_historico['Data de conclusão'] = datetime.now().strftime('%d/%m/%Y %H:%M')
+                                    
+                                    # Adicionar ao histórico
+                                    df_historico_novo = pd.concat([df_historico, pd.DataFrame([linha_historico])], ignore_index=True)
+                                    conn.update(worksheet="HISTORICO", data=df_historico_novo)
+                                    
+                                    # 2. Criar NOVO agendamento em AGENDAMENTOS_ATIVOS
+                                    df_agendamentos_atual = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
+                                    
+                                    novo_agendamento = {
+                                        'Data de contato': datetime.now().strftime('%d/%m/%Y'),
+                                        'Nome': agend.get('Nome', ''),
+                                        'Classificação': agend.get('Classificação', ''),
+                                        'Valor': agend.get('Valor', ''),
+                                        'Telefone': agend.get('Telefone', ''),
+                                        'Relato da conversa': novo_relato,
+                                        'Follow up': novo_follow,
+                                        'Data de chamada': nova_data.strftime('%d/%m/%Y'),
+                                        'Observação': nova_obs
+                                    }
+                                    
+                                    # 3. Remover o agendamento antigo
+                                    df_agendamentos_atualizado = df_agendamentos_atual.drop(idx).reset_index(drop=True)
+                                    
+                                    # 4. Adicionar o novo agendamento
+                                    df_agendamentos_final = pd.concat([df_agendamentos_atualizado, pd.DataFrame([novo_agendamento])], ignore_index=True)
+                                    
+                                    # 5. Salvar em AGENDAMENTOS_ATIVOS
+                                    conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_agendamentos_final)
+                                    
+                                    # Limpar cache e recarregar
                                     st.cache_data.clear()
-                                    st.success("✅ Alterações salvas com sucesso!")
-                                    st.balloons()
-                                    time.sleep(1.5)
-                                    st.rerun()
-                                else:
-                                    st.error("❌ Erro ao salvar. Tente novamente.")
-                    
-                    if btn_finalizar:
-                        if not n_relato:
-                            st.error("❌ Preencha o Relato da Conversa antes de finalizar!")
-                        else:
-                            with st.spinner("Finalizando atendimento..."):
-                                dados_finalizacao = agend.copy()
-                                dados_finalizacao['Relato da conversa'] = n_relato
-                                dados_finalizacao['Follow up'] = n_follow
-                                dados_finalizacao['Data de chamada'] = n_data.strftime('%d/%m/%Y') if n_data else ''
-                                dados_finalizacao['Observação'] = n_obs
-                                
-                                if finalizar_atendimento(idx, dados_finalizacao):
-                                    st.cache_data.clear()
-                                    st.success("✅ Atendimento finalizado e movido para o histórico!")
+                                    st.success(f"✅ Novo agendamento criado para {novo_follow} em {nova_data.strftime('%d/%m/%Y')}!")
                                     st.balloons()
                                     time.sleep(2)
                                     st.rerun()
-                                else:
-                                    st.error("❌ Erro ao finalizar. Tente novamente.")
+                                    
+                                except Exception as e:
+                                    st.error(f"❌ Erro ao processar agendamento: {e}")
         
         st.markdown("---")
 
