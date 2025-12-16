@@ -1363,74 +1363,46 @@ def render_aba1(aba, df_dia, metas):
         st.markdown("---")
         
         # ==========================================
-        # 🔍 DEBUG AVANÇADO NA INTERFACE
+        # 🔍 LISTAR TODAS AS ABAS
         # ==========================================
-        st.sidebar.markdown("### 🐛 DEBUG DETALHADO")
+        st.sidebar.markdown("### 🔍 ABAS DISPONÍVEIS")
         
         try:
-            # Carregar dados diretamente
             client = get_gsheet_client()
             sh = client.open(Config.SHEET_AGENDAMENTOS)
-            ws = sh.worksheet("AGENDAMENTOS ATIVOS")
-            data = ws.get_all_values()
             
-            headers = data[0]
-            rows = data[1:]
-            df_raw = pd.DataFrame(rows, columns=headers)
+            # Listar todas as worksheets
+            worksheets = sh.worksheets()
             
-            st.sidebar.write(f"**📊 Total linhas:** {len(df_raw)}")
+            st.sidebar.write(f"**📋 Total de abas:** {len(worksheets)}")
+            st.sidebar.write("**Nomes das abas:**")
             
-            # Verificar coluna Tipo de atendimento
-            if "Tipo de atendimento" in df_raw.columns:
-                df_raw["_tipo"] = df_raw["Tipo de atendimento"].str.lower().str.strip()
-                tipos = df_raw["_tipo"].value_counts()
-                st.sidebar.write("**🏷️ Tipos:**")
-                st.sidebar.write(tipos)
-                
-                # Separar suporte de agendamentos
-                df_sem_suporte = df_raw[df_raw["_tipo"] != "suporte"]
-                df_suporte = df_raw[df_raw["_tipo"] == "suporte"]
-                
-                st.sidebar.write(f"**Sem suporte:** {len(df_sem_suporte)}")
-                st.sidebar.write(f"**Com suporte:** {len(df_suporte)}")
+            for i, ws in enumerate(worksheets):
+                st.sidebar.write(f"{i+1}. `{ws.title}`")
             
-            # Verificar datas
-            if "Data de chamada" in df_raw.columns:
-                st.sidebar.write("**📅 Primeiras 5 datas:**")
-                st.sidebar.write(df_raw["Data de chamada"].head(5).tolist())
-                
-                # Converter datas
-                df_raw["_data"] = pd.to_datetime(df_raw["Data de chamada"], format="%Y/%m/%d", errors="coerce")
-                
-                # Tentar formato alternativo
-                mask = df_raw["_data"].isna()
-                if mask.any():
-                    df_raw.loc[mask, "_data"] = pd.to_datetime(
-                        df_raw.loc[mask, "Data de chamada"], 
-                        format="%d/%m/%Y", 
-                        errors="coerce"
-                    )
-                
-                datas_unicas = df_raw["_data"].dropna().dt.date.unique()
-                st.sidebar.write(f"**📅 Datas únicas:** {sorted(datas_unicas)[:10]}")
-                
-                hoje = datetime.now().date()
-                st.sidebar.write(f"**📅 Hoje:** {hoje}")
-                
-                df_hoje = df_raw[df_raw["_data"].dt.date == hoje]
-                st.sidebar.write(f"**📅 Registros hoje:** {len(df_hoje)}")
-                
-                if len(df_hoje) > 0:
-                    st.sidebar.write("**Clientes hoje:**")
-                    st.sidebar.write(df_hoje["Nome"].tolist())
+            st.sidebar.markdown("---")
+            
+            # Verificar se existe a aba esperada
+            nomes_abas = [ws.title for ws in worksheets]
+            
+            if "AGENDAMENTOS ATIVOS" in nomes_abas:
+                st.sidebar.success("✅ 'AGENDAMENTOS ATIVOS' existe!")
+            else:
+                st.sidebar.error("❌ 'AGENDAMENTOS ATIVOS' NÃO existe!")
+                st.sidebar.write("**Nomes similares:**")
+                for nome in nomes_abas:
+                    if "AGENDAMENTO" in nome.upper():
+                        st.sidebar.write(f"- `{nome}`")
             
         except Exception as e:
-            st.sidebar.error(f"Erro: {e}")
+            st.sidebar.error(f"Erro ao listar abas: {e}")
+            import traceback
+            st.sidebar.code(traceback.format_exc())
         
-        st.sidebar.markdown("---")
         # ==========================================
         
         # ... resto do código ...
+
 
         
         if "card_counter" not in st.session_state:
