@@ -1276,16 +1276,18 @@ def diagnostico_planilha():
 # (9) 🖥️ UI — ABAS PRINCIPAIS
 # =========================================================
 def render_aba1(aba, df_dia, metas):
-    diagnostico_planilha()  # ← ADICIONE ESTA LINHA
-    st.markdown("---")
     """
     Renderiza a aba principal de Tarefas do Dia
     Inclui: Dashboard de métricas + 3 modos de atendimento (Suporte, Agendamentos, Check-in)
+    VERSÃO OTIMIZADA - Elimina duplicações e melhora performance
     """
     with aba:
         # ==========================================
         # INICIALIZAÇÃO
         # ==========================================
+        diagnostico_planilha()
+        st.markdown("---")
+        
         if "card_counter" not in st.session_state:
             st.session_state["card_counter"] = 0
         
@@ -1317,52 +1319,28 @@ def render_aba1(aba, df_dia, metas):
         st.header("📋 Tarefas do Dia")
         st.markdown("---")
         
-               # ==========================================
-        # CARREGAR APENAS CONTADORES (RÁPIDO)
         # ==========================================
-        # ✅ Carregar só o necessário para métricas
-        df_ag_hoje = load_agendamentos_hoje()  # Manter (é cache)
-        df_suporte = load_casos_suporte()      # Manter (é cache)
-        
-        # ✅ NÃO carregar base completa ainda (só quando precisar)
-        # df_base_completa = load_sheet(...)  ← REMOVER DAQUI
-        
+        # CARREGAR DADOS (OTIMIZADO - 1x APENAS)
         # ==========================================
-        # CALCULAR TOTAIS (SEM JOIN)
-        # ==========================================
-        total_checkin = len(df_dia)
-        total_agendamentos = len(df_ag_hoje)
-        total_suporte = len(df_suporte)
-        total_geral = total_checkin + total_agendamentos + total_suporte
+        df_ag_hoje = load_agendamentos_hoje()
+        df_suporte = load_casos_suporte()
         
-        # Reunir todos os telefones do dia (SIMPLES, SEM APPLY)
-        telefones_do_dia = set()
-        if not df_dia.empty:
-            telefones_do_dia.update(df_dia["Telefone"].astype(str).tolist())
-        if not df_ag_hoje.empty:
-            telefones_do_dia.update(df_ag_hoje["Telefone"].astype(str).tolist())
-        if not df_suporte.empty:
-            telefones_do_dia.update(df_suporte["Telefone"].astype(str).tolist())
-        
-        concluidos_hoje = len(st.session_state["concluidos"].intersection(telefones_do_dia))
-
+        # ✅ CARREGAR BASE COMPLETA UMA VEZ (será usada por todos os modos)
+        df_base_completa = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
         
         # ==========================================
-        # CALCULAR TOTAIS
+        # CALCULAR TOTAIS (SEM DUPLICAÇÃO)
         # ==========================================
         total_checkin = len(df_dia)
         total_agendamentos = len(df_ag_hoje)
         total_suporte = len(df_suporte)
         total_geral = total_checkin + total_agendamentos + total_suporte
         
-        # Reunir todos os telefones do dia
+        # Reunir todos os telefones do dia (OTIMIZADO - sem apply)
         telefones_do_dia = set()
-        if not df_dia.empty:
-            telefones_do_dia.update(df_dia["Telefone"].astype(str).tolist())
-        if not df_ag_hoje.empty:
-            telefones_do_dia.update(df_ag_hoje["Telefone"].astype(str).tolist())
-        if not df_suporte.empty:
-            telefones_do_dia.update(df_suporte["Telefone"].astype(str).tolist())
+        for df in [df_dia, df_ag_hoje, df_suporte]:
+            if not df.empty:
+                telefones_do_dia.update(df["Telefone"].astype(str).tolist())
         
         concluidos_hoje = len(st.session_state["concluidos"].intersection(telefones_do_dia))
         
@@ -1457,284 +1435,176 @@ def render_aba1(aba, df_dia, metas):
         
         st.markdown("---")
         
-               # ==========================================
-        # MODO 1: ACOMPANHAMENTO DE SUPORTE
+        # ==========================================
+        # PROCESSAR DADOS DO MODO SELECIONADO
         # ==========================================
         if modo == "🛠️ Acompanhamento de Suporte":
-            st.markdown("## 🛠️ Casos de Suporte Prioritários")
-            st.info("📌 Problemas e reclamações que precisam de acompanhamento até resolução completa")
+            titulo = "## 🛠️ Casos de Suporte Prioritários"
+            descricao = "📌 Problemas e reclamações que precisam de acompanhamento até resolução completa"
+            msg_vazio = "✅ Nenhum caso de suporte pendente no momento!"
+            dica_vazio = "💡 Quando houver problemas reportados pelos clientes, eles aparecerão aqui automaticamente"
+            df_trabalho = df_suporte.copy()
+            prefixo_card = "suporte"
+            usar_card_suporte = True
+            tipo_atendimento_padrao = "Suporte"
             
-            if df_suporte.empty:
-                st.success("✅ Nenhum caso de suporte pendente no momento!")
-                st.info("💡 Quando houver problemas reportados pelos clientes, eles aparecerão aqui automaticamente")
-            else:
-                # ✅ FAZER JOIN COM BASE PRINCIPAL (enriquecer com dados do cliente)
-                df_base_completa = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
-                
-                if not df_base_completa.empty:
-                    # Garantir que ambos têm Telefone_limpo
-                    if "Telefone_limpo" not in df_suporte.columns:
-                        df_suporte["Telefone_limpo"] = df_suporte["Telefone"].apply(limpar_telefone)
-                    
-                    df_base_completa["Telefone_limpo"] = df_base_completa["Telefone"].apply(limpar_telefone)
-                    
-                    # JOIN: Adicionar colunas da base (Dias_num, Compras, Data, Valor, etc)
-                    df_suporte = df_suporte.merge(
-                        df_base_completa[["Telefone_limpo", "Dias_num", "Compras", "Data", "Valor", "Classificação"]],
-                        on="Telefone_limpo",
-                        how="left",
-                        suffixes=("", "_base")
-                    )
-                    
-                    logger.info(f"✅ Suporte: JOIN realizado - {len(df_suporte)} registros enriquecidos")
-                else:
-                    logger.warning("⚠️ Base principal vazia - cards sem dados complementares")
-                
-                # Filtrar apenas pendentes (não concluídos nem pulados)
-                df_suporte_pendente = df_suporte[
-                    ~df_suporte["Telefone"].astype(str).isin(st.session_state["concluidos"]) &
-                    ~df_suporte["Telefone"].astype(str).isin(st.session_state["pulados"])
-                ]
-                
-                if df_suporte_pendente.empty:
-                    st.success("🎉 Todos os casos de suporte foram atendidos!")
-                    st.info(f"✅ {len(df_suporte)} caso(s) resolvido(s) hoje")
-                else:
-                    st.warning(f"⚠️ **{len(df_suporte_pendente)} caso(s) aguardando resolução**")
-                    st.markdown("---")
-                    
-                    # Exibir cards (2 por linha)
-                    for i in range(0, len(df_suporte_pendente), 2):
-                        col1, col2 = st.columns(2)
-                        
-                        # CARD SUPORTE 1
-                        row1 = df_suporte_pendente.iloc[i]
-                        with col1:
-                            st.session_state["card_counter"] += 1
-                            id_fix = f"suporte_{limpar_telefone(row1['Telefone'])}_{st.session_state['card_counter']}"
-                            
-                            acao, motivo, resumo, proxima, vendedor = card_suporte(id_fix, row1, usuario_atual)
-                            
-                            if acao == "concluir":
-                                registrar_agendamento(
-                                    row1, 
-                                    resumo, 
-                                    motivo, 
-                                    proxima.strftime("%d/%m/%Y") if proxima else "", 
-                                    vendedor, 
-                                    tipo_atendimento="Suporte"
-                                )
-                                remover_card(row1["Telefone"], concluido=True)
-                                remover_lock(row1["Telefone"])
-                                limpar_caches_volateis()
-                                st.rerun()
-                            
-                            elif acao == "pular":
-                                remover_card(row1["Telefone"], concluido=False)
-                                remover_lock(row1["Telefone"])
-                                st.rerun()
-                        
-                        # CARD SUPORTE 2
-                        if i + 1 < len(df_suporte_pendente):
-                            row2 = df_suporte_pendente.iloc[i + 1]
-                            with col2:
-                                st.session_state["card_counter"] += 1
-                                id_fix = f"suporte_{limpar_telefone(row2['Telefone'])}_{st.session_state['card_counter']}"
-                                
-                                acao2, motivo2, resumo2, proxima2, vendedor2 = card_suporte(id_fix, row2, usuario_atual)
-                                
-                                if acao2 == "concluir":
-                                    registrar_agendamento(
-                                        row2, 
-                                        resumo2, 
-                                        motivo2, 
-                                        proxima2.strftime("%d/%m/%Y") if proxima2 else "", 
-                                        vendedor2, 
-                                        tipo_atendimento="Suporte"
-                                    )
-                                    remover_card(row2["Telefone"], concluido=True)
-                                    remover_lock(row2["Telefone"])
-                                    limpar_caches_volateis()
-                                    st.rerun()
-                                
-                                elif acao2 == "pular":
-                                    remover_card(row2["Telefone"], concluido=False)
-                                    remover_lock(row2["Telefone"])
-                                    st.rerun()
-
-        
-        # ==========================================
-        # MODO 2: AGENDAMENTOS ATIVOS
-        # ==========================================
         elif modo == "📅 Agendamentos Ativos":
-            st.markdown("## 📅 Agendamentos Programados para Hoje")
-            st.info("📌 Contatos que você agendou previamente para serem feitos hoje")
+            titulo = "## 📅 Agendamentos Programados para Hoje"
+            descricao = "📌 Contatos que você agendou previamente para serem feitos hoje"
+            msg_vazio = "✅ Nenhum agendamento para hoje!"
+            dica_vazio = "💡 Use a aba 'Histórico/Pesquisa' para criar novos agendamentos"
+            df_trabalho = df_ag_hoje.copy()
+            prefixo_card = "agend"
+            usar_card_suporte = False
+            tipo_atendimento_padrao = "Experiência"
             
-            if df_ag_hoje.empty:
-                st.success("✅ Nenhum agendamento para hoje!")
-                st.info("💡 Use a aba 'Histórico/Pesquisa' para criar novos agendamentos")
-            else:
-                # ✅ FAZER JOIN COM BASE PRINCIPAL (enriquecer com dados do cliente)
-                df_base_completa = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
-                
-                if not df_base_completa.empty:
-                    # Garantir que ambos têm Telefone_limpo
-                    if "Telefone_limpo" not in df_ag_hoje.columns:
-                        df_ag_hoje["Telefone_limpo"] = df_ag_hoje["Telefone"].apply(limpar_telefone)
-                    
-                    df_base_completa["Telefone_limpo"] = df_base_completa["Telefone"].apply(limpar_telefone)
-                    
-                    # JOIN: Adicionar colunas da base (Dias_num, Compras, Data, Valor, etc)
-                    df_ag_hoje = df_ag_hoje.merge(
-                        df_base_completa[["Telefone_limpo", "Dias_num", "Compras", "Data", "Valor", "Classificação"]],
-                        on="Telefone_limpo",
-                        how="left",
-                        suffixes=("", "_base")
-                    )
-                    
-                    logger.info(f"✅ Agendamentos: JOIN realizado - {len(df_ag_hoje)} registros enriquecidos")
-                else:
-                    logger.warning("⚠️ Base principal vazia - cards sem dados complementares")
-                
-                # Filtrar pendentes
-                df_ag_pendente = df_ag_hoje[
-                    ~df_ag_hoje["Telefone"].astype(str).isin(st.session_state["concluidos"]) &
-                    ~df_ag_hoje["Telefone"].astype(str).isin(st.session_state["pulados"])
-                ]
-                
-                if df_ag_pendente.empty:
-                    st.success("🎉 Todos os agendamentos foram concluídos!")
-                    st.info(f"✅ {len(df_ag_hoje)} agendamento(s) realizado(s)")
-                else:
-                    st.warning(f"📋 **{len(df_ag_pendente)} agendamento(s) pendente(s)**")
-                    st.markdown("---")
-                    
-                    # Exibir cards (2 por linha)
-                    for i in range(0, len(df_ag_pendente), 2):
-                        col1, col2 = st.columns(2)
-                        
-                        # CARD AGENDAMENTO 1
-                        row1 = df_ag_pendente.iloc[i]
-                        with col1:
-                            st.session_state["card_counter"] += 1
-                            id_fix = f"agend_{limpar_telefone(row1['Telefone'])}_{st.session_state['card_counter']}"
-                            
-                            ac, mot, res, prox, vend = card_component(id_fix, row1, usuario_atual)
-                            
-                            if ac == "concluir":
-                                registrar_agendamento(
-                                    row1, 
-                                    res, 
-                                    mot, 
-                                    prox.strftime("%d/%m/%Y") if prox else "", 
-                                    vend,
-                                    tipo_atendimento=row1.get("Tipo de atendimento", "Experiência")
-                                )
-                                remover_card(row1["Telefone"], True)
-                                st.rerun()
-                            elif ac == "pular":
-                                remover_card(row1["Telefone"], False)
-                                st.rerun()
-                        
-                        # CARD AGENDAMENTO 2
-                        if i + 1 < len(df_ag_pendente):
-                            row2 = df_ag_pendente.iloc[i + 1]
-                            with col2:
-                                st.session_state["card_counter"] += 1
-                                id_fix = f"agend_{limpar_telefone(row2['Telefone'])}_{st.session_state['card_counter']}"
-                                
-                                ac2, mot2, res2, prox2, vend2 = card_component(id_fix, row2, usuario_atual)
-                                
-                                if ac2 == "concluir":
-                                    registrar_agendamento(
-                                        row2, 
-                                        res2, 
-                                        mot2, 
-                                        prox2.strftime("%d/%m/%Y") if prox2 else "", 
-                                        vend2,
-                                        tipo_atendimento=row2.get("Tipo de atendimento", "Experiência")
-                                    )
-                                    remover_card(row2["Telefone"], True)
-                                    st.rerun()
-                                elif ac2 == "pular":
-                                    remover_card(row2["Telefone"], False)
-                                    st.rerun()
-
+        else:  # Check-in de Clientes
+            titulo = "## 📞 Check-in de Clientes da Base"
+            descricao = "📌 Novos clientes e clientes em risco que precisam de contato proativo"
+            msg_vazio = "✅ Nenhum check-in programado para hoje!"
+            dica_vazio = "💡 A lista é atualizada automaticamente com base nas regras de classificação"
+            df_trabalho = df_dia.copy()
+            prefixo_card = "checkin"
+            usar_card_suporte = False
+            tipo_atendimento_padrao = "Experiência"
         
         # ==========================================
-        # MODO 3: CHECK-IN DE CLIENTES
+        # RENDERIZAR MODO SELECIONADO (LÓGICA UNIFICADA)
         # ==========================================
-        elif modo == "📞 Check-in de Clientes":
-            st.markdown("## 📞 Check-in de Clientes da Base")
-            st.info("📌 Novos clientes e clientes em risco que precisam de contato proativo")
+        st.markdown(titulo)
+        st.info(descricao)
+        
+        if df_trabalho.empty:
+            st.success(msg_vazio)
+            st.info(dica_vazio)
+        else:
+            # ✅ ENRIQUECER COM DADOS DA BASE (JOIN UMA VEZ)
+            df_trabalho = enriquecer_com_base(df_trabalho, df_base_completa)
             
-            if df_dia.empty:
-                st.success("✅ Nenhum check-in programado para hoje!")
-                st.info("💡 A lista é atualizada automaticamente com base nas regras de classificação")
+            # Filtrar apenas pendentes
+            df_pendente = df_trabalho[
+                ~df_trabalho["Telefone"].astype(str).isin(st.session_state["concluidos"]) &
+                ~df_trabalho["Telefone"].astype(str).isin(st.session_state["pulados"])
+            ]
+            
+            if df_pendente.empty:
+                st.success(f"🎉 Todos os {modo.split()[1].lower()} foram concluídos!")
+                st.info(f"✅ {len(df_trabalho)} tarefa(s) realizada(s) hoje")
             else:
-                # Filtrar pendentes
-                df_checkin = df_dia[
-                    ~df_dia["Telefone"].astype(str).isin(st.session_state["concluidos"]) &
-                    ~df_dia["Telefone"].astype(str).isin(st.session_state["pulados"])
-                ]
+                st.warning(f"📋 **{len(df_pendente)} tarefa(s) pendente(s)**")
+                st.markdown("---")
                 
-                if df_checkin.empty:
-                    st.success("🎉 Todos os check-ins foram concluídos!")
-                    st.info(f"✅ {len(df_dia)} cliente(s) contatado(s)")
-                else:
-                    st.warning(f"📋 **{len(df_checkin)} check-in(s) pendente(s)**")
-                    st.markdown("---")
-                    
-                    # Exibir cards (2 por linha)
-                    for i in range(0, len(df_checkin), 2):
-                        col1, col2 = st.columns(2)
-                        
-                        # CARD CHECK-IN 1
-                        row1 = df_checkin.iloc[i]
-                        with col1:
-                            st.session_state["card_counter"] += 1
-                            id_fix = f"checkin_{limpar_telefone(row1['Telefone'])}_{st.session_state['card_counter']}"
-                            
-                            ac, mot, res, prox, vend = card_component(id_fix, row1, usuario_atual)
-                            
-                            if ac == "concluir":
-                                registrar_agendamento(
-                                    row1, 
-                                    res, 
-                                    mot, 
-                                    prox.strftime("%d/%m/%Y") if prox else "", 
-                                    vend,
-                                    tipo_atendimento="Experiência"
-                                )
-                                remover_card(row1["Telefone"], True)
-                                st.rerun()
-                            elif ac == "pular":
-                                remover_card(row1["Telefone"], False)
-                                st.rerun()
-                        
-                        # CARD CHECK-IN 2
-                        if i + 1 < len(df_checkin):
-                            row2 = df_checkin.iloc[i + 1]
-                            with col2:
-                                st.session_state["card_counter"] += 1
-                                id_fix = f"checkin_{limpar_telefone(row2['Telefone'])}_{st.session_state['card_counter']}"
-                                
-                                ac2, mot2, res2, prox2, vend2 = card_component(id_fix, row2, usuario_atual)
-                                
-                                if ac2 == "concluir":
-                                    registrar_agendamento(
-                                        row2, 
-                                        res2, 
-                                        mot2, 
-                                        prox2.strftime("%d/%m/%Y") if prox2 else "", 
-                                        vend2,
-                                        tipo_atendimento="Experiência"
-                                    )
-                                    remover_card(row2["Telefone"], True)
-                                    st.rerun()
-                                elif ac2 == "pular":
-                                    remover_card(row2["Telefone"], False)
-                                    st.rerun()
+                # ✅ RENDERIZAR CARDS (FUNÇÃO UNIFICADA)
+                renderizar_cards_modo(
+                    df_pendente, 
+                    prefixo_card, 
+                    usar_card_suporte, 
+                    usuario_atual,
+                    tipo_atendimento_padrao
+                )
+
+
+# ==========================================
+# FUNÇÕES AUXILIARES (NOVAS - ELIMINAM DUPLICAÇÃO)
+# ==========================================
+
+def enriquecer_com_base(df_trabalho, df_base_completa):
+    """
+    Faz JOIN com base completa para adicionar dados do cliente
+    ✅ Centraliza a lógica que estava repetida 3x
+    """
+    if df_base_completa.empty:
+        logger.warning("⚠️ Base principal vazia - cards sem dados complementares")
+        return df_trabalho
+    
+    # Garantir coluna Telefone_limpo em ambos
+    if "Telefone_limpo" not in df_trabalho.columns:
+        df_trabalho["Telefone_limpo"] = df_trabalho["Telefone"].apply(limpar_telefone)
+    
+    if "Telefone_limpo" not in df_base_completa.columns:
+        df_base_completa["Telefone_limpo"] = df_base_completa["Telefone"].apply(limpar_telefone)
+    
+    # JOIN: Adicionar colunas relevantes
+    colunas_necessarias = ["Telefone_limpo", "Dias_num", "Compras", "Data", "Valor", "Classificação"]
+    colunas_disponiveis = [col for col in colunas_necessarias if col in df_base_completa.columns]
+    
+    df_enriquecido = df_trabalho.merge(
+        df_base_completa[colunas_disponiveis],
+        on="Telefone_limpo",
+        how="left",
+        suffixes=("", "_base")
+    )
+    
+    logger.info(f"✅ JOIN realizado - {len(df_enriquecido)} registros enriquecidos")
+    return df_enriquecido
+
+
+def renderizar_cards_modo(df_pendente, prefixo_card, usar_card_suporte, usuario_atual, tipo_atendimento_padrao):
+    """
+    Renderiza cards em pares (2 por linha) para qualquer modo
+    ✅ Elimina ~150 linhas de código duplicado
+    """
+    for i in range(0, len(df_pendente), 2):
+        col1, col2 = st.columns(2)
+        
+        # CARD 1 (esquerda)
+        with col1:
+            processar_card_individual(
+                df_pendente.iloc[i], 
+                prefixo_card, 
+                usar_card_suporte, 
+                usuario_atual,
+                tipo_atendimento_padrao
+            )
+        
+        # CARD 2 (direita) - se existir
+        if i + 1 < len(df_pendente):
+            with col2:
+                processar_card_individual(
+                    df_pendente.iloc[i + 1], 
+                    prefixo_card, 
+                    usar_card_suporte, 
+                    usuario_atual,
+                    tipo_atendimento_padrao
+                )
+
+
+def processar_card_individual(row, prefixo_card, usar_card_suporte, usuario_atual, tipo_atendimento_padrao):
+    """
+    Processa um card individual (suporte ou padrão)
+    ✅ Centraliza lógica de ação que estava repetida 6x
+    """
+    # Gerar ID único
+    st.session_state["card_counter"] += 1
+    id_card = f"{prefixo_card}_{limpar_telefone(row['Telefone'])}_{st.session_state['card_counter']}"
+    
+    # Renderizar card apropriado
+    if usar_card_suporte:
+        acao, motivo, resumo, proxima, vendedor = card_suporte(id_card, row, usuario_atual)
+    else:
+        acao, motivo, resumo, proxima, vendedor = card_component(id_card, row, usuario_atual)
+    
+    # Processar ação
+    if acao == "concluir":
+        tipo_atend = tipo_atendimento_padrao if usar_card_suporte else row.get("Tipo de atendimento", tipo_atendimento_padrao)
+        
+        registrar_agendamento(
+            row, 
+            resumo, 
+            motivo, 
+            proxima.strftime("%d/%m/%Y") if proxima else "", 
+            vendedor,
+            tipo_atendimento=tipo_atend
+        )
+        remover_card(row["Telefone"], concluido=True)
+        remover_lock(row["Telefone"])  # ✅ Agora remove em TODOS os modos
+        limpar_caches_volateis()
+        st.rerun()
+    
+    elif acao == "pular":
+        remover_card(row["Telefone"], concluido=False)
+        remover_lock(row["Telefone"])  # ✅ Consistente em todos os modos
+        st.rerun()
 
 
 def render_aba2(aba, base, total_tarefas):
