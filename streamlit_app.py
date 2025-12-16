@@ -510,15 +510,61 @@ def render_em_atendimento():
         st.write("👉 Faça check-in de clientes na página **Check-in** para começar!")
         return
     
-    # ========== FILTRAR APENAS ATENDIMENTOS DO DIA ==========
-    hoje = datetime.now().strftime('%d/%m/%Y')
-    hoje_dt = datetime.now()
+   # ========== FILTRAR APENAS ATENDIMENTOS DO DIA ==========
+hoje_dt = datetime.now()
+hoje_str_br = hoje_dt.strftime('%d/%m/%Y')  # Formato brasileiro
+hoje_str_iso = hoje_dt.strftime('%Y/%m/%d')  # Formato ISO
+hoje_str_iso2 = hoje_dt.strftime('%Y-%m-%d')  # Formato ISO com hífen
+
+# Filtrar apenas agendamentos para hoje (aceita múltiplos formatos)
+df_hoje = pd.DataFrame()
+if 'Data de chamada' in df_agendamentos.columns:
+    df_hoje = df_agendamentos[
+        (df_agendamentos['Data de chamada'] == hoje_str_br) |
+        (df_agendamentos['Data de chamada'] == hoje_str_iso) |
+        (df_agendamentos['Data de chamada'] == hoje_str_iso2)
+    ].copy()
+
+# Calcular vencidos (datas anteriores a hoje)
+df_vencidos = pd.DataFrame()
+if 'Data de chamada' in df_agendamentos.columns:
+    vencidos_lista = []
+    for idx, row in df_agendamentos.iterrows():
+        data_chamada_str = row.get('Data de chamada', '')
+        if data_chamada_str and data_chamada_str != '':
+            try:
+                # Tentar múltiplos formatos
+                data_chamada_dt = None
+                
+                # Tentar formato brasileiro DD/MM/YYYY
+                try:
+                    data_chamada_dt = datetime.strptime(data_chamada_str, '%d/%m/%Y')
+                except:
+                    pass
+                
+                # Tentar formato ISO YYYY/MM/DD
+                if not data_chamada_dt:
+                    try:
+                        data_chamada_dt = datetime.strptime(data_chamada_str, '%Y/%m/%d')
+                    except:
+                        pass
+                
+                # Tentar formato ISO com hífen YYYY-MM-DD
+                if not data_chamada_dt:
+                    try:
+                        data_chamada_dt = datetime.strptime(data_chamada_str, '%Y-%m-%d')
+                    except:
+                        pass
+                
+                # Se conseguiu converter e está vencida
+                if data_chamada_dt and data_chamada_dt.date() < hoje_dt.date():
+                    vencidos_lista.append(idx)
+            except:
+                pass
     
-    # Filtrar apenas agendamentos para hoje
-    if 'Data de chamada' in df_agendamentos.columns:
-        df_hoje = df_agendamentos[df_agendamentos['Data de chamada'] == hoje].copy()
-    else:
-        df_hoje = pd.DataFrame()
+    if vencidos_lista:
+        df_vencidos = df_agendamentos.loc[vencidos_lista].copy()
+
     
     # Calcular vencidos (datas anteriores a hoje)
     df_vencidos = pd.DataFrame()
