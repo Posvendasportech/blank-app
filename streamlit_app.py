@@ -659,7 +659,7 @@ if 'Data de chamada' in df_agendamentos.columns:
     
     st.markdown("---")
     
-     # ========== LISTA DE AGENDAMENTOS ==========
+    # ========== LISTA DE AGENDAMENTOS ==========
     st.subheader(f"📋 Atendamentos ({len(df_filt)})")
     
     if df_filt.empty:
@@ -677,6 +677,7 @@ if 'Data de chamada' in df_agendamentos.columns:
         # Verificar se está vencido
         esta_vencido = False
         data_chamada_str = agend.get('Data de chamada', '')
+
 
         if data_chamada_str and data_chamada_str != '':
             try:
