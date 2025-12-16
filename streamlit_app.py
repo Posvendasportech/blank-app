@@ -286,29 +286,34 @@ def render_checkin():
         df_clientes = df_clientes.head(limite_clientes)
 
     
-    st.success(f"✅ {len(df_clientes)} clientes disponíveis para check-in")
+    # Informações compactas + Filtros em uma linha
+col_info, col_busca, col_dias = st.columns([1, 2, 2])
+
+with col_info:
+    st.metric("✅ Disponíveis", len(df_clientes), help="Clientes disponíveis para check-in")
+
+with col_busca:
+    busca_nome = st.text_input(
+        "🔍 Buscar cliente:",
+        "",
+        placeholder="Digite o nome...",
+        label_visibility="collapsed"
+    )
+
+with col_dias:
+    if 'Dias desde a compra' in df_clientes.columns:
+        dias_min = 0
+        dias_max = int(df_clientes['Dias desde a compra'].max()) if df_clientes['Dias desde a compra'].max() > 0 else 365
+        filtro_dias = st.slider(
+            "📅 Dias desde última compra:",
+            dias_min,
+            dias_max,
+            (dias_min, dias_max),
+            label_visibility="collapsed"
+        )
+    else:
+        filtro_dias = None
     
-    # Debug
-    with st.expander("🔍 Debug - Dados carregados"):
-        st.write("**Colunas disponíveis:**", df_clientes.columns.tolist())
-        st.dataframe(df_clientes.head(3), use_container_width=True)
-    
-    st.markdown("---")
-    
-    # Filtros adicionais
-    st.subheader("🔍 Filtros Adicionais")
-    col_f1, col_f2 = st.columns(2)
-    
-    with col_f1:
-        busca_nome = st.text_input("Buscar por nome:", "", placeholder="Digite o nome do cliente...")
-    
-    with col_f2:
-        if 'Dias desde a compra' in df_clientes.columns:
-            dias_min = 0
-            dias_max = int(df_clientes['Dias desde a compra'].max()) if df_clientes['Dias desde a compra'].max() > 0 else 365
-            filtro_dias = st.slider("Dias desde última compra:", dias_min, dias_max, (dias_min, dias_max))
-        else:
-            filtro_dias = None
     
     # Aplicar filtros
     df_filtrado = df_clientes.copy()
