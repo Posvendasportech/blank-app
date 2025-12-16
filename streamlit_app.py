@@ -1363,33 +1363,74 @@ def render_aba1(aba, df_dia, metas):
         st.markdown("---")
         
         # ==========================================
-        # 🔍 DEBUG TEMPORÁRIO - REMOVER DEPOIS
+        # 🔍 DEBUG AVANÇADO NA INTERFACE
         # ==========================================
-        st.sidebar.markdown("### 🐛 DEBUG DE CARREGAMENTO")
+        st.sidebar.markdown("### 🐛 DEBUG DETALHADO")
         
-        # Testar carregamento de agendamentos
-        df_ag_teste = load_agendamentos_hoje()
-        st.sidebar.write(f"**📅 Agendamentos carregados:** {len(df_ag_teste)}")
-        if not df_ag_teste.empty:
-            st.sidebar.write("Colunas:", df_ag_teste.columns.tolist())
-            st.sidebar.dataframe(df_ag_teste[["Nome", "Data de chamada", "Tipo de atendimento"]].head())
-        else:
-            st.sidebar.error("❌ Nenhum agendamento carregado!")
+        try:
+            # Carregar dados diretamente
+            client = get_gsheet_client()
+            sh = client.open(Config.SHEET_AGENDAMENTOS)
+            ws = sh.worksheet("AGENDAMENTOS ATIVOS")
+            data = ws.get_all_values()
+            
+            headers = data[0]
+            rows = data[1:]
+            df_raw = pd.DataFrame(rows, columns=headers)
+            
+            st.sidebar.write(f"**📊 Total linhas:** {len(df_raw)}")
+            
+            # Verificar coluna Tipo de atendimento
+            if "Tipo de atendimento" in df_raw.columns:
+                df_raw["_tipo"] = df_raw["Tipo de atendimento"].str.lower().str.strip()
+                tipos = df_raw["_tipo"].value_counts()
+                st.sidebar.write("**🏷️ Tipos:**")
+                st.sidebar.write(tipos)
+                
+                # Separar suporte de agendamentos
+                df_sem_suporte = df_raw[df_raw["_tipo"] != "suporte"]
+                df_suporte = df_raw[df_raw["_tipo"] == "suporte"]
+                
+                st.sidebar.write(f"**Sem suporte:** {len(df_sem_suporte)}")
+                st.sidebar.write(f"**Com suporte:** {len(df_suporte)}")
+            
+            # Verificar datas
+            if "Data de chamada" in df_raw.columns:
+                st.sidebar.write("**📅 Primeiras 5 datas:**")
+                st.sidebar.write(df_raw["Data de chamada"].head(5).tolist())
+                
+                # Converter datas
+                df_raw["_data"] = pd.to_datetime(df_raw["Data de chamada"], format="%Y/%m/%d", errors="coerce")
+                
+                # Tentar formato alternativo
+                mask = df_raw["_data"].isna()
+                if mask.any():
+                    df_raw.loc[mask, "_data"] = pd.to_datetime(
+                        df_raw.loc[mask, "Data de chamada"], 
+                        format="%d/%m/%Y", 
+                        errors="coerce"
+                    )
+                
+                datas_unicas = df_raw["_data"].dropna().dt.date.unique()
+                st.sidebar.write(f"**📅 Datas únicas:** {sorted(datas_unicas)[:10]}")
+                
+                hoje = datetime.now().date()
+                st.sidebar.write(f"**📅 Hoje:** {hoje}")
+                
+                df_hoje = df_raw[df_raw["_data"].dt.date == hoje]
+                st.sidebar.write(f"**📅 Registros hoje:** {len(df_hoje)}")
+                
+                if len(df_hoje) > 0:
+                    st.sidebar.write("**Clientes hoje:**")
+                    st.sidebar.write(df_hoje["Nome"].tolist())
+            
+        except Exception as e:
+            st.sidebar.error(f"Erro: {e}")
         
-        # Testar carregamento de suporte
-        df_sup_teste = load_casos_suporte()
-        st.sidebar.write(f"**🛠️ Suporte carregado:** {len(df_sup_teste)}")
-        if not df_sup_teste.empty:
-            st.sidebar.write("Colunas:", df_sup_teste.columns.tolist())
-            st.sidebar.dataframe(df_sup_teste[["Nome", "Telefone", "Tipo de atendimento"]].head())
-        else:
-            st.sidebar.error("❌ Nenhum suporte carregado!")
-        
-        st.sidebar.write(f"**Data de hoje:** {datetime.now().date()}")
         st.sidebar.markdown("---")
         # ==========================================
         
-        # ... resto do código normal ...
+        # ... resto do código ...
 
         
         if "card_counter" not in st.session_state:
