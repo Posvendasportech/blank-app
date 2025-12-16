@@ -660,7 +660,7 @@ if 'Data de chamada' in df_agendamentos.columns:
         # ========== LISTA DE AGENDAMENTOS ==========
     st.subheader(f"📋 Atendimentos ({len(df_filt)})")
     
-    if df_filt.empty:
+       if df_filt.empty:
         if visualizar == "Hoje":
             st.info("✅ Nenhum atendimento agendado para hoje!")
         elif visualizar == "Vencidos":
@@ -668,6 +668,7 @@ if 'Data de chamada' in df_agendamentos.columns:
         else:
             st.info("Nenhum agendamento encontrado")
         return
+
     
     # Cards de agendamentos
     for idx, agend in df_filt.iterrows():
