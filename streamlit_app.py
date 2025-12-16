@@ -510,7 +510,6 @@ def render_em_atendimento():
         st.write("👉 Faça check-in de clientes na página **Check-in** para começar!")
         return
     
-   # ========== FILTRAR APENAS ATENDIMENTOS DO DIA ==========
     # ========== FILTRAR APENAS ATENDIMENTOS DO DIA ==========
     hoje_dt = datetime.now()
     hoje_str_br = hoje_dt.strftime('%d/%m/%Y')  # Formato brasileiro
@@ -526,48 +525,6 @@ def render_em_atendimento():
             (df_agendamentos['Data de chamada'] == hoje_str_iso2)
         ].copy()
 
-
-# Calcular vencidos (datas anteriores a hoje)
-df_vencidos = pd.DataFrame()
-if 'Data de chamada' in df_agendamentos.columns:
-    vencidos_lista = []
-    for idx, row in df_agendamentos.iterrows():
-        data_chamada_str = row.get('Data de chamada', '')
-        if data_chamada_str and data_chamada_str != '':
-            try:
-                # Tentar múltiplos formatos
-                data_chamada_dt = None
-                
-                # Tentar formato brasileiro DD/MM/YYYY
-                try:
-                    data_chamada_dt = datetime.strptime(data_chamada_str, '%d/%m/%Y')
-                except:
-                    pass
-                
-                # Tentar formato ISO YYYY/MM/DD
-                if not data_chamada_dt:
-                    try:
-                        data_chamada_dt = datetime.strptime(data_chamada_str, '%Y/%m/%d')
-                    except:
-                        pass
-                
-                # Tentar formato ISO com hífen YYYY-MM-DD
-                if not data_chamada_dt:
-                    try:
-                        data_chamada_dt = datetime.strptime(data_chamada_str, '%Y-%m-%d')
-                    except:
-                        pass
-                
-                # Se conseguiu converter e está vencida
-                if data_chamada_dt and data_chamada_dt.date() < hoje_dt.date():
-                    vencidos_lista.append(idx)
-            except:
-                pass
-    
-    if vencidos_lista:
-        df_vencidos = df_agendamentos.loc[vencidos_lista].copy()
-
-    
     # Calcular vencidos (datas anteriores a hoje)
     df_vencidos = pd.DataFrame()
     if 'Data de chamada' in df_agendamentos.columns:
@@ -576,11 +533,35 @@ if 'Data de chamada' in df_agendamentos.columns:
             data_chamada_str = row.get('Data de chamada', '')
             if data_chamada_str and data_chamada_str != '':
                 try:
-                    data_chamada_dt = datetime.strptime(data_chamada_str, '%d/%m/%Y')
-                    if data_chamada_dt < hoje_dt:
+                    # Tentar múltiplos formatos
+                    data_chamada_dt = None
+                    
+                    # Tentar formato brasileiro DD/MM/YYYY
+                    try:
+                        data_chamada_dt = datetime.strptime(data_chamada_str, '%d/%m/%Y')
+                    except:
+                        pass
+                    
+                    # Tentar formato ISO YYYY/MM/DD
+                    if not data_chamada_dt:
+                        try:
+                            data_chamada_dt = datetime.strptime(data_chamada_str, '%Y/%m/%d')
+                        except:
+                            pass
+                    
+                    # Tentar formato ISO com hífen YYYY-MM-DD
+                    if not data_chamada_dt:
+                        try:
+                            data_chamada_dt = datetime.strptime(data_chamada_str, '%Y-%m-%d')
+                        except:
+                            pass
+                    
+                    # Se conseguiu converter e está vencida
+                    if data_chamada_dt and data_chamada_dt.date() < hoje_dt.date():
                         vencidos_lista.append(idx)
                 except:
                     pass
+        
         if vencidos_lista:
             df_vencidos = df_agendamentos.loc[vencidos_lista].copy()
     
@@ -713,7 +694,6 @@ if 'Data de chamada' in df_agendamentos.columns:
         nome_cliente = agend.get('Nome', 'N/D')
         classificacao = agend.get('Classificação', 'N/D')
         status_badge = "🔥 VENCIDO" if esta_vencido else "📅 HOJE"
-
         
         # Título do expander com status visual
         titulo_card = f"{status_badge} | 👤 {nome_cliente} | 🏷️ {classificacao}"
@@ -814,7 +794,6 @@ if 'Data de chamada' in df_agendamentos.columns:
                     )
                     
                     # ========== AÇÃO DO BOTÃO ==========
-                    
                     if btn_novo_agendamento:
                         # Validação
                         if not novo_relato:
@@ -874,6 +853,7 @@ if 'Data de chamada' in df_agendamentos.columns:
                                     st.error(f"❌ Erro ao processar agendamento: {e}")
         
         st.markdown("---")
+
 
 # ============================================================================
 # RENDER - PÁGINA SUPORTE
