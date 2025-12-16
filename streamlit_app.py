@@ -93,6 +93,24 @@ st.markdown("""
 # =========================================================
 # (2) 🔑 CONEXÃO + FUNÇÕES UTILITÁRIAS (NÚCLEO)
 # =========================================================
+# ==========================================
+# CONFIGURAÇÃO DE CACHE OTIMIZADO
+# ==========================================
+
+# ✅ Cache de 5 minutos (300s) para base principal
+@st.cache_data(ttl=300, show_spinner=False)
+def load_sheet_cached(sheet_id, sheet_name):
+    """Cache agressivo - reduz 90% das leituras"""
+    return load_sheet(sheet_id, sheet_name)
+
+# ✅ Cache de 2 minutos para dados voláteis
+@st.cache_data(ttl=120, show_spinner=False)
+def load_agendamentos_cached():
+    return load_agendamentos_hoje()
+
+@st.cache_data(ttl=120, show_spinner=False)
+def load_suporte_cached():
+    return load_casos_suporte()
 
 @st.cache_resource
 def get_gsheet_client():
@@ -1306,27 +1324,42 @@ def render_aba1(aba, df_dia, metas):
         
         tempo_decorrido = (datetime.now() - st.session_state.last_refresh).total_seconds()
         
-        if tempo_decorrido > 30:
+        # ✅ SOLUÇÃO: Auto-refresh apenas a cada 5 minutos
+        if tempo_decorrido > 300:  # 5 minutos = 300 segundos
             load_em_atendimento.clear()
             load_agendamentos_hoje.clear()
             load_casos_suporte.clear()
+            load_sheet_cached.clear()  # Adicione esta linha
             st.session_state.last_refresh = datetime.now()
-            logger.info("Auto-refresh de dados executado (30s)")
+            logger.info("Auto-refresh de dados executado (5min)")
+
         
         # ==========================================
         # CABEÇALHO
         # ==========================================
-        st.header("📋 Tarefas do Dia")
+        col_h1, col_h2 = st.columns([5, 1])
+        with col_h1:
+            st.header("📋 Tarefas do Dia")
+        with col_h2:
+            if st.button("🔄 Atualizar", help="Recarregar dados", use_container_width=True):
+                load_em_atendimento.clear()
+                load_agendamentos_cached.clear()
+                load_suporte_cached.clear()
+                load_sheet_cached.clear()
+                st.success("✅ Atualizado!")
+                time.sleep(0.5)
+                st.rerun()
+        
         st.markdown("---")
         
         # ==========================================
         # CARREGAR DADOS (OTIMIZADO - 1x APENAS)
         # ==========================================
-        df_ag_hoje = load_agendamentos_hoje()
-        df_suporte = load_casos_suporte()
+        df_ag_hoje = load_agendamentos_cached()
+        df_suporte = load_suporte_cached()
         
         # ✅ CARREGAR BASE COMPLETA UMA VEZ (será usada por todos os modos)
-        df_base_completa = load_sheet(Config.SHEET_ID, Config.SHEET_NAME)
+        df_base_completa = load_sheet_cached(Config.SHEET_ID, Config.SHEET_NAME)
         
         # ==========================================
         # CALCULAR TOTAIS (SEM DUPLICAÇÃO)
