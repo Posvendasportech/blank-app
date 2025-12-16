@@ -14,27 +14,27 @@ st.set_page_config(
 st.title("🎯 CRM de Pós-Vendas")
 st.markdown("### Sistema de Gestão de Relacionamento com Clientes")
 
-# Conexão com Google Sheets - SEM CACHE para debug
-def load_data():
+# Listar abas disponíveis
+def list_worksheets():
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
-        st.write("✅ Conexão criada")
+        # Pegar o spreadsheet diretamente
+        spreadsheet = conn._instance._client.open_by_url(
+            "https://docs.google.com/spreadsheets/d/1JEoG2HsPyrMAQ6NrNpOSmFrkiRseY1gsxEWnf-zDuu8/edit?usp=sharing"
+        )
+        worksheets = spreadsheet.worksheets()
         
-        df = conn.read(worksheet="Total", usecols=list(range(10)))
-        st.write("✅ Leitura executada")
-        st.write("Tipo:", type(df))
+        st.success("✅ Planilha conectada!")
+        st.write("**Abas disponíveis:**")
+        for ws in worksheets:
+            st.write(f"- {ws.title}")
         
-        return df
+        return [ws.title for ws in worksheets]
     except Exception as e:
-        st.error(f"Erro interno: {str(e)}")
-        st.write("Tipo do erro:", type(e))
+        st.error(f"Erro: {e}")
         import traceback
         st.code(traceback.format_exc())
-        return None
+        return []
 
-# Carregar dados
-df_total = load_data()
-
-if df_total is not None:
-    st.success(f"✅ Dados carregados: {len(df_total)} clientes")
-    st.dataframe(df_total, use_container_width=True)
+# Executar
+abas = list_worksheets()
