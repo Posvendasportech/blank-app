@@ -20,7 +20,7 @@ def diagnostico_planilha():
     try:
         client = get_gsheet_client()
         sh = client.open(Config.SHEET_AGENDAMENTOS)
-        ws = sh.worksheet("AGENDAMENTOS ATIVOS")
+        ws = sh.worksheet("AGENDAMENTOS_ATIVOS")
         
         data = ws.get_all_values()
         
@@ -1385,7 +1385,7 @@ def render_aba1(aba, df_dia, metas):
             # Verificar se existe a aba esperada
             nomes_abas = [ws.title for ws in worksheets]
             
-            if "AGENDAMENTOS ATIVOS" in nomes_abas:
+            if "AGENDAMENTOS_ATIVOS" in nomes_abas:
                 st.sidebar.success("✅ 'AGENDAMENTOS ATIVOS' existe!")
             else:
                 st.sidebar.error("❌ 'AGENDAMENTOS ATIVOS' NÃO existe!")
