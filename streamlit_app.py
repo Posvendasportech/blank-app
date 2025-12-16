@@ -130,10 +130,9 @@ if pagina == "✅ Check-in":
             placeholder="Digite o nome do cliente..."
         )
     
-    with col_filtro2:
+        with col_filtro2:
         # Verificar se a coluna existe antes de criar o filtro
         if 'Dias desde a compra' in df_clientes.columns:
-            # Pegar valores mínimo e máximo
             dias_min = 0
             dias_max = int(df_clientes['Dias desde a compra'].max()) if df_clientes['Dias desde a compra'].max() > 0 else 365
             
@@ -144,8 +143,9 @@ if pagina == "✅ Check-in":
                 value=(dias_min, dias_max)
             )
         else:
-            st.warning("⚠️ Coluna 'Dias desde a compra' não encontrada")
+            st.info("⏭️ Filtro de dias não disponível para esta classificação")
             filtro_dias = None
+
     
     # --- APLICAR FILTROS ---
     df_filtrado = df_clientes.copy()
@@ -206,25 +206,34 @@ if pagina == "✅ Check-in":
                             st.metric("💰 Gasto Total", "R$ 0,00")
                     
                     with met2:
-                        compras = cliente.get('Compras', 0)
-                        if pd.notna(compras) and compras != '':
-                            try:
-                                st.metric("🛒 Compras", int(float(compras)))
-                            except:
+                        # Verificar se a coluna Compras existe
+                        if 'Compras' in df_filtrado.columns:
+                            compras = cliente.get('Compras', 0)
+                            if pd.notna(compras) and compras != '':
+                                try:
+                                    st.metric("🛒 Compras", int(float(compras)))
+                                except:
+                                    st.metric("🛒 Compras", "0")
+                            else:
                                 st.metric("🛒 Compras", "0")
                         else:
-                            st.metric("🛒 Compras", "0")
+                            # Se não existir, mostrar N/D
+                            st.metric("🛒 Compras", "N/D")
                     
                     with met3:
-                        dias = cliente.get('Dias desde a compra', 0)
-                        if pd.notna(dias) and dias != '':
-                            try:
-                                # Arredondar para número inteiro
-                                st.metric("📅 Dias", int(round(float(dias))))
-                            except:
+                        # Verificar se a coluna existe
+                        if 'Dias desde a compra' in df_filtrado.columns:
+                            dias = cliente.get('Dias desde a compra', 0)
+                            if pd.notna(dias) and dias != '':
+                                try:
+                                    st.metric("📅 Dias", int(round(float(dias))))
+                                except:
+                                    st.metric("📅 Dias", "0")
+                            else:
                                 st.metric("📅 Dias", "0")
                         else:
-                            st.metric("📅 Dias", "0")
+                            # Se não existir, mostrar N/D
+                            st.metric("📅 Dias", "N/D")
 
                 
                 # --- COLUNA 3: BOTÃO DE AÇÃO ---
