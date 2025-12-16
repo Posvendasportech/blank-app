@@ -1,6 +1,6 @@
 # ============================================================================
 # CRM PÓS-VENDAS - STREAMLIT APP
-# Versão: 1.0
+# Versão: 1.0 - Arquitetura Modular
 # Descrição: Sistema de gestão de relacionamento com clientes
 # ============================================================================
 
@@ -21,7 +21,7 @@ st.set_page_config(
 )
 
 # ============================================================================
-# FUNÇÕES AUXILIARES
+# FUNÇÕES AUXILIARES - UTILITÁRIOS
 # ============================================================================
 
 @st.cache_data(ttl=60)
@@ -108,48 +108,38 @@ def finalizar_atendimento(index, dados_completos):
         return False
 
 # ============================================================================
-# SIDEBAR
+# RENDER - PÁGINA CHECK-IN
 # ============================================================================
 
-with st.sidebar:
-    st.title("📋 Menu Principal")
-    st.markdown("---")
-    pagina = st.radio(
-        "Navegação:",
-        ["✅ Check-in", "📞 Em Atendimento", "🆘 Suporte", "📜 Histórico"],
-        index=0
-    )
-    st.markdown("---")
-    st.caption("CRM Pós-Vendas v1.0")
-
-# ============================================================================
-# PÁGINA: CHECK-IN
-# ============================================================================
-
-if pagina == "✅ Check-in":
+def render_checkin():
+    """Renderiza a página de Check-in de clientes"""
+    
     st.title("✅ Check-in de Clientes")
     st.markdown("Selecione clientes para iniciar o fluxo de atendimento")
     st.markdown("---")
     
-    classificacoes_disponiveis = ["Total", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
+    # Seletor de classificação
+    classificacoes = ["Total", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
     classificacao_selecionada = st.selectbox(
         "📂 Escolha a classificação:",
-        classificacoes_disponiveis,
+        classificacoes,
         index=0
     )
     
     st.info(f"📊 Visualizando: **{classificacao_selecionada}**")
     st.markdown("---")
     
+    # Carregar dados
     with st.spinner(f"Carregando clientes..."):
         df_clientes = carregar_dados(classificacao_selecionada)
     
     if df_clientes.empty:
         st.warning(f"⚠️ Nenhum cliente encontrado")
-        st.stop()
+        return
     
     st.success(f"✅ {len(df_clientes)} clientes encontrados")
     
+    # Debug
     with st.expander("🔍 Debug"):
         st.write("Colunas:", df_clientes.columns.tolist())
         st.dataframe(df_clientes.head(3))
@@ -179,246 +169,291 @@ if pagina == "✅ Check-in":
     st.subheader(f"📋 Clientes ({len(df_filtrado)})")
     
     if df_filtrado.empty:
-        st.info("Nenhum cliente encontrado")
-    else:
-        for index, cliente in df_filtrado.iterrows():
-            with st.container():
-                col_info, col_metricas, col_acao = st.columns([2, 3, 1])
-                
-                with col_info:
-                    st.markdown(f"### 👤 {cliente.get('Nome', 'N/D')}")
-                    st.caption(f"📧 {cliente.get('Email', 'N/D')}")
-                    st.caption(f"📱 {cliente.get('Telefone', 'N/D')}")
-                
-                with col_metricas:
-                    m1, m2, m3 = st.columns(3)
-                    with m1:
-                        valor = cliente.get('Valor', 0)
-                        if pd.notna(valor) and valor != '':
-                            try:
-                                st.metric("💰 Total", f"R$ {float(valor):,.2f}")
-                            except:
-                                st.metric("💰 Total", "R$ 0,00")
-                        else:
+        st.info("Nenhum cliente encontrado com os filtros aplicados")
+        return
+    
+    # Cards de clientes
+    for index, cliente in df_filtrado.iterrows():
+        with st.container():
+            col_info, col_metricas, col_acao = st.columns([2, 3, 1])
+            
+            with col_info:
+                st.markdown(f"### 👤 {cliente.get('Nome', 'N/D')}")
+                st.caption(f"📧 {cliente.get('Email', 'N/D')}")
+                st.caption(f"📱 {cliente.get('Telefone', 'N/D')}")
+            
+            with col_metricas:
+                m1, m2, m3 = st.columns(3)
+                with m1:
+                    valor = cliente.get('Valor', 0)
+                    if pd.notna(valor) and valor != '':
+                        try:
+                            st.metric("💰 Total", f"R$ {float(valor):,.2f}")
+                        except:
                             st.metric("💰 Total", "R$ 0,00")
-                    
-                    with m2:
-                        if 'Compras' in df_filtrado.columns:
-                            compras = cliente.get('Compras', 0)
-                            if pd.notna(compras) and compras != '':
-                                try:
-                                    st.metric("🛒 Compras", int(float(compras)))
-                                except:
-                                    st.metric("🛒 Compras", "0")
-                            else:
+                    else:
+                        st.metric("💰 Total", "R$ 0,00")
+                
+                with m2:
+                    if 'Compras' in df_filtrado.columns:
+                        compras = cliente.get('Compras', 0)
+                        if pd.notna(compras) and compras != '':
+                            try:
+                                st.metric("🛒 Compras", int(float(compras)))
+                            except:
                                 st.metric("🛒 Compras", "0")
                         else:
-                            st.metric("🛒 Compras", "N/D")
-                    
-                    with m3:
-                        if 'Dias desde a compra' in df_filtrado.columns:
-                            dias = cliente.get('Dias desde a compra', 0)
-                            if pd.notna(dias) and dias != '':
-                                try:
-                                    st.metric("📅 Dias", int(round(float(dias))))
-                                except:
-                                    st.metric("📅 Dias", "0")
-                            else:
+                            st.metric("🛒 Compras", "0")
+                    else:
+                        st.metric("🛒 Compras", "N/D")
+                
+                with m3:
+                    if 'Dias desde a compra' in df_filtrado.columns:
+                        dias = cliente.get('Dias desde a compra', 0)
+                        if pd.notna(dias) and dias != '':
+                            try:
+                                st.metric("📅 Dias", int(round(float(dias))))
+                            except:
                                 st.metric("📅 Dias", "0")
                         else:
-                            st.metric("📅 Dias", "N/D")
-                
-                with col_acao:
-                    st.write("")
-                    st.write("")
-                    if st.button("✅ Check-in", key=f"btn_{index}", type="primary", use_container_width=True):
-                        with st.spinner('Processando...'):
-                            if adicionar_agendamento(cliente, classificacao_selecionada):
-                                st.cache_data.clear()
-                                st.success(f"✅ Check-in realizado!")
-                                st.balloons()
-                                time.sleep(2)
-                                st.rerun()
-                            else:
-                                st.error("❌ Erro ao realizar check-in")
-                
-                st.markdown("---")
+                            st.metric("📅 Dias", "0")
+                    else:
+                        st.metric("📅 Dias", "N/D")
+            
+            with col_acao:
+                st.write("")
+                st.write("")
+                if st.button("✅ Check-in", key=f"btn_{index}", type="primary", use_container_width=True):
+                    with st.spinner('Processando...'):
+                        if adicionar_agendamento(cliente, classificacao_selecionada):
+                            st.cache_data.clear()
+                            st.success(f"✅ Check-in realizado!")
+                            st.balloons()
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error("❌ Erro ao realizar check-in")
+            
+            st.markdown("---")
 
 # ============================================================================
-# PÁGINA: EM ATENDIMENTO
+# RENDER - PÁGINA EM ATENDIMENTO
 # ============================================================================
 
-elif pagina == "📞 Em Atendimento":
+def render_em_atendimento():
+    """Renderiza a página de Em Atendimento"""
+    
     st.title("📞 Em Atendimento")
     st.markdown("Registre conversas e agende próximos contatos")
     st.markdown("---")
     
+    # Carregar dados
     with st.spinner("Carregando..."):
         df_agendamentos = carregar_dados("AGENDAMENTOS_ATIVOS")
     
     if df_agendamentos.empty:
         st.info("✅ Nenhum agendamento ativo")
         st.write("👉 Faça check-in na página **Check-in**")
-    else:
-        # Métricas
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            st.metric("📊 Total", len(df_agendamentos))
-        with c2:
-            if 'Follow up' in df_agendamentos.columns:
-                pend = len(df_agendamentos[df_agendamentos['Follow up'] == 'Pendente'])
-                st.metric("⏳ Pendentes", pend)
-        with c3:
-            hoje = datetime.now().strftime('%d/%m/%Y')
-            if 'Data de contato' in df_agendamentos.columns:
-                hj = len(df_agendamentos[df_agendamentos['Data de contato'] == hoje])
-                st.metric("📅 Hoje", hj)
-        with c4:
-            if 'Relato da conversa' in df_agendamentos.columns:
-                rel = len(df_agendamentos[df_agendamentos['Relato da conversa'].notna() & (df_agendamentos['Relato da conversa'] != '')])
-                st.metric("✅ Com Relato", rel)
-        
-        st.markdown("---")
-        
-        # Filtros
-        cf1, cf2, cf3 = st.columns(3)
-        with cf1:
-            busca = st.text_input("Buscar:", "", key="busca_atend")
-        with cf2:
-            if 'Follow up' in df_agendamentos.columns:
-                status_opts = ['Todos'] + list(df_agendamentos['Follow up'].unique())
-                filtro_st = st.selectbox("Status:", status_opts)
-            else:
-                filtro_st = 'Todos'
-        with cf3:
-            if 'Classificação' in df_agendamentos.columns:
-                class_opts = ['Todos'] + list(df_agendamentos['Classificação'].unique())
-                filtro_cl = st.selectbox("Classificação:", class_opts)
-            else:
-                filtro_cl = 'Todos'
-        
-        df_filt = df_agendamentos.copy()
-        if busca and 'Nome' in df_filt.columns:
-            df_filt = df_filt[df_filt['Nome'].str.contains(busca, case=False, na=False)]
-        if filtro_st != 'Todos' and 'Follow up' in df_filt.columns:
-            df_filt = df_filt[df_filt['Follow up'] == filtro_st]
-        if filtro_cl != 'Todos' and 'Classificação' in df_filt.columns:
-            df_filt = df_filt[df_filt['Classificação'] == filtro_cl]
-        
-        st.markdown("---")
-        st.subheader(f"📋 Agendamentos ({len(df_filt)})")
-        
-        if df_filt.empty:
-            st.info("Nenhum agendamento encontrado")
+        return
+    
+    # Métricas
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.metric("📊 Total", len(df_agendamentos))
+    with c2:
+        if 'Follow up' in df_agendamentos.columns:
+            pend = len(df_agendamentos[df_agendamentos['Follow up'] == 'Pendente'])
+            st.metric("⏳ Pendentes", pend)
+    with c3:
+        hoje = datetime.now().strftime('%d/%m/%Y')
+        if 'Data de contato' in df_agendamentos.columns:
+            hj = len(df_agendamentos[df_agendamentos['Data de contato'] == hoje])
+            st.metric("📅 Hoje", hj)
+    with c4:
+        if 'Relato da conversa' in df_agendamentos.columns:
+            rel = len(df_agendamentos[df_agendamentos['Relato da conversa'].notna() & (df_agendamentos['Relato da conversa'] != '')])
+            st.metric("✅ Com Relato", rel)
+    
+    st.markdown("---")
+    
+    # Filtros
+    cf1, cf2, cf3 = st.columns(3)
+    with cf1:
+        busca = st.text_input("Buscar:", "", key="busca_atend")
+    with cf2:
+        if 'Follow up' in df_agendamentos.columns:
+            status_opts = ['Todos'] + list(df_agendamentos['Follow up'].unique())
+            filtro_st = st.selectbox("Status:", status_opts)
         else:
-            for idx, agend in df_filt.iterrows():
-                with st.expander(f"👤 {agend.get('Nome', 'N/D')} - {agend.get('Classificação', 'N/D')}", expanded=False):
-                    ce, cd = st.columns([1, 1])
-                    
-                    with ce:
-                        st.markdown("### 📊 Informações")
-                        st.write(f"**👤 Nome:** {agend.get('Nome', 'N/D')}")
-                        st.write(f"**📱 Telefone:** {agend.get('Telefone', 'N/D')}")
-                        st.write(f"**🏷️ Classificação:** {agend.get('Classificação', 'N/D')}")
-                        
-                        val = agend.get('Valor', 0)
-                        if pd.notna(val) and val != '':
-                            try:
-                                st.write(f"**💰 Valor:** R$ {float(val):,.2f}")
-                            except:
-                                st.write(f"**💰 Valor:** {val}")
-                        else:
-                            st.write("**💰 Valor:** R$ 0,00")
-                        
-                        st.write(f"**📅 Check-in:** {agend.get('Data de contato', 'N/D')}")
-                        st.markdown("---")
-                        st.markdown("### 📝 Histórico")
-                        
-                        rel_at = agend.get('Relato da conversa', '')
-                        if rel_at:
-                            st.info(f"**Relato:** {rel_at}")
-                        else:
-                            st.caption("_Sem relato_")
-                        
-                        fol_at = agend.get('Follow up', '')
-                        if fol_at:
-                            st.info(f"**Follow-up:** {fol_at}")
-                        else:
-                            st.caption("_Sem follow-up_")
-                        
-                        dat_at = agend.get('Data de chamada', '')
-                        if dat_at:
-                            st.info(f"**Data:** {dat_at}")
-                        else:
-                            st.caption("_Sem data_")
-                        
-                        obs_at = agend.get('Observação', '')
-                        if obs_at:
-                            st.info(f"**Obs:** {obs_at}")
-                    
-                    with cd:
-                        st.markdown("### ✏️ Atualizar")
-                        
-                        with st.form(key=f"form_{idx}"):
-                            n_relato = st.text_area("📝 Relato:", value=rel_at if rel_at else "", height=100, placeholder="Descreva a conversa...")
-                            n_follow = st.text_input("🎯 Follow-up:", value=fol_at if fol_at else "", placeholder="Motivo do próximo contato...")
-                            n_data = st.date_input("📅 Data:", value=None)
-                            n_obs = st.text_area("💬 Observações:", value=obs_at if obs_at else "", height=80, placeholder="Informações extras...")
-                            
-                            st.markdown("---")
-                            cb1, cb2 = st.columns(2)
-                            
-                            with cb1:
-                                btn_salv = st.form_submit_button("💾 Salvar", type="primary", use_container_width=True)
-                            with cb2:
-                                btn_fin = st.form_submit_button("✅ Finalizar", use_container_width=True)
-                            
-                            if btn_salv:
-                                if not n_relato and not n_follow:
-                                    st.warning("⚠️ Preencha ao menos Relato ou Follow-up")
-                                else:
-                                    with st.spinner("Salvando..."):
-                                        dados_upd = {
-                                            'Relato da conversa': n_relato,
-                                            'Follow up': n_follow,
-                                            'Data de chamada': n_data.strftime('%d/%m/%Y') if n_data else '',
-                                            'Observação': n_obs
-                                        }
-                                        if atualizar_agendamento(idx, dados_upd):
-                                            st.cache_data.clear()
-                                            st.success("✅ Salvo com sucesso!")
-                                            st.balloons()
-                                            time.sleep(1.5)
-                                            st.rerun()
-                            
-                            if btn_fin:
-                                if not n_relato:
-                                    st.error("❌ Preencha o Relato antes de finalizar!")
-                                else:
-                                    with st.spinner("Finalizando..."):
-                                        dados_fin = agend.copy()
-                                        dados_fin['Relato da conversa'] = n_relato
-                                        dados_fin['Follow up'] = n_follow
-                                        dados_fin['Data de chamada'] = n_data.strftime('%d/%m/%Y') if n_data else ''
-                                        dados_fin['Observação'] = n_obs
-                                        
-                                        if finalizar_atendimento(idx, dados_fin):
-                                            st.cache_data.clear()
-                                            st.success("✅ Finalizado e movido para histórico!")
-                                            st.balloons()
-                                            time.sleep(2)
-                                            st.rerun()
+            filtro_st = 'Todos'
+    with cf3:
+        if 'Classificação' in df_agendamentos.columns:
+            class_opts = ['Todos'] + list(df_agendamentos['Classificação'].unique())
+            filtro_cl = st.selectbox("Classificação:", class_opts)
+        else:
+            filtro_cl = 'Todos'
+    
+    # Aplicar filtros
+    df_filt = df_agendamentos.copy()
+    if busca and 'Nome' in df_filt.columns:
+        df_filt = df_filt[df_filt['Nome'].str.contains(busca, case=False, na=False)]
+    if filtro_st != 'Todos' and 'Follow up' in df_filt.columns:
+        df_filt = df_filt[df_filt['Follow up'] == filtro_st]
+    if filtro_cl != 'Todos' and 'Classificação' in df_filt.columns:
+        df_filt = df_filt[df_filt['Classificação'] == filtro_cl]
+    
+    st.markdown("---")
+    st.subheader(f"📋 Agendamentos ({len(df_filt)})")
+    
+    if df_filt.empty:
+        st.info("Nenhum agendamento encontrado")
+        return
+    
+    # Cards de agendamentos
+    for idx, agend in df_filt.iterrows():
+        with st.expander(f"👤 {agend.get('Nome', 'N/D')} - {agend.get('Classificação', 'N/D')}", expanded=False):
+            ce, cd = st.columns([1, 1])
+            
+            # Coluna esquerda - Informações
+            with ce:
+                st.markdown("### 📊 Informações")
+                st.write(f"**👤 Nome:** {agend.get('Nome', 'N/D')}")
+                st.write(f"**📱 Telefone:** {agend.get('Telefone', 'N/D')}")
+                st.write(f"**🏷️ Classificação:** {agend.get('Classificação', 'N/D')}")
                 
+                val = agend.get('Valor', 0)
+                if pd.notna(val) and val != '':
+                    try:
+                        st.write(f"**💰 Valor:** R$ {float(val):,.2f}")
+                    except:
+                        st.write(f"**💰 Valor:** {val}")
+                else:
+                    st.write("**💰 Valor:** R$ 0,00")
+                
+                st.write(f"**📅 Check-in:** {agend.get('Data de contato', 'N/D')}")
                 st.markdown("---")
+                st.markdown("### 📝 Histórico")
+                
+                rel_at = agend.get('Relato da conversa', '')
+                if rel_at:
+                    st.info(f"**Relato:** {rel_at}")
+                else:
+                    st.caption("_Sem relato_")
+                
+                fol_at = agend.get('Follow up', '')
+                if fol_at:
+                    st.info(f"**Follow-up:** {fol_at}")
+                else:
+                    st.caption("_Sem follow-up_")
+                
+                dat_at = agend.get('Data de chamada', '')
+                if dat_at:
+                    st.info(f"**Data:** {dat_at}")
+                else:
+                    st.caption("_Sem data_")
+                
+                obs_at = agend.get('Observação', '')
+                if obs_at:
+                    st.info(f"**Obs:** {obs_at}")
+            
+            # Coluna direita - Formulário
+            with cd:
+                st.markdown("### ✏️ Atualizar")
+                
+                with st.form(key=f"form_{idx}"):
+                    n_relato = st.text_area("📝 Relato:", value=rel_at if rel_at else "", height=100, placeholder="Descreva a conversa...")
+                    n_follow = st.text_input("🎯 Follow-up:", value=fol_at if fol_at else "", placeholder="Motivo do próximo contato...")
+                    n_data = st.date_input("📅 Data:", value=None)
+                    n_obs = st.text_area("💬 Observações:", value=obs_at if obs_at else "", height=80, placeholder="Informações extras...")
+                    
+                    st.markdown("---")
+                    cb1, cb2 = st.columns(2)
+                    
+                    with cb1:
+                        btn_salv = st.form_submit_button("💾 Salvar", type="primary", use_container_width=True)
+                    with cb2:
+                        btn_fin = st.form_submit_button("✅ Finalizar", use_container_width=True)
+                    
+                    if btn_salv:
+                        if not n_relato and not n_follow:
+                            st.warning("⚠️ Preencha ao menos Relato ou Follow-up")
+                        else:
+                            with st.spinner("Salvando..."):
+                                dados_upd = {
+                                    'Relato da conversa': n_relato,
+                                    'Follow up': n_follow,
+                                    'Data de chamada': n_data.strftime('%d/%m/%Y') if n_data else '',
+                                    'Observação': n_obs
+                                }
+                                if atualizar_agendamento(idx, dados_upd):
+                                    st.cache_data.clear()
+                                    st.success("✅ Salvo!")
+                                    st.balloons()
+                                    time.sleep(1.5)
+                                    st.rerun()
+                    
+                    if btn_fin:
+                        if not n_relato:
+                            st.error("❌ Preencha o Relato antes de finalizar!")
+                        else:
+                            with st.spinner("Finalizando..."):
+                                dados_fin = agend.copy()
+                                dados_fin['Relato da conversa'] = n_relato
+                                dados_fin['Follow up'] = n_follow
+                                dados_fin['Data de chamada'] = n_data.strftime('%d/%m/%Y') if n_data else ''
+                                dados_fin['Observação'] = n_obs
+                                
+                                if finalizar_atendimento(idx, dados_fin):
+                                    st.cache_data.clear()
+                                    st.success("✅ Finalizado!")
+                                    st.balloons()
+                                    time.sleep(2)
+                                    st.rerun()
+        
+        st.markdown("---")
 
 # ============================================================================
-# OUTRAS PÁGINAS
+# RENDER - PÁGINA SUPORTE
 # ============================================================================
 
-elif pagina == "🆘 Suporte":
+def render_suporte():
+    """Renderiza a página de Suporte"""
     st.title("🆘 Suporte")
-    st.info("Em breve")
+    st.info("Esta página será implementada em breve")
 
-elif pagina == "📜 Histórico":
+# ============================================================================
+# RENDER - PÁGINA HISTÓRICO
+# ============================================================================
+
+def render_historico():
+    """Renderiza a página de Histórico"""
     st.title("📜 Histórico")
-    st.info("Em breve")
+    st.info("Esta página será implementada em breve")
+
+# ============================================================================
+# SIDEBAR E NAVEGAÇÃO
+# ============================================================================
+
+with st.sidebar:
+    st.title("📋 Menu Principal")
+    st.markdown("---")
+    pagina = st.radio(
+        "Navegação:",
+        ["✅ Check-in", "📞 Em Atendimento", "🆘 Suporte", "📜 Histórico"],
+        index=0
+    )
+    st.markdown("---")
+    st.caption("CRM Pós-Vendas v1.0")
+
+# ============================================================================
+# ROUTER - CHAMADA DAS PÁGINAS
+# ============================================================================
+
+if pagina == "✅ Check-in":
+    render_checkin()
+elif pagina == "📞 Em Atendimento":
+    render_em_atendimento()
+elif pagina == "🆘 Suporte":
+    render_suporte()
+elif pagina == "📜 Histórico":
+    render_historico()
