@@ -239,16 +239,23 @@ def render_checkin():
         )
     
     with col_config2:
-        # Filtro de quantidade
-        limite_clientes = st.selectbox(
-            "📊 Quantidade de clientes:",
-            [10, 20, 50, 100, "Todos"],
-            index=0,
-            help="Quantos clientes carregar por vez"
-        )
+    # Vincular com o planejamento de metas
+    metas_por_classificacao = {
+        "Novo": meta_novo,
+        "Promissor": meta_promissor,
+        "Leal": meta_leal,
+        "Campeão": meta_campeao,
+        "Em risco": meta_risco,
+        "Dormente": meta_dormente
+    }
     
-    st.info(f"📊 Visualizando: **{classificacao_selecionada}** | Limite: **{limite_clientes}**")
-    st.markdown("---")
+    # Pegar limite baseado na meta definida
+    limite_clientes = metas_por_classificacao.get(classificacao_selecionada, 10)
+    
+    # Mostrar info de quantos serão carregados
+    st.info(f"📊 **{limite_clientes}** clientes da meta do dia")
+
+    
     
     # Carregar dados
     with st.spinner(f"Carregando clientes de '{classificacao_selecionada}'..."):
@@ -275,7 +282,9 @@ def render_checkin():
     
     # Aplicar limite de quantidade
     if limite_clientes != "Todos":
-        df_clientes = df_clientes.head(int(limite_clientes))
+        # Aplicar limite baseado na meta definida
+        df_clientes = df_clientes.head(limite_clientes)
+
     
     st.success(f"✅ {len(df_clientes)} clientes disponíveis para check-in")
     
