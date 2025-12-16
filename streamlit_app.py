@@ -12,6 +12,43 @@ import logging
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import gspread.exceptions
 
+def diagnostico_planilha():
+    """
+    Função de diagnóstico - mostra estrutura da planilha
+    REMOVER depois que funcionar
+    """
+    try:
+        client = get_gsheet_client()
+        sh = client.open(Config.SHEET_AGENDAMENTOS)
+        ws = sh.worksheet("AGENDAMENTOS ATIVOS")
+        
+        data = ws.get_all_values()
+        
+        if len(data) > 0:
+            headers = data[0]
+            st.sidebar.markdown("### 🔍 Diagnóstico da Planilha")
+            st.sidebar.write(f"**Total de linhas:** {len(data) - 1}")
+            
+            # Verificar coluna J
+            if "Tipo de atendimento" in headers:
+                idx_col_j = headers.index("Tipo de atendimento")
+                st.sidebar.success(f"✅ Coluna 'Tipo de atendimento' encontrada (coluna {idx_col_j + 1})")
+                
+                # Contar valores
+                df_temp = pd.DataFrame(data[1:], columns=headers)
+                valores_tipo = df_temp["Tipo de atendimento"].value_counts()
+                
+                st.sidebar.write("**Distribuição:**")
+                for tipo, qtd in valores_tipo.items():
+                    st.sidebar.write(f"- {tipo}: {qtd}")
+            else:
+                st.sidebar.error("❌ Coluna 'Tipo de atendimento' NÃO encontrada")
+                st.sidebar.write("**Colunas disponíveis:**")
+                st.sidebar.write(headers)
+                
+    except Exception as e:
+        st.sidebar.error(f"Erro no diagnóstico: {e}")
+
 # =========================================================
 # (0) 🔧 CONFIGURAÇÕES GLOBAIS
 # =========================================================
@@ -437,130 +474,146 @@ def load_historico():
 # Cache de 10 segundos (muda frequentemente)
 @st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)
 def load_agendamentos_hoje():
-    """Carrega agendamentos de HOJE (Experiência + vazios) - VERSÃO CORRIGIDA"""
+    """
+    Carrega agendamentos de HOJE (Experiência + Venda + vazios)
+    EXCLUI casos de Suporte
+    """
     try:
         client = get_gsheet_client()
         sh = client.open(Config.SHEET_AGENDAMENTOS)
-        ws = sh.worksheet("AGENDAMENTOS_ATIVOS")
-
-        # Pegar todos os dados
+        ws = sh.worksheet("AGENDAMENTOS ATIVOS")
+        
         data = ws.get_all_values()
-
+        
         if len(data) <= 1:
-            logger.info("⚠️ Planilha vazia")
+            logger.info("Planilha vazia")
             return pd.DataFrame()
-
-        # Criar DataFrame
+        
         headers = data[0]
         rows = data[1:]
         df = pd.DataFrame(rows, columns=headers)
-
-        logger.info(f"📊 Total de registros na base: {len(df)}")
-
-        # ✅ FILTRAR POR TIPO: Experiência, Venda e vazios (EXCLUI Suporte)
+        
+        logger.info(f"📋 Total de registros na base: {len(df)}")
+        
+         # ==========================================
+        # FILTRAR POR TIPO: Experiência, Venda e vazios (EXCLUI Suporte)
+        # ==========================================
         if "Tipo de atendimento" in df.columns:
-            # Pegar tudo que NÃO é "Suporte"
-            df = df[
-                (df["Tipo de atendimento"].str.lower().str.strip() != "suporte") &
-                (df["Tipo de atendimento"].str.lower().str.strip() != "")
+            # Criar coluna normalizada
+            df["_tipo_lower"] = df["Tipo de atendimento"].str.lower().str.strip()
+            
+            # FILTRAR: tudo que NÃO é "suporte"
+            df_filtrado = df[
+                (df["_tipo_lower"] != "suporte") &  # Excluir suporte
+                (df["_tipo_lower"].notna())          # Excluir nulos
             ].copy()
-
-            # ✅ ALTERNATIVA: Se quiser incluir vazios também, use:
-            # df = df[
-            #     (df["Tipo de atendimento"].str.lower().str.strip().isin(["experiência", "experiencia", "venda", ""])) |
-            #     (df["Tipo de atendimento"] == "")
-            # ].copy()
-
-            logger.info(f"📊 Após filtrar tipo (sem Suporte): {len(df)} registros")
-
+            
+            # Remover coluna auxiliar
+            df_filtrado = df_filtrado.drop(columns=["_tipo_lower"])
+            
+            logger.info(f"✅ Agendamentos (sem Suporte): {len(df_filtrado)} registros")
+            logger.info(f"   Tipos encontrados: {df['Tipo de atendimento'].unique().tolist()}")
+            
+            df = df_filtrado
+        else:
+            logger.error("❌ Coluna 'Tipo de atendimento' NÃO existe!")
+            logger.info(f"   Colunas disponíveis: {df.columns.tolist()}")
+            return pd.DataFrame()
+        
         # ✅ CONVERTER DATA usando "Data de chamada"
+        # ==========================================
+        # FILTRAR POR DATA DE HOJE
+        # ==========================================
         if "Data de chamada" in df.columns:
-            # Tentar formato YYYY/MM/DD primeiro
-            df['data_convertida'] = pd.to_datetime(df["Data de chamada"], format='%Y/%m/%d', errors='coerce')
-
-            # Se não funcionou, tentar DD/MM/YYYY
-            mascara_nulas = df['data_convertida'].isna()
+            # Converter data
+            df["data_convertida"] = pd.to_datetime(
+                df["Data de chamada"], 
+                format="%Y-%m-%d", 
+                errors="coerce"
+            )
+            
+            # Tentar formato DD/MM/YYYY se falhar
+            mascara_nulas = df["data_convertida"].isna()
             if mascara_nulas.any():
-                df.loc[mascara_nulas, 'data_convertida'] = pd.to_datetime(
-                    df.loc[mascara_nulas, "Data de chamada"], 
-                    format='%d/%m/%Y', 
-                    errors='coerce'
+                df.loc[mascara_nulas, "data_convertida"] = pd.to_datetime(
+                    df.loc[mascara_nulas, "Data de chamada"],
+                    format="%d/%m/%Y",
+                    errors="coerce"
                 )
-
-            # Data de hoje
+            
             hoje = datetime.now().date()
-
-            # Filtrar por hoje
-            df_hoje = df[df['data_convertida'].dt.date == hoje].copy()
-
+            df_hoje = df[df["data_convertida"].dt.date == hoje].copy()
+            
             if not df_hoje.empty:
                 df_hoje["Telefone_limpo"] = df_hoje["Telefone"].apply(limpar_telefone)
-                logger.info(f"✅ Agendamentos para HOJE ({hoje}): {len(df_hoje)}")
-
-                # ✅ DEBUG: Mostrar exemplos
-                logger.info(f"🔍 Exemplos: {df_hoje[['Nome', 'Telefone', 'Tipo de atendimento']].head(3).to_dict('records')}")
+                logger.info(f"📅 Agendamentos para HOJE ({hoje}): {len(df_hoje)}")
+                logger.info(f"   Exemplos: {df_hoje[['Nome', 'Telefone', 'Tipo de atendimento']].head(3).to_dict('records')}")
             else:
-                # Mostrar quais datas existem
-                datas_unicas = df['data_convertida'].dropna().dt.date.unique()
+                datas_unicas = df["data_convertida"].dropna().dt.date.unique()
                 logger.warning(f"⚠️ Nenhum agendamento para hoje ({hoje})")
                 if len(datas_unicas) > 0:
-                    logger.warning(f"⚠️ Datas na base: {sorted(datas_unicas)[:5]}")
-
+                    logger.warning(f"   Datas na base: {sorted(datas_unicas)[:5]}")
+            
             return df_hoje
         else:
             logger.error("❌ Coluna 'Data de chamada' não encontrada!")
             return pd.DataFrame()
-
+            
     except Exception as e:
-        logger.error(f"❌ Erro ao carregar agendamentos: {e}", exc_info=True)
+        logger.error(f"Erro ao carregar agendamentos: {e}", exc_info=True)
         return pd.DataFrame()
         
 @st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)
 def load_casos_suporte():
-    """Carrega APENAS casos de Suporte - VERSÃO CORRIGIDA"""
+    """
+    Carrega APENAS casos de Suporte da planilha Agendamentos Ativos
+    Filtra pela coluna J: "Tipo de atendimento" == "Suporte"
+    """
     try:
         client = get_gsheet_client()
         sh = client.open(Config.SHEET_AGENDAMENTOS)
-        ws = sh.worksheet("AGENDAMENTOS_ATIVOS")
-
-        # Pegar todos os dados
+        ws = sh.worksheet("AGENDAMENTOS ATIVOS")
+        
         data = ws.get_all_values()
-
+        
         if len(data) <= 1:
-            logger.info("⚠️ Planilha vazia")
+            logger.info("Planilha vazia")
             return pd.DataFrame()
-
-        # Criar DataFrame
+        
         headers = data[0]
         rows = data[1:]
         df = pd.DataFrame(rows, columns=headers)
-
-        logger.info(f"📊 Total de registros: {len(df)}")
+        
+        logger.info(f"📋 Total de registros: {len(df)}")
 
         # ✅ FILTRAR APENAS "Suporte"
         if "Tipo de atendimento" in df.columns:
-            df_suporte = df[
-                df["Tipo de atendimento"].str.lower().str.strip() == "suporte"
-            ].copy()
-
+            # Criar coluna normalizada
+            df["_tipo_lower"] = df["Tipo de atendimento"].str.lower().str.strip()
+            
+            # FILTRAR: apenas "suporte"
+            df_suporte = df[df["_tipo_lower"] == "suporte"].copy()
+            
+            # Remover coluna auxiliar
+            df_suporte = df_suporte.drop(columns=["_tipo_lower"])
+            
             logger.info(f"🛠️ Casos de SUPORTE: {len(df_suporte)}")
-
+            
             if not df_suporte.empty:
                 df_suporte["Telefone_limpo"] = df_suporte["Telefone"].apply(limpar_telefone)
-
-                # ✅ DEBUG
-                logger.info(f"🔍 Exemplos suporte: {df_suporte[['Nome', 'Telefone', 'Follow up']].head(3).to_dict('records')}")
+                logger.info(f"   Exemplos: {df_suporte[['Nome', 'Telefone', 'Follow up']].head(3).to_dict('records')}")
             else:
                 valores = df["Tipo de atendimento"].unique()
                 logger.warning(f"⚠️ Nenhum caso de suporte. Tipos na base: {valores}")
-
+            
             return df_suporte
         else:
-            logger.error("❌ Coluna 'Tipo de atendimento' não existe!")
+            logger.error("❌ Coluna 'Tipo de atendimento' NÃO existe!")
+            logger.info(f"   Colunas disponíveis: {df.columns.tolist()}")
             return pd.DataFrame()
-
+            
     except Exception as e:
-        logger.error(f"❌ Erro ao carregar suporte: {e}", exc_info=True)
+        logger.error(f"Erro ao carregar suporte: {e}", exc_info=True)
         return pd.DataFrame()
 
 
@@ -1296,14 +1349,9 @@ def diagnostico_planilha():
 def render_aba1(aba, df_dia, metas):
     """
     Renderiza a aba principal de Tarefas do Dia
-    Inclui: Dashboard de métricas + 3 modos de atendimento (Suporte, Agendamentos, Check-in)
-    VERSÃO OTIMIZADA - Elimina duplicações e melhora performance
     """
     with aba:
-        # ==========================================
-        # INICIALIZAÇÃO
-        # ==========================================
-        diagnostico_planilha()
+        diagnostico_planilha()  # ← ADICIONE ESTA LINHA
         st.markdown("---")
         
         if "card_counter" not in st.session_state:
