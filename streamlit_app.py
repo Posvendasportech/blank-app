@@ -111,45 +111,85 @@ def finalizar_atendimento(index, dados_completos):
 # RENDER - PÁGINA CHECK-IN
 # ============================================================================
 
+# ============================================================================
+# RENDER - PÁGINA CHECK-IN (VERSÃO OTIMIZADA)
+# ============================================================================
+
 def render_checkin():
-    """Renderiza a página de Check-in de clientes"""
+    """Renderiza a página de Check-in de clientes - Versão otimizada"""
     
     st.title("✅ Check-in de Clientes")
     st.markdown("Selecione clientes para iniciar o fluxo de atendimento")
     st.markdown("---")
     
-    # Seletor de classificação
-    classificacoes = ["Total", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
-    classificacao_selecionada = st.selectbox(
-        "📂 Escolha a classificação:",
-        classificacoes,
-        index=0
-    )
+    # Configurações de filtros
+    col_config1, col_config2 = st.columns([2, 1])
     
-    st.info(f"📊 Visualizando: **{classificacao_selecionada}**")
+    with col_config1:
+        # Seletor de classificação (SEM "Total")
+        classificacoes = ["Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
+        classificacao_selecionada = st.selectbox(
+            "📂 Escolha a classificação:",
+            classificacoes,
+            index=0,
+            help="Selecione o grupo de clientes que deseja visualizar"
+        )
+    
+    with col_config2:
+        # Filtro de quantidade
+        limite_clientes = st.selectbox(
+            "📊 Quantidade de clientes:",
+            [10, 20, 50, 100, "Todos"],
+            index=0,
+            help="Quantos clientes carregar por vez"
+        )
+    
+    st.info(f"📊 Visualizando: **{classificacao_selecionada}** | Limite: **{limite_clientes}**")
     st.markdown("---")
     
     # Carregar dados
-    with st.spinner(f"Carregando clientes..."):
+    with st.spinner(f"Carregando clientes de '{classificacao_selecionada}'..."):
         df_clientes = carregar_dados(classificacao_selecionada)
+        df_agendamentos_ativos = carregar_dados("AGENDAMENTOS_ATIVOS")
     
     if df_clientes.empty:
-        st.warning(f"⚠️ Nenhum cliente encontrado")
+        st.warning(f"⚠️ Nenhum cliente encontrado na classificação '{classificacao_selecionada}'")
         return
     
-    st.success(f"✅ {len(df_clientes)} clientes encontrados")
+    # Remover clientes que já estão em agendamentos ativos
+    if not df_agendamentos_ativos.empty and 'Nome' in df_agendamentos_ativos.columns:
+        clientes_em_atendimento = df_agendamentos_ativos['Nome'].tolist()
+        df_clientes_original = df_clientes.copy()
+        df_clientes = df_clientes[~df_clientes['Nome'].isin(clientes_em_atendimento)]
+        
+        clientes_removidos = len(df_clientes_original) - len(df_clientes)
+        if clientes_removidos > 0:
+            st.warning(f"⚠️ {clientes_removidos} cliente(s) já estão em atendimento ativo e foram removidos da lista")
+    
+    if df_clientes.empty:
+        st.info("✅ Todos os clientes desta classificação já estão em atendimento!")
+        return
+    
+    # Aplicar limite de quantidade
+    if limite_clientes != "Todos":
+        df_clientes = df_clientes.head(int(limite_clientes))
+    
+    st.success(f"✅ {len(df_clientes)} clientes disponíveis para check-in")
     
     # Debug
-    with st.expander("🔍 Debug"):
-        st.write("Colunas:", df_clientes.columns.tolist())
-        st.dataframe(df_clientes.head(3))
+    with st.expander("🔍 Debug - Dados carregados"):
+        st.write("**Colunas disponíveis:**", df_clientes.columns.tolist())
+        st.dataframe(df_clientes.head(3), use_container_width=True)
     
     st.markdown("---")
     
-    # Filtros
+    # Filtros adicionais
+    st.subheader("🔍 Filtros Adicionais")
     col_f1, col_f2 = st.columns(2)
+    
     with col_f1:
-        busca_nome = st.text_input("Buscar por nome:", "")
+        busca_nome = st.text_input("Buscar por nome:", "", placeholder="Digite o nome do cliente...")
+    
     with col_f2:
         if 'Dias desde a compra' in df_clientes.columns:
             dias_min = 0
@@ -166,35 +206,61 @@ def render_checkin():
         df_filtrado = df_filtrado[(df_filtrado['Dias desde a compra'] >= filtro_dias[0]) & (df_filtrado['Dias desde a compra'] <= filtro_dias[1])]
     
     st.markdown("---")
-    st.subheader(f"📋 Clientes ({len(df_filtrado)})")
+    st.subheader(f"📋 Clientes para Check-in ({len(df_filtrado)})")
     
     if df_filtrado.empty:
         st.info("Nenhum cliente encontrado com os filtros aplicados")
         return
     
-    # Cards de clientes
+    # Cards de clientes - Estilo otimizado com expander
     for index, cliente in df_filtrado.iterrows():
-        with st.container():
-            col_info, col_metricas, col_acao = st.columns([2, 3, 1])
+        
+        # Título do card com informações principais
+        nome_cliente = cliente.get('Nome', 'Nome não disponível')
+        valor_cliente = cliente.get('Valor', 0)
+        
+        # Formatação do valor
+        if pd.notna(valor_cliente) and valor_cliente != '':
+            try:
+                valor_formatado = f"R$ {float(valor_cliente):,.2f}"
+            except:
+                valor_formatado = "R$ 0,00"
+        else:
+            valor_formatado = "R$ 0,00"
+        
+        # Card expansível com tema azul
+        with st.expander(
+            f"👤 {nome_cliente} | 💰 {valor_formatado} | 🏷️ {classificacao_selecionada}",
+            expanded=False
+        ):
+            # Dividir em 2 colunas
+            col_info, col_form = st.columns([1, 1])
             
+            # ========== COLUNA ESQUERDA: INFORMAÇÕES DO CLIENTE ==========
             with col_info:
-                st.markdown(f"### 👤 {cliente.get('Nome', 'N/D')}")
-                st.caption(f"📧 {cliente.get('Email', 'N/D')}")
-                st.caption(f"📱 {cliente.get('Telefone', 'N/D')}")
-            
-            with col_metricas:
-                m1, m2, m3 = st.columns(3)
-                with m1:
-                    valor = cliente.get('Valor', 0)
-                    if pd.notna(valor) and valor != '':
-                        try:
-                            st.metric("💰 Total", f"R$ {float(valor):,.2f}")
-                        except:
-                            st.metric("💰 Total", "R$ 0,00")
-                    else:
-                        st.metric("💰 Total", "R$ 0,00")
+                st.markdown("### 📊 Informações do Cliente")
                 
-                with m2:
+                # Dados principais
+                st.write(f"**👤 Nome Completo:** {nome_cliente}")
+                st.write(f"**📧 E-mail:** {cliente.get('Email', 'N/D')}")
+                st.write(f"**📱 Telefone:** {cliente.get('Telefone', 'N/D')}")
+                st.write(f"**🏷️ Classificação:** {classificacao_selecionada}")
+                
+                st.markdown("---")
+                
+                # Métricas em mini cards
+                st.markdown("### 📈 Histórico de Compras")
+                
+                met1, met2, met3 = st.columns(3)
+                
+                with met1:
+                    st.metric(
+                        label="💰 Gasto Total",
+                        value=valor_formatado,
+                        help="Valor total gasto pelo cliente"
+                    )
+                
+                with met2:
                     if 'Compras' in df_filtrado.columns:
                         compras = cliente.get('Compras', 0)
                         if pd.notna(compras) and compras != '':
@@ -207,12 +273,13 @@ def render_checkin():
                     else:
                         st.metric("🛒 Compras", "N/D")
                 
-                with m3:
+                with met3:
                     if 'Dias desde a compra' in df_filtrado.columns:
                         dias = cliente.get('Dias desde a compra', 0)
                         if pd.notna(dias) and dias != '':
                             try:
-                                st.metric("📅 Dias", int(round(float(dias))))
+                                dias_int = int(round(float(dias)))
+                                st.metric("📅 Dias", dias_int, help="Dias desde a última compra")
                             except:
                                 st.metric("📅 Dias", "0")
                         else:
@@ -220,21 +287,95 @@ def render_checkin():
                     else:
                         st.metric("📅 Dias", "N/D")
             
-            with col_acao:
-                st.write("")
-                st.write("")
-                if st.button("✅ Check-in", key=f"btn_{index}", type="primary", use_container_width=True):
-                    with st.spinner('Processando...'):
-                        if adicionar_agendamento(cliente, classificacao_selecionada):
-                            st.cache_data.clear()
-                            st.success(f"✅ Check-in realizado!")
-                            st.balloons()
-                            time.sleep(2)
-                            st.rerun()
+            # ========== COLUNA DIREITA: FORMULÁRIO DE CHECK-IN ==========
+            with col_form:
+                st.markdown("### ✏️ Registrar Check-in")
+                
+                # Formulário de check-in
+                with st.form(key=f"form_checkin_{index}"):
+                    
+                    st.info("💡 Preencha as informações do primeiro contato com o cliente")
+                    
+                    # Campo: Primeira conversa
+                    primeira_conversa = st.text_area(
+                        "📝 Como foi a primeira conversa?",
+                        height=120,
+                        help="Registre os principais pontos da conversa inicial",
+                        placeholder="Ex: Cliente demonstrou interesse em produtos premium. Mencionou necessidade de entrega rápida..."
+                    )
+                    
+                    # Campo: Motivo do próximo contato
+                    proximo_contato = st.text_input(
+                        "🎯 Qual o motivo do próximo contato?",
+                        help="Defina o objetivo do próximo follow-up",
+                        placeholder="Ex: Enviar catálogo de produtos, Confirmar orçamento..."
+                    )
+                    
+                    # Campo: Data do próximo contato
+                    data_proximo = st.date_input(
+                        "📅 Data do próximo contato:",
+                        value=None,
+                        help="Quando será o próximo follow-up?"
+                    )
+                    
+                    # Campo: Observações adicionais
+                    observacoes = st.text_area(
+                        "💬 Observações adicionais:",
+                        height=80,
+                        placeholder="Informações extras relevantes sobre o cliente..."
+                    )
+                    
+                    st.markdown("---")
+                    
+                    # Botão de check-in
+                    btn_checkin = st.form_submit_button(
+                        "✅ Realizar Check-in",
+                        type="primary",
+                        use_container_width=True
+                    )
+                    
+                    # Ação do botão
+                    if btn_checkin:
+                        # Validação
+                        if not primeira_conversa:
+                            st.error("❌ Preencha como foi a primeira conversa antes de continuar!")
+                        elif not proximo_contato:
+                            st.error("❌ Defina o motivo do próximo contato!")
                         else:
-                            st.error("❌ Erro ao realizar check-in")
-            
-            st.markdown("---")
+                            with st.spinner('Processando check-in...'):
+                                # Preparar dados para agendamento
+                                try:
+                                    conn = st.connection("gsheets", type=GSheetsConnection)
+                                    df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
+                                    
+                                    nova_linha = {
+                                        'Data de contato': datetime.now().strftime('%d/%m/%Y'),
+                                        'Nome': cliente.get('Nome', ''),
+                                        'Classificação': classificacao_selecionada,
+                                        'Valor': cliente.get('Valor', ''),
+                                        'Telefone': cliente.get('Telefone', ''),
+                                        'Relato da conversa': primeira_conversa,
+                                        'Follow up': proximo_contato,
+                                        'Data de chamada': data_proximo.strftime('%d/%m/%Y') if data_proximo else '',
+                                        'Observação': observacoes if observacoes else 'Check-in realizado via CRM'
+                                    }
+                                    
+                                    df_nova_linha = pd.DataFrame([nova_linha])
+                                    df_atualizado = pd.concat([df_agendamentos, df_nova_linha], ignore_index=True)
+                                    conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_atualizado)
+                                    
+                                    st.cache_data.clear()
+                                    st.success(f"✅ Check-in realizado com sucesso para **{nome_cliente}**!")
+                                    st.balloons()
+                                    time.sleep(2)
+                                    st.rerun()
+                                    
+                                except Exception as e:
+                                    st.error(f"❌ Erro ao realizar check-in: {e}")
+        
+        # Separador entre cards
+        st.markdown("---")
+
 
 # ============================================================================
 # RENDER - PÁGINA EM ATENDIMENTO
