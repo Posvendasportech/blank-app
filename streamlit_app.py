@@ -18,7 +18,12 @@ st.markdown("### Sistema de Gestão de Relacionamento com Clientes")
 @st.cache_data(ttl=300)  # Cache de 5 minutos
 def load_data():
     conn = st.connection("gsheets", type=GSheetsConnection)
-    df = conn.read(worksheet="Total", ttl=300)
+    # Especificar o spreadsheet ID da sua planilha
+    df = conn.read(
+        spreadsheet="1JEoG2HsPyrMAQ6NrNpOSmFrkiRseY1gsxEWnf-zDuu8",
+        worksheet="Total",
+        ttl=300
+    )
     return df
 
 # Carregar dados
