@@ -830,122 +830,124 @@ def agendamento_card(id_fix, row):
 
 
 
-def card_suporte(id_fix, row, usuario_atual):
-    """Card de SUPORTE - USA 'Nome'"""
-
+def card_suporte(idfix, row, usuario_atual):
+    """
+    Card de SUPORTE - Versão Robusta com Fallbacks
+    """
     telefone = str(row.get("Telefone", ""))
-    nome = row.get("Nome") or row.get("Cliente", "—")
-
-    # Sistema de lock
-    lock_key = f"lock_criado_{id_fix}"
-    if lock_key not in st.session_state:
-        df_locks = load_em_atendimento()
+    nome = row.get("Nome") or row.get("Cliente", "Cliente sem nome")
+    
+    lockkey = f"lock_criado_{idfix}"
+    
+    if lockkey not in st.session_state:
+        dflocks = load_em_atendimento()
         telefone_limpo = limpar_telefone(telefone)
-
-        lock_existente = df_locks[
-            (df_locks["Telefone"].astype(str) == str(telefone)) | 
-            (df_locks["Telefone"].apply(limpar_telefone) == telefone_limpo)
+        
+        lock_existente = dflocks[
+            (dflocks["Telefone"].astype(str) == str(telefone)) |
+            (dflocks["Telefone"].apply(limpar_telefone) == telefone_limpo)
         ]
-
+        
         if not lock_existente.empty:
             usuario_lock = lock_existente.iloc[0]["Usuario"]
             if usuario_lock != usuario_atual:
-                st.warning(f"⚠️ Este caso está sendo atendido por **{usuario_lock}**")
+                st.warning(f"⚠️ Este caso está sendo atendido por {usuario_lock}")
                 return None, "", "", None, ""
-
+        
         criar_lock(telefone, usuario_atual, nome)
-        st.session_state[lock_key] = True
-
+        st.session_state[lockkey] = True
+    
     with st.container():
         st.markdown("""
-            <style>
-            .card-suporte {
-                background: linear-gradient(135deg, #8B0000, #DC143C);
-                border: 2px solid #FF6347;
-                border-radius: 16px;
-                padding: 18px;
-                color: white;
-                box-shadow: 0 8px 24px rgba(220, 20, 60, 0.3);
-                margin-bottom: 18px;
-            }
-            </style>
+        <style>
+        .card-suporte {
+            background: linear-gradient(135deg, #8B0000, #DC143C);
+            border: 2px solid #FF6347;
+            border-radius: 16px;
+            padding: 18px;
+            color: white;
+            box-shadow: 0 8px 24px rgba(220, 20, 60, 0.3);
+            margin-bottom: 18px;
+        }
+        </style>
         """, unsafe_allow_html=True)
-
+        
         st.markdown('<div class="card-suporte">', unsafe_allow_html=True)
-
-        # Header
-        valor_gasto = safe_valor(row.get("Valor", "—"))
+        
+        # ✅ USAR .get() COM FALLBACKS PARA EVITAR ERROS
+        valor_gasto = safe_valor(row.get("Valor"))
         followup = row.get("Follow up", "")
         relato = row.get("Relato da conversa", "")
-
+        classificacao = row.get("Classificação", "Sem classificação")
+        dias_num = row.get("Dias_num", "")
+        
+        # Construir cabeçalho com dados disponíveis
         header_html = f"""
-            <div style="background: rgba(0,0,0,0.3); padding: 14px; border-radius: 12px; margin-bottom: 14px;">
-                <b style="font-size:18px;">🛠️ SUPORTE - {nome}</b><br>
-                📱 {row.get('Telefone', '—')}<br>
-                💰 {valor_gasto}<br>
+        <div style="background: rgba(0,0,0,0.3); padding: 14px; border-radius: 12px; margin-bottom: 14px;">
+            <b style="font-size:18px;">🛠️ SUPORTE - {nome}</b><br>
+            {telefone}<br>
+            {classificacao}<br>
+            {valor_gasto}
         """
-
+        
+        if dias_num:
+            header_html += f"<br>{dias_num} dias desde última compra"
+        
         if followup and str(followup).strip():
-            header_html += f"""
-                <br><b style="color:#FFD700;">⚠️ Problema reportado:</b><br>
-                <i style="color:#FFA07A;">{followup}</i>
-            """
-
+            header_html += f'<br><br><b style="color:#FFD700;">⚠️ Problema reportado:</b><br><i style="color:#FFA07A;">{followup}</i>'
+        
         if relato and str(relato).strip():
-            header_html += f"""
-                <br><br><b style="color:#FFD700;">💬 Relato anterior:</b><br>
-                <i style="color:#FFA07A;">{relato}</i>
-            """
-
+            header_html += f'<br><br><b style="color:#FFD700;">💬 Relato anterior:</b><br><i style="color:#FFA07A;">{relato}</i>'
+        
         header_html += "</div>"
+        
         st.markdown(header_html, unsafe_allow_html=True)
-
+        
         # Formulário
-        with st.form(key=f"form_suporte_{id_fix}", clear_on_submit=False):
-            vendedor = st.selectbox("Responsável", Config.VENDEDORES, key=f"vend_sup_{id_fix}")
-
+        with st.form(key=f"form_suporte_{idfix}", clear_on_submit=False):
+            vendedor = st.selectbox("Responsável", Config.VENDEDORES, key=f"vend_sup_{idfix}")
+            
             status = st.selectbox(
                 "Status do problema",
                 ["Aguardando fornecedor", "Em análise", "Resolvido", "Escalado"],
-                key=f"status_{id_fix}"
+                key=f"status_{idfix}"
             )
-
+            
             resumo = st.text_area(
                 "Atualização do caso",
-                key=f"res_sup_{id_fix}",
+                key=f"res_sup_{idfix}",
                 height=100,
                 placeholder="Descreva o andamento..."
             )
-
+            
             if status != "Resolvido":
-                proxima = st.date_input("Próximo acompanhamento", key=f"dt_sup_{id_fix}")
-                motivo = f"[{status}] Acompanhamento de suporte"
+                proxima = st.date_input("Próximo acompanhamento", key=f"dt_sup_{idfix}")
+                motivo = f"{status} - Acompanhamento de suporte"
             else:
                 proxima = None
-                motivo = "[Resolvido] Caso encerrado"
+                motivo = "Resolvido - Caso encerrado"
                 st.success("✅ Caso será marcado como resolvido")
-
+            
             col1, col2 = st.columns(2)
-
             concluir = col1.form_submit_button("✅ Atualizar", use_container_width=True)
-            pular = col2.form_submit_button("⏭ Pular", use_container_width=True)
-
-            acao = None
-
-            if concluir:
-                if not resumo.strip():
-                    st.error("⚠️ Descreva a atualização")
-                else:
-                    acao = "concluir"
-                    remover_lock(telefone)
-
-            if pular:
-                acao = "pular"
+            pular = col2.form_submit_button("⏭️ Pular", use_container_width=True)
+        
+        acao = None
+        if concluir:
+            if not resumo.strip():
+                st.error("❌ Descreva a atualização")
+            else:
+                acao = "concluir"
                 remover_lock(telefone)
-
-        st.markdown("</div>", unsafe_allow_html=True)
-
+        
+        if pular:
+            acao = "pular"
+            remover_lock(telefone)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+    
     return acao, motivo, resumo, proxima, vendedor
+
 
 # =========================================================
 # (6) 🧾 AÇÕES — SALVAR, REMOVER, REGISTRAR
@@ -1570,70 +1572,103 @@ def render_aba1(aba, df_dia, metas):
         # ==========================================
         # PROCESSAR DADOS DO MODO SELECIONADO
         # ==========================================
-        if modo == "🛠️ Acompanhamento de Suporte":
-            titulo = "## 🛠️ Casos de Suporte Prioritários"
-            descricao = "📌 Problemas e reclamações que precisam de acompanhamento até resolução completa"
-            msg_vazio = "✅ Nenhum caso de suporte pendente no momento!"
-            dica_vazio = "💡 Quando houver problemas reportados pelos clientes, eles aparecerão aqui automaticamente"
-            df_trabalho = df_suporte.copy()
-            prefixo_card = "suporte"
-            usar_card_suporte = True
-            tipo_atendimento_padrao = "Suporte"
-            
-        elif modo == "📅 Agendamentos Ativos":
-            titulo = "## 📅 Agendamentos Programados para Hoje"
-            descricao = "📌 Contatos que você agendou previamente para serem feitos hoje"
-            msg_vazio = "✅ Nenhum agendamento para hoje!"
-            dica_vazio = "💡 Use a aba 'Histórico/Pesquisa' para criar novos agendamentos"
-            df_trabalho = df_ag_hoje.copy()
-            prefixo_card = "agend"
-            usar_card_suporte = False
-            tipo_atendimento_padrao = "Experiência"
-            
-        else:  # Check-in de Clientes
-            titulo = "## 📞 Check-in de Clientes da Base"
-            descricao = "📌 Novos clientes e clientes em risco que precisam de contato proativo"
-            msg_vazio = "✅ Nenhum check-in programado para hoje!"
-            dica_vazio = "💡 A lista é atualizada automaticamente com base nas regras de classificação"
-            df_trabalho = df_dia.copy()
-            prefixo_card = "checkin"
-            usar_card_suporte = False
-            tipo_atendimento_padrao = "Experiência"
+# ==========================================
+# PROCESSAR DADOS DO MODO SELECIONADO
+# ==========================================
+if modo == "🛠️ Acompanhamento de Suporte":
+    st.markdown("## 🛠️ Casos de Suporte Prioritários")
+    st.info("📌 Problemas e reclamações que precisam de acompanhamento até resolução completa")
+    
+    if df_suporte.empty:
+        st.success("✅ Nenhum caso de suporte pendente no momento!")
+        st.info("💡 Quando houver problemas reportados pelos clientes, eles aparecerão aqui automaticamente")
+    else:
+        # ✅ ENRIQUECER APENAS OS CASOS DE SUPORTE (NÃO TODA A BASE)
+        df_suporte_enriquecido = enriquecer_com_base(df_suporte.copy(), df_base_completa)
         
-        # ==========================================
-        # RENDERIZAR MODO SELECIONADO (LÓGICA UNIFICADA)
-        # ==========================================
-        st.markdown(titulo)
-        st.info(descricao)
+        # Filtrar apenas pendentes
+        df_suporte_pendente = df_suporte_enriquecido[
+            ~df_suporte_enriquecido["Telefone"].astype(str).isin(st.session_state["concluidos"]) &
+            ~df_suporte_enriquecido["Telefone"].astype(str).isin(st.session_state["pulados"])
+        ]
         
-        if df_trabalho.empty:
-            st.success(msg_vazio)
-            st.info(dica_vazio)
+        if df_suporte_pendente.empty:
+            st.success("🎉 Todos os casos de suporte foram atendidos!")
+            st.info(f"✅ {len(df_suporte)} caso(s) resolvido(s) hoje")
         else:
-            # ✅ ENRIQUECER COM DADOS DA BASE (JOIN UMA VEZ)
-            df_trabalho = enriquecer_com_base(df_trabalho, df_base_completa)
+            # ✅ CONTAGEM CORRETA (só os 3 casos pendentes)
+            st.warning(f"⚠️ **{len(df_suporte_pendente)} caso(s) aguardando resolução**")
+            st.markdown("---")
             
-            # Filtrar apenas pendentes
-            df_pendente = df_trabalho[
-                ~df_trabalho["Telefone"].astype(str).isin(st.session_state["concluidos"]) &
-                ~df_trabalho["Telefone"].astype(str).isin(st.session_state["pulados"])
-            ]
+            # Renderizar cards
+            renderizar_cards_modo(
+                df_suporte_pendente, 
+                "suporte", 
+                True,  # usar_card_suporte
+                usuario_atual,
+                "Suporte"
+            )
+
+elif modo == "📅 Agendamentos Ativos":
+    st.markdown("## 📅 Agendamentos Programados para Hoje")
+    st.info("📌 Contatos que você agendou previamente para serem feitos hoje")
+    
+    if df_ag_hoje.empty:
+        st.success("✅ Nenhum agendamento para hoje!")
+        st.info("💡 Use a aba 'Histórico/Pesquisa' para criar novos agendamentos")
+    else:
+        # Enriquecer
+        df_ag_enriquecido = enriquecer_com_base(df_ag_hoje.copy(), df_base_completa)
+        
+        # Filtrar pendentes
+        df_ag_pendente = df_ag_enriquecido[
+            ~df_ag_enriquecido["Telefone"].astype(str).isin(st.session_state["concluidos"]) &
+            ~df_ag_enriquecido["Telefone"].astype(str).isin(st.session_state["pulados"])
+        ]
+        
+        if df_ag_pendente.empty:
+            st.success("🎉 Todos os agendamentos foram concluídos!")
+            st.info(f"✅ {len(df_ag_hoje)} agendamento(s) realizado(s)")
+        else:
+            st.warning(f"📋 **{len(df_ag_pendente)} agendamento(s) pendente(s)**")
+            st.markdown("---")
             
-            if df_pendente.empty:
-                st.success(f"🎉 Todos os {modo.split()[1].lower()} foram concluídos!")
-                st.info(f"✅ {len(df_trabalho)} tarefa(s) realizada(s) hoje")
-            else:
-                st.warning(f"📋 **{len(df_pendente)} tarefa(s) pendente(s)**")
-                st.markdown("---")
-                
-                # ✅ RENDERIZAR CARDS (FUNÇÃO UNIFICADA)
-                renderizar_cards_modo(
-                    df_pendente, 
-                    prefixo_card, 
-                    usar_card_suporte, 
-                    usuario_atual,
-                    tipo_atendimento_padrao
-                )
+            renderizar_cards_modo(
+                df_ag_pendente,
+                "agend",
+                False,  # usar_card_suporte
+                usuario_atual,
+                "Experiência"
+            )
+
+else:  # Check-in de Clientes
+    st.markdown("## 📞 Check-in de Clientes da Base")
+    st.info("📌 Novos clientes e clientes em risco que precisam de contato proativo")
+    
+    if df_dia.empty:
+        st.success("✅ Nenhum check-in programado para hoje!")
+        st.info("💡 A lista é atualizada automaticamente com base nas regras de classificação")
+    else:
+        # Check-in NÃO precisa de JOIN (df_dia já vem da base principal)
+        df_checkin = df_dia[
+            ~df_dia["Telefone"].astype(str).isin(st.session_state["concluidos"]) &
+            ~df_dia["Telefone"].astype(str).isin(st.session_state["pulados"])
+        ]
+        
+        if df_checkin.empty:
+            st.success("🎉 Todos os check-ins foram concluídos!")
+            st.info(f"✅ {len(df_dia)} cliente(s) contatado(s)")
+        else:
+            st.warning(f"📋 **{len(df_checkin)} check-in(s) pendente(s)**")
+            st.markdown("---")
+            
+            renderizar_cards_modo(
+                df_checkin,
+                "checkin",
+                False,  # usar_card_suporte
+                usuario_atual,
+                "Experiência"
+            )
 
 
 # ==========================================
