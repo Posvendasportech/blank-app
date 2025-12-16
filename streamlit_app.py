@@ -588,17 +588,12 @@ elif pagina == "📞 Em Atendimento":
                                     use_container_width=True
                                 )
                             
-                            # ========================================
                             # AÇÕES DOS BOTÕES
-                            # ========================================
-                            
                             if btn_salvar:
-                                # Validar se há alterações
                                 if not novo_relato and not novo_followup:
                                     st.warning("⚠️ Preencha ao menos o Relato ou Follow-up antes de salvar")
                                 else:
                                     with st.spinner("Salvando alterações..."):
-                                        # Preparar dados para atualização
                                         dados_atualizacao = {
                                             'Relato da conversa': novo_relato,
                                             'Follow up': novo_followup,
@@ -606,14 +601,12 @@ elif pagina == "📞 Em Atendimento":
                                             'Observação': nova_observacao
                                         }
                                         
-                                        # Atualizar na planilha
                                         sucesso = atualizar_agendamento(index, dados_atualizacao)
                                         
                                         if sucesso:
                                             st.cache_data.clear()
                                             st.success("✅ Alterações salvas com sucesso!")
                                             st.balloons()
-                                            
                                             import time
                                             time.sleep(1.5)
                                             st.rerun()
@@ -621,33 +614,28 @@ elif pagina == "📞 Em Atendimento":
                                             st.error("❌ Erro ao salvar. Tente novamente.")
                             
                             if btn_finalizar:
-                                # Validar se o atendimento está completo
                                 if not novo_relato:
                                     st.error("❌ Preencha o Relato da Conversa antes de finalizar!")
                                 else:
                                     with st.spinner("Finalizando atendimento..."):
-                                        # Preparar dados completos
                                         dados_finalizacao = agendamento.copy()
                                         dados_finalizacao['Relato da conversa'] = novo_relato
                                         dados_finalizacao['Follow up'] = novo_followup
                                         dados_finalizacao['Data de chamada'] = nova_data_chamada.strftime('%d/%m/%Y') if nova_data_chamada else ''
                                         dados_finalizacao['Observação'] = nova_observacao
                                         
-                                        # Finalizar (mover para histórico)
                                         sucesso = finalizar_atendimento(index, dados_finalizacao)
                                         
                                         if sucesso:
                                             st.cache_data.clear()
                                             st.success("✅ Atendimento finalizado e movido para o histórico!")
                                             st.balloons()
-                                            
                                             import time
                                             time.sleep(2)
                                             st.rerun()
                                         else:
                                             st.error("❌ Erro ao finalizar. Tente novamente.")
                 
-                # Separador entre cards
                 st.markdown("---")
 
 # ============================================================================
