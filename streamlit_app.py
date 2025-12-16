@@ -1652,6 +1652,7 @@ def render_aba1(aba, df_dia, metas):
 
 
 
+
 # ==========================================
 # FUNÇÕES AUXILIARES (NOVAS - ELIMINAM DUPLICAÇÃO)
 # ==========================================
