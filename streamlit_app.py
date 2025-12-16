@@ -10,6 +10,11 @@ import pandas as pd
 from datetime import datetime
 import time
 
+def limpar_telefone(telefone):
+    """Remove caracteres especiais do telefone, deixando apenas números"""
+    if pd.isna(telefone) or telefone == '':
+        return ''
+    return ''.join(filter(str.isdigit, str(telefone)))
 # ============================================================================
 # CONFIGURAÇÃO DA PÁGINA
 # ============================================================================
@@ -980,27 +985,36 @@ def render_historico():
             st.markdown("---")
             
             # ========== BUSCAR HISTÓRICO POR TELEFONE ==========
+                        # ========== BUSCAR HISTÓRICO POR TELEFONE ==========
             historico_cliente = []
             agendamentos_ativos = []
             tickets_suporte = []
             
+            # Limpar telefone do cliente para comparação
+            telefone_limpo = limpar_telefone(telefone_cliente)
+            
             # Histórico de atendimentos finalizados
             if not df_historico.empty and 'Telefone' in df_historico.columns:
+                # Criar coluna temporária com telefone limpo
+                df_historico['Telefone_Limpo'] = df_historico['Telefone'].apply(limpar_telefone)
                 historico_cliente = df_historico[
-                    df_historico['Telefone'].astype(str).str.contains(str(telefone_cliente), case=False, na=False, regex=False)
+                    df_historico['Telefone_Limpo'].str.contains(telefone_limpo, case=False, na=False, regex=False)
                 ].to_dict('records')
             
             # Agendamentos ativos
             if not df_agendamentos.empty and 'Telefone' in df_agendamentos.columns:
+                df_agendamentos['Telefone_Limpo'] = df_agendamentos['Telefone'].apply(limpar_telefone)
                 agendamentos_ativos = df_agendamentos[
-                    df_agendamentos['Telefone'].astype(str).str.contains(str(telefone_cliente), case=False, na=False, regex=False)
+                    df_agendamentos['Telefone_Limpo'].str.contains(telefone_limpo, case=False, na=False, regex=False)
                 ].to_dict('records')
             
             # Tickets de suporte
             if not df_suporte.empty and 'Telefone' in df_suporte.columns:
+                df_suporte['Telefone_Limpo'] = df_suporte['Telefone'].apply(limpar_telefone)
                 tickets_suporte = df_suporte[
-                    df_suporte['Telefone'].astype(str).str.contains(str(telefone_cliente), case=False, na=False, regex=False)
+                    df_suporte['Telefone_Limpo'].str.contains(telefone_limpo, case=False, na=False, regex=False)
                 ].to_dict('records')
+
             
             # ========== MÉTRICAS DE HISTÓRICO ==========
             st.subheader("📈 Resumo de Atendimentos")
