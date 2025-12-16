@@ -1348,12 +1348,39 @@ def diagnostico_planilha():
 # (9) 🖥️ UI — ABAS PRINCIPAIS
 # =========================================================
 def render_aba1(aba, df_dia, metas):
-    """
-    Renderiza a aba principal de Tarefas do Dia
-    """
     with aba:
-        diagnostico_planilha()  # ← ADICIONE ESTA LINHA
+        diagnostico_planilha()
         st.markdown("---")
+        
+        # ==========================================
+        # 🔍 DEBUG TEMPORÁRIO - REMOVER DEPOIS
+        # ==========================================
+        st.sidebar.markdown("### 🐛 DEBUG DE CARREGAMENTO")
+        
+        # Testar carregamento de agendamentos
+        df_ag_teste = load_agendamentos_hoje()
+        st.sidebar.write(f"**📅 Agendamentos carregados:** {len(df_ag_teste)}")
+        if not df_ag_teste.empty:
+            st.sidebar.write("Colunas:", df_ag_teste.columns.tolist())
+            st.sidebar.dataframe(df_ag_teste[["Nome", "Data de chamada", "Tipo de atendimento"]].head())
+        else:
+            st.sidebar.error("❌ Nenhum agendamento carregado!")
+        
+        # Testar carregamento de suporte
+        df_sup_teste = load_casos_suporte()
+        st.sidebar.write(f"**🛠️ Suporte carregado:** {len(df_sup_teste)}")
+        if not df_sup_teste.empty:
+            st.sidebar.write("Colunas:", df_sup_teste.columns.tolist())
+            st.sidebar.dataframe(df_sup_teste[["Nome", "Telefone", "Tipo de atendimento"]].head())
+        else:
+            st.sidebar.error("❌ Nenhum suporte carregado!")
+        
+        st.sidebar.write(f"**Data de hoje:** {datetime.now().date()}")
+        st.sidebar.markdown("---")
+        # ==========================================
+        
+        # ... resto do código normal ...
+
         
         if "card_counter" not in st.session_state:
             st.session_state["card_counter"] = 0
