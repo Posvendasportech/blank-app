@@ -223,7 +223,6 @@ def render_checkin():
         )
     
     st.markdown("---")
-
     
     # Configurações de filtros
     col_config1, col_config2 = st.columns([2, 1])
@@ -238,24 +237,24 @@ def render_checkin():
             help="Selecione o grupo de clientes que deseja visualizar"
         )
     
-        with col_config2:
+    with col_config2:
         # Vincular com o planejamento de metas
-            metas_por_classificacao = {
-                "Novo": meta_novo,
-                "Promissor": meta_promissor,
-                "Leal": meta_leal,
-                "Campeão": meta_campeao,
-                "Em risco": meta_risco,
-                "Dormente": meta_dormente
-            }
+        metas_por_classificacao = {
+            "Novo": meta_novo,
+            "Promissor": meta_promissor,
+            "Leal": meta_leal,
+            "Campeão": meta_campeao,
+            "Em risco": meta_risco,
+            "Dormente": meta_dormente
+        }
+        
+        # Pegar limite baseado na meta definida
+        limite_clientes = metas_por_classificacao.get(classificacao_selecionada, 10)
+        
+        # Mostrar info de quantos serão carregados
+        st.info(f"📊 **{limite_clientes}** clientes da meta do dia")
     
-    # Pegar limite baseado na meta definida
-    limite_clientes = metas_por_classificacao.get(classificacao_selecionada, 10)
-    
-    # Mostrar info de quantos serão carregados
-    st.info(f"📊 **{limite_clientes}** clientes da meta do dia")
-
-    
+    st.markdown("---")
     
     # Carregar dados
     with st.spinner(f"Carregando clientes de '{classificacao_selecionada}'..."):
@@ -280,42 +279,38 @@ def render_checkin():
         st.info("✅ Todos os clientes desta classificação já estão em atendimento!")
         return
     
-    # Aplicar limite de quantidade
-    if limite_clientes != "Todos":
-        # Aplicar limite baseado na meta definida
-        df_clientes = df_clientes.head(limite_clientes)
-
+    # Aplicar limite baseado na meta definida
+    df_clientes = df_clientes.head(limite_clientes)
     
     # Informações compactas + Filtros em uma linha
-col_info, col_busca, col_dias = st.columns([1, 2, 2])
-
-with col_info:
-    st.metric("✅ Disponíveis", len(df_clientes), help="Clientes disponíveis para check-in")
-
-with col_busca:
-    busca_nome = st.text_input(
-        "🔍 Buscar cliente:",
-        "",
-        placeholder="Digite o nome...",
-        label_visibility="collapsed"
-    )
-
-with col_dias:
-    if 'Dias desde a compra' in df_clientes.columns:
-        dias_min = 0
-        dias_max = int(df_clientes['Dias desde a compra'].max()) if df_clientes['Dias desde a compra'].max() > 0 else 365
-        filtro_dias = st.slider(
-            "📅 Dias desde última compra:",
-            dias_min,
-            dias_max,
-            (dias_min, dias_max),
+    col_info, col_busca, col_dias = st.columns([1, 2, 2])
+    
+    with col_info:
+        st.metric("✅ Disponíveis", len(df_clientes), help="Clientes disponíveis para check-in")
+    
+    with col_busca:
+        busca_nome = st.text_input(
+            "🔍 Buscar cliente:",
+            "",
+            placeholder="Digite o nome...",
             label_visibility="collapsed"
         )
-    else:
-        filtro_dias = None
     
+    with col_dias:
+        if 'Dias desde a compra' in df_clientes.columns:
+            dias_min = 0
+            dias_max = int(df_clientes['Dias desde a compra'].max()) if df_clientes['Dias desde a compra'].max() > 0 else 365
+            filtro_dias = st.slider(
+                "📅 Dias desde última compra:",
+                dias_min,
+                dias_max,
+                (dias_min, dias_max),
+                label_visibility="collapsed"
+            )
+        else:
+            filtro_dias = None
     
-        # Aplicar filtros
+    # Aplicar filtros
     df_filtrado = df_clientes.copy()
     if busca_nome and 'Nome' in df_filtrado.columns:
         df_filtrado = df_filtrado[df_filtrado['Nome'].str.contains(busca_nome, case=False, na=False)]
@@ -327,7 +322,7 @@ with col_dias:
     
     if df_filtrado.empty:
         st.info("Nenhum cliente encontrado com os filtros aplicados")
-    return
+        return
     
     # Cards de clientes - Estilo otimizado com expander
     for index, cliente in df_filtrado.iterrows():
@@ -344,7 +339,6 @@ with col_dias:
                 valor_formatado = "R$ 0,00"
         else:
             valor_formatado = "R$ 0,00"
-
         
         # Card expansível com tema azul
         with st.expander(
@@ -352,10 +346,10 @@ with col_dias:
             expanded=False
         ):
             # Dividir em 2 colunas
-            col_info, col_form = st.columns([1, 1])
+            col_info_card, col_form = st.columns([1, 1])
             
             # ========== COLUNA ESQUERDA: INFORMAÇÕES DO CLIENTE ==========
-            with col_info:
+            with col_info_card:
                 st.markdown("### 📊 Informações do Cliente")
                 
                 # Dados principais
@@ -493,6 +487,7 @@ with col_dias:
         
         # Separador entre cards
         st.markdown("---")
+
 
 
 # ============================================================================
