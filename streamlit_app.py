@@ -844,7 +844,8 @@ def render_em_atendimento():
                                     
                                     # Limpar cache e recarregar
                                     st.cache_data.clear()
-                                    st.success(f"✅ Novo agendamento criado para {novo_follow} em {nova_data.strftime('%d/%m/%Y')}!")
+                                    st.toast("✅ Agendamento atualizado!", icon="✅")
+                                    time.sleep(0.5)
                                     st.rerun()
                                     
                                 except Exception as e:
