@@ -472,7 +472,7 @@ def load_historico():
         return pd.DataFrame()
 
 # Cache de 10 segundos (muda frequentemente)
-@st.cache_data(ttl=Config.CACHE_VOLATIL_TTL)
+@st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)
 def load_agendamentos_hoje():
     """
     Carrega agendamentos de HOJE (Experiência + Venda + VAZIOS)
@@ -562,7 +562,7 @@ def load_agendamentos_hoje():
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=Config.CACHE_VOLATIL_TTL)
+@st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)
 def load_casos_suporte():
     """
     Carrega APENAS casos de Suporte
