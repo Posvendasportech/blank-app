@@ -327,7 +327,7 @@ with col_dias:
     
     if df_filtrado.empty:
         st.info("Nenhum cliente encontrado com os filtros aplicados")
-        return
+    return
     
     # Cards de clientes - Estilo otimizado com expander
     for index, cliente in df_filtrado.iterrows():
