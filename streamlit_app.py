@@ -493,81 +493,90 @@ def load_agendamentos_hoje():
         rows = data[1:]
         df = pd.DataFrame(rows, columns=headers)
         
-        logger.info(f"📋 Total de registros na base: {len(df)}")
+        logger.info(f"📋 TOTAL DE REGISTROS: {len(df)}")
         
         # ==========================================
-        # FILTRAR: TUDO exceto "Suporte"
+        # PASSO 1: FILTRAR POR TIPO (excluir Suporte)
         # ==========================================
-        if "Tipo de atendimento" in df.columns:
-            # Normalizar valores (minúsculas e sem espaços)
-            df["_tipo_lower"] = df["Tipo de atendimento"].astype(str).str.lower().str.strip()
-            
-            # INCLUIR: Experiência, Venda, vazios e qualquer outro valor
-            # EXCLUIR: apenas "suporte"
-            df_filtrado = df[df["_tipo_lower"] != "suporte"].copy()
-            
-            # Remover coluna auxiliar
-            df_filtrado = df_filtrado.drop(columns=["_tipo_lower"])
-            
-            logger.info(f"✅ Agendamentos (sem Suporte): {len(df_filtrado)} registros")
-            
-            # Debug: mostrar distribuição
-            tipos_incluidos = df[df["_tipo_lower"] != "suporte"]["Tipo de atendimento"].value_counts()
-            logger.info(f"   Tipos incluídos: {tipos_incluidos.to_dict()}")
-            
-            df = df_filtrado
-        else:
+        if "Tipo de atendimento" not in df.columns:
             logger.error("❌ Coluna 'Tipo de atendimento' NÃO existe!")
             return pd.DataFrame()
         
+        # Normalizar valores
+        df["_tipo_lower"] = df["Tipo de atendimento"].astype(str).str.lower().str.strip()
+        
+        # Excluir apenas "suporte"
+        df_sem_suporte = df[df["_tipo_lower"] != "suporte"].copy()
+        logger.info(f"✅ Após excluir Suporte: {len(df_sem_suporte)} registros")
+        
         # ==========================================
-        # FILTRAR POR DATA DE HOJE
+        # PASSO 2: VERIFICAR COLUNA DE DATA
         # ==========================================
-        if "Data de chamada" in df.columns:
-            # Converter data (tentar formato YYYY-MM-DD primeiro)
-            df["data_convertida"] = pd.to_datetime(
-                df["Data de chamada"], 
-                format="%Y-%m-%d", 
+        if "Data de chamada" not in df_sem_suporte.columns:
+            logger.error("❌ Coluna 'Data de chamada' NÃO existe!")
+            return pd.DataFrame()
+        
+        # DEBUG: Mostrar exemplos de datas na planilha
+        datas_exemplo = df_sem_suporte["Data de chamada"].head(10).tolist()
+        logger.info(f"📅 EXEMPLOS DE DATAS NA PLANILHA: {datas_exemplo}")
+        
+        # ==========================================
+        # PASSO 3: CONVERTER DATAS (múltiplos formatos)
+        # ==========================================
+        df_sem_suporte["data_convertida"] = pd.to_datetime(
+            df_sem_suporte["Data de chamada"], 
+            format="%Y/%m/%d",  # Formato: 2025/12/16
+            errors="coerce"
+        )
+        
+        # Contar quantas falharam
+        falhas = df_sem_suporte["data_convertida"].isna().sum()
+        logger.info(f"⚠️ Conversão formato YYYY/MM/DD: {falhas} falhas")
+        
+        # Tentar formato alternativo para as que falharam
+        mascara_nulas = df_sem_suporte["data_convertida"].isna()
+        if mascara_nulas.any():
+            df_sem_suporte.loc[mascara_nulas, "data_convertida"] = pd.to_datetime(
+                df_sem_suporte.loc[mascara_nulas, "Data de chamada"],
+                format="%d/%m/%Y",  # Formato: 16/12/2025
                 errors="coerce"
             )
             
-            # Tentar formato DD/MM/YYYY se falhar
-            mascara_nulas = df["data_convertida"].isna()
-            if mascara_nulas.any():
-                df.loc[mascara_nulas, "data_convertida"] = pd.to_datetime(
-                    df.loc[mascara_nulas, "Data de chamada"],
-                    format="%d/%m/%Y",
-                    errors="coerce"
-                )
-            
-            hoje = datetime.now().date()
-            df_hoje = df[df["data_convertida"].dt.date == hoje].copy()
-            
-            if not df_hoje.empty:
-                df_hoje["Telefone_limpo"] = df_hoje["Telefone"].apply(limpar_telefone)
-                logger.info(f"📅 Agendamentos para HOJE ({hoje}): {len(df_hoje)}")
-            else:
-                datas_unicas = df["data_convertida"].dropna().dt.date.unique()
-                logger.warning(f"⚠️ Nenhum agendamento para hoje ({hoje})")
-                if len(datas_unicas) > 0:
-                    logger.warning(f"   Datas disponíveis: {sorted(datas_unicas)[:5]}")
-            
-            return df_hoje
+            falhas_final = df_sem_suporte["data_convertida"].isna().sum()
+            logger.info(f"⚠️ Após tentar DD/MM/YYYY: {falhas_final} falhas restantes")
+        
+        # DEBUG: Mostrar datas convertidas
+        datas_convertidas = df_sem_suporte["data_convertida"].dropna().dt.date.unique()
+        logger.info(f"📅 DATAS CONVERTIDAS ÚNICAS: {sorted(datas_convertidas)[:10]}")
+        
+        # ==========================================
+        # PASSO 4: FILTRAR POR DATA DE HOJE
+        # ==========================================
+        hoje = datetime.now().date()
+        logger.info(f"📅 HOJE: {hoje}")
+        
+        df_hoje = df_sem_suporte[df_sem_suporte["data_convertida"].dt.date == hoje].copy()
+        
+        logger.info(f"✅ AGENDAMENTOS PARA HOJE: {len(df_hoje)}")
+        
+        if not df_hoje.empty:
+            df_hoje["Telefone_limpo"] = df_hoje["Telefone"].apply(limpar_telefone)
+            logger.info(f"   Clientes hoje: {df_hoje['Nome'].tolist()}")
         else:
-            logger.error("❌ Coluna 'Data de chamada' não encontrada!")
-            return pd.DataFrame()
-            
+            logger.warning(f"⚠️ Nenhum agendamento para {hoje}")
+            logger.warning(f"   Datas disponíveis na base: {sorted(datas_convertidas)[:5]}")
+        
+        return df_hoje
+        
     except Exception as e:
-        logger.error(f"Erro ao carregar agendamentos: {e}", exc_info=True)
+        logger.error(f"❌ ERRO ao carregar agendamentos: {e}", exc_info=True)
         return pd.DataFrame()
 
 
 @st.cache_data(ttl=Config.CACHE_VOLATILE_TTL)
 def load_casos_suporte():
     """
-    Carrega APENAS casos de Suporte
-    Filtra pela coluna "Tipo de atendimento" == "Suporte"
-    NÃO filtra por data (mostra todos os casos pendentes)
+    Carrega APENAS casos de Suporte (TODOS, sem filtro de data)
     """
     try:
         client = get_gsheet_client()
@@ -584,38 +593,39 @@ def load_casos_suporte():
         rows = data[1:]
         df = pd.DataFrame(rows, columns=headers)
         
-        logger.info(f"📋 Total de registros: {len(df)}")
+        logger.info(f"📋 TOTAL DE REGISTROS: {len(df)}")
         
         # ==========================================
         # FILTRAR: apenas "Suporte"
         # ==========================================
-        if "Tipo de atendimento" in df.columns:
-            # Normalizar valores
-            df["_tipo_lower"] = df["Tipo de atendimento"].astype(str).str.lower().str.strip()
-            
-            # FILTRAR: apenas "suporte"
-            df_suporte = df[df["_tipo_lower"] == "suporte"].copy()
-            
-            # Remover coluna auxiliar
-            df_suporte = df_suporte.drop(columns=["_tipo_lower"])
-            
-            logger.info(f"🛠️ Casos de SUPORTE encontrados: {len(df_suporte)}")
-            
-            if not df_suporte.empty:
-                df_suporte["Telefone_limpo"] = df_suporte["Telefone"].apply(limpar_telefone)
-                logger.info(f"   Clientes: {df_suporte['Nome'].tolist()}")
-            else:
-                valores = df["Tipo de atendimento"].unique()
-                logger.warning(f"⚠️ Nenhum caso de suporte. Tipos disponíveis: {valores}")
-            
-            return df_suporte
-        else:
+        if "Tipo de atendimento" not in df.columns:
             logger.error("❌ Coluna 'Tipo de atendimento' NÃO existe!")
             return pd.DataFrame()
-            
+        
+        # Normalizar valores
+        df["_tipo_lower"] = df["Tipo de atendimento"].astype(str).str.lower().str.strip()
+        
+        # DEBUG: Mostrar valores únicos
+        valores_unicos = df["_tipo_lower"].unique()
+        logger.info(f"🏷️ TIPOS DE ATENDIMENTO: {valores_unicos}")
+        
+        # Filtrar apenas "suporte"
+        df_suporte = df[df["_tipo_lower"] == "suporte"].copy()
+        
+        logger.info(f"🛠️ CASOS DE SUPORTE: {len(df_suporte)}")
+        
+        if not df_suporte.empty:
+            df_suporte["Telefone_limpo"] = df_suporte["Telefone"].apply(limpar_telefone)
+            logger.info(f"   Clientes com suporte: {df_suporte['Nome'].tolist()}")
+        else:
+            logger.warning(f"⚠️ Nenhum caso de suporte encontrado")
+        
+        return df_suporte
+        
     except Exception as e:
-        logger.error(f"Erro ao carregar suporte: {e}", exc_info=True)
+        logger.error(f"❌ ERRO ao carregar suporte: {e}", exc_info=True)
         return pd.DataFrame()
+
 
 
 # =========================================================
