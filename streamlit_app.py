@@ -1705,6 +1705,10 @@ def render_historico():
 # RENDER - PÁGINA DASHBOARD
 # ============================================================================
 
+# ============================================================================
+# RENDER - PÁGINA DASHBOARD
+# ============================================================================
+
 def render_dashboard():
     """Renderiza a página de Dashboard com análises e gráficos"""
     
@@ -1712,12 +1716,75 @@ def render_dashboard():
     st.markdown("Visão geral e análises do CRM")
     st.markdown("---")
     
-    # Aqui vamos adicionar os gráficos aos poucos
-    st.info("🚧 Dashboard em construção - Gráficos serão adicionados passo a passo")
+    # ========== SEÇÃO DE FILTROS ==========
+    st.subheader("🔍 Filtros de Análise")
     
-    # Espaço reservado para gráficos futuros
-    st.subheader("📈 Análises")
-    st.write("Aqui entrarão os gráficos e métricas")
+    # Criar 3 colunas para os filtros
+    col_filtro1, col_filtro2, col_filtro3 = st.columns(3)
+    
+    with col_filtro1:
+        # Filtro de Classificação
+        opcoes_classificacao = [
+            "Todas",
+            "Novo",
+            "Promissor", 
+            "Leal",
+            "Campeão",
+            "Em risco",
+            "Dormente"
+        ]
+        
+        filtro_classificacao = st.multiselect(
+            "🏷️ Classificações:",
+            options=opcoes_classificacao[1:],  # Todas exceto "Todas"
+            default=opcoes_classificacao[1:],  # Todas selecionadas por padrão
+            help="Selecione uma ou mais classificações para analisar"
+        )
+        
+        # Se nenhuma selecionada, usar todas
+        if not filtro_classificacao:
+            filtro_classificacao = opcoes_classificacao[1:]
+    
+    with col_filtro2:
+        # Filtro de Data Inicial
+        data_inicial = st.date_input(
+            "📅 Data Inicial:",
+            value=datetime.now().replace(day=1),  # Primeiro dia do mês atual
+            help="Data inicial para análise"
+        )
+    
+    with col_filtro3:
+        # Filtro de Data Final
+        data_final = st.date_input(
+            "📅 Data Final:",
+            value=datetime.now(),  # Hoje
+            help="Data final para análise"
+        )
+    
+    # Validação de datas
+    if data_inicial > data_final:
+        st.error("⚠️ A data inicial não pode ser maior que a data final!")
+        return
+    
+    # Mostrar período selecionado
+    dias_periodo = (data_final - data_inicial).days + 1
+    st.info(f"📊 **Período selecionado:** {data_inicial.strftime('%d/%m/%Y')} até {data_final.strftime('%d/%m/%Y')} ({dias_periodo} dias)")
+    
+    # Mostrar classificações selecionadas
+    st.info(f"🏷️ **Classificações:** {', '.join(filtro_classificacao)}")
+    
+    st.markdown("---")
+    
+    # ========== ÁREA DOS GRÁFICOS (virá depois) ==========
+    st.subheader("📈 Análises e Gráficos")
+    st.write("🚧 Gráficos serão adicionados aqui em seguida...")
+    
+    # Aqui vamos adicionar os gráficos nos próximos passos
+    # Os filtros já estarão disponíveis nas variáveis:
+    # - filtro_classificacao (lista de classificações selecionadas)
+    # - data_inicial (data inicial do período)
+    # - data_final (data final do período)
+
 
 
 # ============================================================================
