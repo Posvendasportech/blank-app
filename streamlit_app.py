@@ -1701,6 +1701,24 @@ def render_historico():
     elif st.session_state.cliente_encontrado is None and not btn_buscar:
         st.info("👆 Digite o telefone ou nome do cliente acima e clique em Buscar")
 
+# ============================================================================
+# RENDER - PÁGINA DASHBOARD
+# ============================================================================
+
+def render_dashboard():
+    """Renderiza a página de Dashboard com análises e gráficos"""
+    
+    st.title("📊 Dashboard Analítico")
+    st.markdown("Visão geral e análises do CRM")
+    st.markdown("---")
+    
+    # Aqui vamos adicionar os gráficos aos poucos
+    st.info("🚧 Dashboard em construção - Gráficos serão adicionados passo a passo")
+    
+    # Espaço reservado para gráficos futuros
+    st.subheader("📈 Análises")
+    st.write("Aqui entrarão os gráficos e métricas")
+
 
 # ============================================================================
 # SIDEBAR E NAVEGAÇÃO
@@ -1711,7 +1729,7 @@ with st.sidebar:
     st.markdown("---")
     pagina = st.radio(
         "Navegação:",
-        ["✅ Check-in", "📞 Em Atendimento", "🆘 Suporte", "📜 Histórico"],
+        ["✅ Check-in", "📞 Em Atendimento", "🆘 Suporte", "📜 Histórico", "Dashboard 📈" ],
         index=0
     )
     st.markdown("---")
@@ -1729,3 +1747,5 @@ elif pagina == "🆘 Suporte":
     render_suporte()
 elif pagina == "📜 Histórico":
     render_historico()
+elif menu == "Dashboard 📈":
+    render_dashboard()    
