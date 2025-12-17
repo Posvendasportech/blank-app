@@ -217,11 +217,29 @@ def detectar_mudanca_classificacao():
                 for _, cliente in df.iterrows():
                     telefone = limpar_telefone(cliente.get('Telefone', ''))
                     if telefone:
+                        # Tratar valores NaN
+                        valor_raw = cliente.get('Valor', 0)
+                        compras_raw = cliente.get('Compras', 0)
+                        
+                        valor_limpo = 0.0
+                        if pd.notna(valor_raw) and valor_raw != '':
+                            try:
+                                valor_limpo = float(valor_raw)
+                            except:
+                                valor_limpo = 0.0
+                        
+                        compras_limpo = 0
+                        if pd.notna(compras_raw) and compras_raw != '':
+                            try:
+                                compras_limpo = int(float(compras_raw))
+                            except:
+                                compras_limpo = 0
+                        
                         clientes_atuais[telefone] = {
                             'Nome': cliente.get('Nome', ''),
                             'Classificacao_Atual': aba,
-                            'Valor_Atual': float(cliente.get('Valor', 0)) if pd.notna(cliente.get('Valor', 0)) else 0,
-                            'Compras_Atual': int(cliente.get('Compras', 0)) if pd.notna(cliente.get('Compras', 0)) else 0
+                            'Valor_Atual': valor_limpo,
+                            'Compras_Atual': compras_limpo
                         }
         
         mudancas_detectadas = []
@@ -242,13 +260,31 @@ def detectar_mudanca_classificacao():
             ultima_entrada = df_cliente_hist.iloc[-1]
             classificacao_historico = ultima_entrada.get('Classificação', '')
             
+            # Tratar valores NaN do histórico
+            valor_antes_raw = ultima_entrada.get('Valor', 0)
+            compras_antes_raw = ultima_entrada.get('Compras', 0)
+            
+            valor_antes = 0.0
+            if pd.notna(valor_antes_raw) and valor_antes_raw != '':
+                try:
+                    valor_antes = float(valor_antes_raw)
+                except:
+                    valor_antes = 0.0
+            
+            compras_antes = 0
+            if pd.notna(compras_antes_raw) and compras_antes_raw != '':
+                try:
+                    compras_antes = int(float(compras_antes_raw))
+                except:
+                    compras_antes = 0
+            
             # Verificar se cliente existe nas abas atuais
             if telefone_limpo in clientes_atuais:
                 dados_atuais = clientes_atuais[telefone_limpo]
                 classificacao_atual = dados_atuais['Classificacao_Atual']
                 
                 # SE MUDOU DE CLASSIFICAÇÃO
-                if classificacao_historico != classificacao_atual:
+                if classificacao_historico != classificacao_atual and classificacao_historico != '':
                     
                     # Verificar se já não foi registrada hoje
                     ja_registrado = False
@@ -266,16 +302,17 @@ def detectar_mudanca_classificacao():
                             'Telefone': telefone,
                             'Classificacao_Anterior': classificacao_historico,
                             'Classificacao_Nova': classificacao_atual,
-                            'Valor_Antes': float(ultima_entrada.get('Valor', 0)),
+                            'Valor_Antes': valor_antes,
                             'Valor_Depois': dados_atuais['Valor_Atual'],
-                            'Compras_Antes': int(ultima_entrada.get('Compras', 0)),
+                            'Compras_Antes': compras_antes,
                             'Compras_Depois': dados_atuais['Compras_Atual']
                         })
                         
                         # ATUALIZAR O HISTORICO COM A NOVA CLASSIFICAÇÃO
-                        df_historico.loc[df_historico['Telefone'] == telefone, 'Classificação'] = classificacao_atual
-                        df_historico.loc[df_historico['Telefone'] == telefone, 'Valor'] = dados_atuais['Valor_Atual']
-                        df_historico.loc[df_historico['Telefone'] == telefone, 'Compras'] = dados_atuais['Compras_Atual']
+                        mask = df_historico['Telefone'] == telefone
+                        df_historico.loc[mask, 'Classificação'] = classificacao_atual
+                        df_historico.loc[mask, 'Valor'] = dados_atuais['Valor_Atual']
+                        df_historico.loc[mask, 'Compras'] = dados_atuais['Compras_Atual']
         
         # Salvar mudanças detectadas
         if mudancas_detectadas:
@@ -296,6 +333,7 @@ def detectar_mudanca_classificacao():
         import traceback
         st.error(traceback.format_exc())
         return False
+
 
 def executar_rotinas_diarias():
     """
