@@ -83,34 +83,51 @@ def adicionar_agendamento(dados_cliente, classificacao_origem):
 def registrar_log_checkin(dados_cliente, classificacao, respondeu, relato_resumo, criado_por="Sistema"):
     """Registra cada check-in realizado na aba LOG_CHECKINS com ID único - Horário de Brasília"""
     try:
+        st.write("🔍 DEBUG FUNÇÃO: Início da função")
+        
         conn = get_gsheets_connection()
         df_log = conn.read(worksheet="LOG_CHECKINS", ttl=0)
+        
+        st.write(f"🔍 DEBUG FUNÇÃO: LOG carregado. Linhas: {len(df_log)}")
+        st.write(f"🔍 DEBUG FUNÇÃO: Colunas: {df_log.columns.tolist()}")
+        
+        if not df_log.empty and 'ID_Checkin' in df_log.columns:
+            st.write(f"🔍 DEBUG FUNÇÃO: Primeiros IDs: {df_log['ID_Checkin'].head().tolist()}")
         
         # HORÁRIO DE BRASÍLIA para pegar o ano
         timezone_brasilia = pytz.timezone('America/Sao_Paulo')
         agora = datetime.now(timezone_brasilia)
         ano_atual = agora.strftime('%Y')
         
+        st.write(f"🔍 DEBUG FUNÇÃO: Ano atual: {ano_atual}")
+        
         # Gerar ID único no formato CHK-AAAA-NNNNN
         if df_log.empty or 'ID_Checkin' not in df_log.columns:
             numero_sequencial = 1
+            st.write("🔍 DEBUG FUNÇÃO: LOG vazio, usando número 1")
         else:
-            # CONVERTER COLUNA PARA STRING ANTES DE USAR .str (CORREÇÃO DO BUG)
+            # CONVERTER COLUNA PARA STRING
             df_log['ID_Checkin'] = df_log['ID_Checkin'].astype(str)
+            st.write(f"🔍 DEBUG FUNÇÃO: IDs convertidos para string")
             
             # Filtrar IDs do ano atual
             ids_ano_atual = df_log[df_log['ID_Checkin'].str.contains(f'CHK-{ano_atual}-', na=False)]
+            st.write(f"🔍 DEBUG FUNÇÃO: IDs do ano {ano_atual}: {len(ids_ano_atual)}")
             
             if len(ids_ano_atual) > 0:
+                st.write(f"🔍 DEBUG FUNÇÃO: Último ID: {ids_ano_atual['ID_Checkin'].iloc[-1]}")
                 # Extrair números dos IDs (CHK-2025-00001 -> 1)
                 ultimos_numeros = ids_ano_atual['ID_Checkin'].str.extract(r'CHK-\d{4}-(\d{5})')[0]
                 ultimo_numero = ultimos_numeros.astype(int).max()
                 numero_sequencial = ultimo_numero + 1
+                st.write(f"🔍 DEBUG FUNÇÃO: Próximo número: {numero_sequencial}")
             else:
                 numero_sequencial = 1
+                st.write("🔍 DEBUG FUNÇÃO: Nenhum ID do ano atual, usando 1")
         
         # Formatar ID: CHK-2025-00001
         proximo_id = f"CHK-{ano_atual}-{numero_sequencial:05d}"
+        st.write(f"🔍 DEBUG FUNÇÃO: ID gerado: {proximo_id}")
         
         # Resto do código continua igual
         data_checkin = agora.strftime('%d/%m/%Y')
@@ -145,14 +162,20 @@ def registrar_log_checkin(dados_cliente, classificacao, respondeu, relato_resumo
             'Hora_Checkin': hora_checkin
         }
         
+        st.write("🔍 DEBUG FUNÇÃO: Linha preparada, salvando...")
+        
         # Adicionar ao log
         df_log_novo = pd.concat([df_log, pd.DataFrame([nova_linha_log])], ignore_index=True)
         conn.update(worksheet="LOG_CHECKINS", data=df_log_novo)
+        
+        st.write("🔍 DEBUG FUNÇÃO: Salvo com sucesso!")
         
         return proximo_id
         
     except Exception as e:
         st.error(f"Erro ao registrar log: {e}")
+        import traceback
+        st.code(traceback.format_exc())
         return None
 
 
