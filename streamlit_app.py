@@ -645,7 +645,7 @@ def render_checkin():
                                         'Observação': observacoes if observacoes else 'Check-in realizado via CRM'
                                     }
                                     
-                                                                        df_nova_linha = pd.DataFrame([nova_linha])
+                                    df_nova_linha = pd.DataFrame([nova_linha])
                                     df_atualizado = pd.concat([df_agendamentos, df_nova_linha], ignore_index=True)
                                     conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_atualizado)
                                     
