@@ -109,7 +109,7 @@ def registrar_log_checkin(dados_cliente, classificacao, respondeu, relato_resumo
         # Formatar ID: CHK-2025-00001
         proximo_id = f"CHK-{ano_atual}-{numero_sequencial:05d}"
 
-            else:
+        else:
             # Pegar o maior ID existente e adicionar 1
             ids_existentes = df_log['ID_Checkin'].dropna()
             if len(ids_existentes) > 0:
