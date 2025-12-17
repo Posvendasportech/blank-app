@@ -2242,7 +2242,33 @@ def render_dashboard():
     st.info(f"🏷️ **Classificações:** {', '.join(filtro_classificacao)}")
     
     st.markdown("---")
+
+        # =====================================================================
+    # SNAPSHOT DIÁRIO - GERAR LINHA NA ABA HISTORICO_METRICAS
+    # =====================================================================
+    st.subheader("📸 Snapshot diário de métricas")
     
+    col_snap1, col_snap2 = st.columns([2, 1])
+    
+    with col_snap1:
+        st.write(
+            "Gere o resumo completo do dia (check-ins, agendamentos, suporte, conversões) "
+            "e salve uma linha na aba HISTORICO_METRICAS."
+        )
+    
+    with col_snap2:
+        if st.button("📸 Gerar snapshot de hoje", use_container_width=True, type="primary"):
+            gerar_snapshot_diario()
+            carregar_dados.clear()
+            time.sleep(2)
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Abaixo disso, futuramente entrarão os gráficos do dashboard
+    st.subheader("📈 Análises (em construção)")
+    st.info("Os gráficos serão construídos usando os dados da aba HISTORICO_METRICAS.")
+
     # ========== ÁREA DOS GRÁFICOS (virá depois) ==========
     st.subheader("📈 Análises e Gráficos")
     st.write("🚧 Gráficos serão adicionados aqui em seguida...")
