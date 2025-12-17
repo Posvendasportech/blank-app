@@ -592,8 +592,14 @@ def render_checkin():
                     type="secondary",
                     help="Registra tentativa de contato sem resposta"
                 ):
+                    st.write("🔍 DEBUG: Botão foi clicado!")  # TESTE 1
+                    st.write(f"🔍 DEBUG: Nome do cliente: {cliente.get('Nome', 'N/D')}")  # TESTE 2
+                    st.write(f"🔍 DEBUG: Classificação: {classificacao_selecionada}")  # TESTE 3
+                    
                     with st.spinner('Registrando tentativa sem resposta...'):
                         try:
+                            st.write("🔍 DEBUG: Entrando no TRY...")  # TESTE 4
+                            
                             # APENAS REGISTRAR NO LOG - NÃO ADICIONA EM AGENDAMENTOS
                             id_checkin = registrar_log_checkin(
                                 dados_cliente=cliente,
@@ -603,16 +609,28 @@ def render_checkin():
                                 criado_por="CRM"
                             )
                             
-                            carregar_dados.clear()
-                            st.warning(f"⏳ Tentativa {id_checkin} registrada - Cliente não respondeu")
-                            st.info("💡 Este cliente permanece disponível para nova tentativa de contato")
-                            time.sleep(2)
-                            st.rerun()
+                            st.write(f"🔍 DEBUG: ID gerado: {id_checkin}")  # TESTE 5
+                            
+                            if id_checkin:
+                                carregar_dados.clear()
+                                st.success(f"✅ Tentativa {id_checkin} registrada!")
+                                st.warning(f"⏳ Cliente não respondeu ao contato")
+                                st.info("💡 Este cliente permanece disponível para nova tentativa")
+                                time.sleep(3)
+                                st.rerun()
+                            else:
+                                st.error("❌ Erro: ID não foi gerado")
                             
                         except Exception as e:
-                            st.error(f"❌ Erro ao registrar: {e}")
+                            st.error(f"❌ ERRO CAPTURADO: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())  # Mostrar erro completo
                 
                 st.caption("💡 Use este botão para registrar rapidamente tentativas sem resposta")
+🧪 TESTE:
+Clique no botão "❌ Cliente Não Respondeu"
+
+Me diga o que aparece na tela:
             
             # ========== COLUNA DIREITA: FORMULÁRIO DE CHECK-IN ==========
             with col_form:
