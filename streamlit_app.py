@@ -11,21 +11,6 @@ from datetime import datetime
 import time
 
 # ============================================================================
-# CONEXÃO CENTRALIZADA
-# ============================================================================
-
-@st.cache_resource
-def get_gsheets_connection():
-    # Retorna conexão única reutilizável com Google Sheets
-    return get_gsheets_connection()
-
-
-def limpar_telefone(telefone):
-    """Remove caracteres especiais do telefone, deixando apenas números"""
-    if pd.isna(telefone) or telefone == '':
-        return ''
-    return ''.join(filter(str.isdigit, str(telefone)))
-# ============================================================================
 # CONFIGURAÇÃO DA PÁGINA
 # ============================================================================
 st.set_page_config(
@@ -36,12 +21,27 @@ st.set_page_config(
 )
 
 # ============================================================================
+# CONEXÃO CENTRALIZADA
+# ============================================================================
+
+@st.cache_resource
+def get_gsheets_connection():
+    """Retorna conexão única reutilizável com Google Sheets"""
+    return st.connection("gsheets", type=GSheetsConnection)
+
+# ============================================================================
 # FUNÇÕES AUXILIARES - UTILITÁRIOS
 # ============================================================================
 
+def limpar_telefone(telefone):
+    """Remove caracteres especiais do telefone, deixando apenas números"""
+    if pd.isna(telefone) or telefone == '':
+        return ''
+    return ''.join(filter(str.isdigit, str(telefone)))
+
 @st.cache_data(ttl=60)
 def carregar_dados(nome_aba, _force_refresh=False):
-    # O _ no parâmetro faz Streamlit ignorá-lo no cache
+    """Carrega dados de uma aba específica do Google Sheets"""
     try:
         conn = get_gsheets_connection()
         df = conn.read(worksheet=nome_aba, ttl=60)
