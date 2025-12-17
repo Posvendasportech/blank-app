@@ -372,6 +372,9 @@ def render_checkin():
     else:
         checkins_hoje = 0
     
+    # ✅ NOVO: Salvar metas diárias automaticamente (1x por dia)
+    salvar_metas_diarias(st.session_state.metas_checkin)
+    
     # Painel de metas diárias
     with st.expander("🎯 Definir Metas de Check-in por Classificação", expanded=True):
         st.write("**Defina quantos clientes de cada grupo você quer contatar hoje:**")
@@ -792,6 +795,24 @@ def render_checkin():
                                     df_nova_linha = pd.DataFrame([nova_linha])
                                     df_atualizado = pd.concat([df_agendamentos, df_nova_linha], ignore_index=True)
                                     conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_atualizado)
+                                    
+                                    # ✅ NOVO: Registrar check-in no LOG
+                                    dados_checkin = {
+                                        'Nome': cliente.get('Nome', ''),
+                                        'Telefone': cliente.get('Telefone', ''),
+                                        'Valor': cliente.get('Valor', 0),
+                                        'Compras': cliente.get('Compras', 0),
+                                        'Relato': primeira_conversa
+                                    }
+                                    registrar_checkin(dados_checkin, classificacao_selecionada, respondeu="SIM" if primeira_conversa else "SEM_RESPOSTA")
+                                    
+                                    # ✅ NOVO: Detectar se houve conversão
+                                    try:
+                                        valor_atual = float(cliente.get('Valor', 0)) if pd.notna(cliente.get('Valor', 0)) else 0
+                                        compras_atual = int(cliente.get('Compras', 0)) if pd.notna(cliente.get('Compras', 0)) else 0
+                                        detectar_conversao(cliente.get('Nome', ''), valor_atual, compras_atual)
+                                    except:
+                                        pass  # Se falhar detecção, não interrompe o fluxo
                                     
                                     carregar_dados.clear()
                                     st.success(f"✅ Check-in realizado com sucesso para **{nome_cliente}**!")
