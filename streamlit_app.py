@@ -585,7 +585,7 @@ def render_checkin():
                 
                 col_btn_checkin = st.columns(1)
                 
-                                if st.button(
+                if st.button(
                     "❌ Cliente Não Respondeu (Check-in Rápido)", 
                     key=f"nao_resp_{index}",
                     use_container_width=True,
