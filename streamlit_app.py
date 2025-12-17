@@ -10,6 +10,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 import time
+import pytz
 
 # ============================================================================
 # CONFIGURAÇÃO DA PÁGINA
@@ -78,6 +79,69 @@ def adicionar_agendamento(dados_cliente, classificacao_origem):
     except Exception as e:
         st.error(f"Erro ao adicionar agendamento: {e}")
         return False
+
+def registrar_log_checkin(dados_cliente, classificacao, respondeu, relato_resumo, criado_por="Sistema"):
+    """Registra cada check-in realizado na aba LOG_CHECKINS com ID único - Horário de Brasília"""
+    try:
+        conn = get_gsheets_connection()
+        df_log = conn.read(worksheet="LOG_CHECKINS", ttl=0)
+        
+        # Gerar ID único
+        if df_log.empty or 'ID_Checkin' not in df_log.columns:
+            proximo_id = 1
+        else:
+            # Pegar o maior ID existente e adicionar 1
+            ids_existentes = df_log['ID_Checkin'].dropna()
+            if len(ids_existentes) > 0:
+                proximo_id = int(ids_existentes.max()) + 1
+            else:
+                proximo_id = 1
+        
+        # ========== HORÁRIO DE BRASÍLIA (UTC-3) ==========
+        timezone_brasilia = pytz.timezone('America/Sao_Paulo')
+        agora = datetime.now(timezone_brasilia)
+        
+        data_checkin = agora.strftime('%d/%m/%Y')
+        hora_checkin = agora.strftime('%H:%M:%S')
+        dia_semana = agora.strftime('%A')
+        
+        # Traduzir dia da semana para português
+        dias_pt = {
+            'Monday': 'Segunda-feira',
+            'Tuesday': 'Terça-feira',
+            'Wednesday': 'Quarta-feira',
+            'Thursday': 'Quinta-feira',
+            'Friday': 'Sexta-feira',
+            'Saturday': 'Sábado',
+            'Sunday': 'Domingo'
+        }
+        dia_semana = dias_pt.get(dia_semana, dia_semana)
+        
+        # Preparar linha de log
+        nova_linha_log = {
+            'ID_Checkin': proximo_id,
+            'Data_Checkin': data_checkin,
+            'Nome_Cliente': dados_cliente.get('Nome', ''),
+            'Telefone': dados_cliente.get('Telefone', ''),
+            'Classificacao_Cliente': classificacao,
+            'Valor_Cliente_Antes': dados_cliente.get('Valor', 0),
+            'Compras_Cliente_Antes': dados_cliente.get('Compras', 0),
+            'Respondeu': respondeu,
+            'Relato_Resumo': relato_resumo[:200] if relato_resumo else '',
+            'Criado_Por': criado_por,
+            'Dia_Semana': dia_semana,
+            'Hora_Checkin': hora_checkin
+        }
+        
+        # Adicionar ao log
+        df_log_novo = pd.concat([df_log, pd.DataFrame([nova_linha_log])], ignore_index=True)
+        conn.update(worksheet="LOG_CHECKINS", data=df_log_novo)
+        
+        return proximo_id
+        
+    except Exception as e:
+        st.error(f"Erro ao registrar log: {e}")
+        return None
 
 
 def atualizar_agendamento(index, dados_atualizados):
@@ -585,14 +649,19 @@ def render_checkin():
                                     df_atualizado = pd.concat([df_agendamentos, df_nova_linha], ignore_index=True)
                                     conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_atualizado)
                                     
-                                    carregar_dados.clear()
-                                    st.success(f"✅ Check-in realizado com sucesso para **{nome_cliente}**!")
-                                    st.balloons()
-                                    time.sleep(2)
-                                    st.rerun()
+                                    # REGISTRAR NO LOG
+                                    id_checkin = registrar_log_checkin(
+                                        dados_cliente=cliente,
+                                        classificacao=classificacao_selecionada,
+                                        respondeu="NÃO RESPONDEU",
+                                        relato_resumo=primeira_conversa,
+                                        criado_por="CRM"
+                                    )
                                     
-                                except Exception as e:
-                                    st.error(f"❌ Erro ao realizar check-in: {e}")
+                                    carregar_dados.clear()
+                                    st.success(f"✅ Check-in #{id_checkin} realizado com sucesso para **{nome_cliente}**!")
+                                    st.balloons()
+
         
         # Separador entre cards
         st.markdown("---")
