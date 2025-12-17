@@ -1180,6 +1180,24 @@ def render_em_atendimento():
                                     # 5. Salvar em AGENDAMENTOS_ATIVOS
                                     conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_agendamentos_final)
                                     
+                                    # ✅ NOVO: Registrar follow-up no LOG
+                                    dados_followup = {
+                                        'Nome': agend.get('Nome', ''),
+                                        'Telefone': agend.get('Telefone', ''),
+                                        'Valor': agend.get('Valor', 0),
+                                        'Compras': agend.get('Compras', 0),
+                                        'Relato': novo_relato
+                                    }
+                                    registrar_checkin(dados_followup, agend.get('Classificação', ''), respondeu="SIM" if novo_relato else "SEM_RESPOSTA")
+                                    
+                                    # ✅ NOVO: Detectar conversão
+                                    try:
+                                        valor_atual = float(agend.get('Valor', 0)) if pd.notna(agend.get('Valor', 0)) else 0
+                                        compras_atual = int(agend.get('Compras', 0)) if pd.notna(agend.get('Compras', 0)) else 0
+                                        detectar_conversao(agend.get('Nome', ''), valor_atual, compras_atual)
+                                    except:
+                                        pass  # Se falhar, não interrompe
+                                    
                                     # Limpar cache e recarregar
                                     carregar_dados.clear()
                                     st.toast("✅ Agendamento atualizado!", icon="✅")
