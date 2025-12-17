@@ -88,61 +88,214 @@ def registrar_checkin(dados_cliente, classificacao, respondeu="SEM_RESPOSTA"):
         return False
 
 
-def detectar_conversao(nome_cliente, valor_novo, compras_novas):
-    """Detecta se houve conversão e registra em LOG_CONVERSOES"""
+def detectar_conversao_automatica():
+    """
+    Detecta conversões comparando HISTORICO com aba Total
+    Deve rodar 1x por dia às 00h
+    """
     try:
         conn = get_gsheets_connection()
         
-        # Buscar valor/compras anteriores no histórico
+        # Carregar dados necessários
         df_historico = conn.read(worksheet="HISTORICO", ttl=0)
-        df_cliente = df_historico[df_historico['Nome'] == nome_cliente]
+        df_total = conn.read(worksheet="Total", ttl=0)
+        df_conversoes = conn.read(worksheet="LOG_CONVERSOES", ttl=0)
         
-        if df_cliente.empty:
+        if df_historico.empty or df_total.empty:
             return False
         
-        ultimo_registro = df_cliente.iloc[-1]
-        valor_antes = float(ultimo_registro.get('Valor', 0))
-        compras_antes = int(ultimo_registro.get('Compras', 0))
+        conversoes_detectadas = []
+        hoje = datetime.now().strftime('%d/%m/%Y')
         
-        # Critério de conversão: +R$5 OU +1 compra
-        diferenca_valor = valor_novo - valor_antes
-        diferenca_compras = compras_novas - compras_antes
+        # Para cada cliente no histórico
+        for telefone in df_historico['Telefone'].unique():
+            if pd.isna(telefone) or telefone == '':
+                continue
+            
+            # Última entrada do histórico deste cliente
+            df_cliente_hist = df_historico[df_historico['Telefone'] == telefone]
+            if df_cliente_hist.empty:
+                continue
+            
+            ultima_entrada_hist = df_cliente_hist.iloc[-1]
+            
+            # Dados atuais na aba Total
+            df_cliente_total = df_total[df_total['Telefone'] == telefone]
+            if df_cliente_total.empty:
+                continue
+            
+            dados_total = df_cliente_total.iloc[0]
+            
+            # Comparar valores
+            valor_antes = float(ultima_entrada_hist.get('Valor', 0))
+            valor_depois = float(dados_total.get('Valor', 0))
+            compras_antes = int(ultima_entrada_hist.get('Compras', 0))
+            compras_depois = int(dados_total.get('Compras', 0))
+            
+            diferenca_valor = valor_depois - valor_antes
+            diferenca_compras = compras_depois - compras_antes
+            
+            # Critério de conversão: +R$5 OU +1 compra
+            if diferenca_valor >= 5 or diferenca_compras >= 1:
+                
+                # Verificar se já não foi registrada hoje
+                ja_registrado = False
+                if not df_conversoes.empty:
+                    df_conv_cliente = df_conversoes[
+                        (df_conversoes['Telefone'] == telefone) & 
+                        (df_conversoes['Data_Conversao'].str.startswith(hoje))
+                    ]
+                    ja_registrado = not df_conv_cliente.empty
+                
+                if not ja_registrado:
+                    # Buscar último check-in
+                    df_checkins = conn.read(worksheet="LOG_CHECKINS", ttl=0)
+                    dias_desde_checkin = 0
+                    
+                    if not df_checkins.empty:
+                        df_checkins_cliente = df_checkins[df_checkins['Telefone'] == telefone]
+                        if not df_checkins_cliente.empty:
+                            ultima_data_checkin = pd.to_datetime(
+                                df_checkins_cliente.iloc[-1]['Data_Checkin'], 
+                                format='%d/%m/%Y %H:%M',
+                                errors='coerce'
+                            )
+                            if pd.notna(ultima_data_checkin):
+                                dias_desde_checkin = (datetime.now() - ultima_data_checkin).days
+                    
+                    conversoes_detectadas.append({
+                        'ID_Conversao': gerar_id_unico('CONV'),
+                        'Data_Conversao': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                        'Nome_Cliente': dados_total.get('Nome', ''),
+                        'Telefone': telefone,
+                        'Classificacao_Cliente': dados_total.get('Classificação', ''),
+                        'Valor_Antes': valor_antes,
+                        'Valor_Depois': valor_depois,
+                        'Diferenca_Valor': diferenca_valor,
+                        'Compras_Antes': compras_antes,
+                        'Compras_Depois': compras_depois,
+                        'Dias_Desde_Ultimo_Checkin': dias_desde_checkin
+                    })
         
-        if diferenca_valor >= 5 or diferenca_compras >= 1:
-            # Registrar conversão
-            df_conversoes = conn.read(worksheet="LOG_CONVERSOES", ttl=0)
-            
-            # Calcular dias desde último check-in
-            df_checkins = conn.read(worksheet="LOG_CHECKINS", ttl=0)
-            df_checkins_cliente = df_checkins[df_checkins['Nome_Cliente'] == nome_cliente]
-            
-            if not df_checkins_cliente.empty:
-                ultima_data = pd.to_datetime(df_checkins_cliente.iloc[-1]['Data_Checkin'], format='%d/%m/%Y %H:%M')
-                dias_desde = (datetime.now() - ultima_data).days
-            else:
-                dias_desde = 0
-            
-            nova_conversao = {
-                'ID_Conversao': gerar_id_unico('CONV'),
-                'Data_Conversao': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                'Nome_Cliente': nome_cliente,
-                'Telefone': ultimo_registro.get('Telefone', ''),
-                'Classificacao_Cliente': ultimo_registro.get('Classificação', ''),
-                'Valor_Antes': valor_antes,
-                'Valor_Depois': valor_novo,
-                'Diferenca_Valor': diferenca_valor,
-                'Compras_Antes': compras_antes,
-                'Compras_Depois': compras_novas,
-                'Dias_Desde_Ultimo_Checkin': dias_desde
-            }
-            
-            df_conv_atualizado = pd.concat([df_conversoes, pd.DataFrame([nova_conversao])], ignore_index=True)
+        # Salvar conversões detectadas
+        if conversoes_detectadas:
+            df_novas_conv = pd.DataFrame(conversoes_detectadas)
+            df_conv_atualizado = pd.concat([df_conversoes, df_novas_conv], ignore_index=True)
             conn.update(worksheet="LOG_CONVERSOES", data=df_conv_atualizado)
             return True
         
         return False
+        
     except Exception as e:
-        st.error(f"Erro ao detectar conversão: {e}")
+        st.error(f"Erro ao detectar conversões: {e}")
+        return False
+
+def detectar_mudanca_classificacao():
+    """
+    Detecta se algum cliente mudou de classificação entre hoje e ontem
+    Deve rodar 1x por dia às 00h
+    """
+    try:
+        conn = get_gsheets_connection()
+        
+        # Carregar histórico de métricas para comparar
+        df_historico_metricas = conn.read(worksheet="HISTORICO_METRICAS", ttl=0)
+        
+        if df_historico_metricas.empty or len(df_historico_metricas) < 2:
+            return False  # Precisa de pelo menos 2 dias de dados
+        
+        # Carregar classificação atual de cada cliente
+        classificacoes_atuais = {}
+        abas_classificacao = ['Novo', 'Promissor', 'Leal', 'Campeão', 'Em risco', 'Dormente']
+        
+        for aba in abas_classificacao:
+            df = conn.read(worksheet=aba, ttl=0)
+            if not df.empty and 'Nome' in df.columns and 'Telefone' in df.columns:
+                for _, cliente in df.iterrows():
+                    chave = cliente.get('Telefone', '')  # Usar telefone como ID único
+                    if chave:
+                        classificacoes_atuais[chave] = {
+                            'Nome': cliente.get('Nome', ''),
+                            'Classificacao': aba,
+                            'Valor': cliente.get('Valor', 0),
+                            'Compras': cliente.get('Compras', 0)
+                        }
+        
+        # Carregar histórico para comparar classificações anteriores
+        df_historico = conn.read(worksheet="HISTORICO", ttl=0)
+        df_historico_class = conn.read(worksheet="HISTORICO_CLASSIFICACOES", ttl=0)
+        
+        mudancas_detectadas = []
+        
+        if not df_historico.empty and 'Telefone' in df_historico.columns:
+            # Agrupar por telefone e pegar última classificação conhecida
+            for telefone, dados_atuais in classificacoes_atuais.items():
+                # Buscar última entrada no histórico
+                df_cliente = df_historico[df_historico['Telefone'] == telefone]
+                
+                if not df_cliente.empty:
+                    ultima_entrada = df_cliente.iloc[-1]
+                    classificacao_anterior = ultima_entrada.get('Classificação', '')
+                    classificacao_nova = dados_atuais['Classificacao']
+                    
+                    # Se mudou de classificação
+                    if classificacao_anterior and classificacao_anterior != classificacao_nova:
+                        mudancas_detectadas.append({
+                            'Data': datetime.now().strftime('%d/%m/%Y'),
+                            'Nome_Cliente': dados_atuais['Nome'],
+                            'Telefone': telefone,
+                            'Classificacao_Anterior': classificacao_anterior,
+                            'Classificacao_Nova': classificacao_nova,
+                            'Valor_Antes': ultima_entrada.get('Valor', 0),
+                            'Valor_Depois': dados_atuais['Valor'],
+                            'Compras_Antes': ultima_entrada.get('Compras', 0),
+                            'Compras_Depois': dados_atuais['Compras']
+                        })
+        
+        # Salvar mudanças detectadas
+        if mudancas_detectadas:
+            df_mudancas = pd.DataFrame(mudancas_detectadas)
+            df_atualizado = pd.concat([df_historico_class, df_mudancas], ignore_index=True)
+            conn.update(worksheet="HISTORICO_CLASSIFICACOES", data=df_atualizado)
+            return True
+        
+        return False
+        
+    except Exception as e:
+        st.error(f"Erro ao detectar mudanças de classificação: {e}")
+        return False
+
+def executar_rotinas_diarias():
+    """
+    Executa todas as rotinas diárias automáticas:
+    - Snapshot de métricas
+    - Detecção de conversões
+    - Detecção de mudanças de classificação
+    
+    Deve rodar 1x por dia às 00h
+    """
+    try:
+        st.info("🔄 Executando rotinas diárias...")
+        
+        # 1. Snapshot de métricas
+        sucesso_metricas = snapshot_metricas_diarias()
+        if sucesso_metricas:
+            st.success("✅ Snapshot de métricas realizado")
+        
+        # 2. Detecção de conversões
+        sucesso_conversoes = detectar_conversao_automatica()
+        if sucesso_conversoes:
+            st.success("✅ Conversões detectadas e registradas")
+        
+        # 3. Detecção de mudanças de classificação
+        sucesso_classificacoes = detectar_mudanca_classificacao()
+        if sucesso_classificacoes:
+            st.success("✅ Mudanças de classificação registradas")
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"Erro nas rotinas diárias: {e}")
         return False
 
 
@@ -2352,17 +2505,23 @@ def calcular_percentual(valor_anterior, valor_atual):
 # SIDEBAR E NAVEGAÇÃO
 # ============================================================================
 
-# ============================================================================
-# SIDEBAR E NAVEGAÇÃO
-# ============================================================================
-
 with st.sidebar:
     st.title("📋 Menu Principal")
     st.markdown("---")
     pagina = st.radio("Navegação", ["Check-in", "Em Atendimento", "Suporte", "Histórico", "📊 Dashboard"], index=0)
     st.markdown("---")
     st.caption("CRM Pós-Vendas v1.0")
-    
+  # No sidebar, após o botão de teste
+st.markdown("---")
+st.markdown("### ⏰ Rotinas Diárias")
+st.caption("Executar manualmente (normalmente roda às 00h)")
+
+if st.button("🔄 EXECUTAR ROTINAS DIÁRIAS", use_container_width=True):
+    with st.spinner("Processando rotinas..."):
+        executar_rotinas_diarias()
+        time.sleep(2)
+        st.rerun()
+  
 
 # ============================================================================
 # ROTEAMENTO DE PÁGINAS (ADICIONAR AQUI!)
