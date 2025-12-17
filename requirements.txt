@@ -3,3 +3,4 @@ gspread>=5.12.0
 pandas>=2.0.0
 plotly>=5.18.0
 st-gsheets-connection>=0.0.3
+plotly
