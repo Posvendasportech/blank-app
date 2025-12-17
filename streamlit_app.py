@@ -1901,6 +1901,16 @@ def render_historico():
                             df_novo = pd.concat([df_agend_atual, pd.DataFrame([novo_agend])], ignore_index=True)
                             conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_novo)
                             
+                            # ✅ NOVO: Registrar criação do agendamento
+                            dados_agend = {
+                                'Nome': nome_cliente,
+                                'Telefone': telefone_cliente,
+                                'Valor': cliente.get('Valor', 0),
+                                'Compras': cliente.get('Compras', 0),
+                                'Relato': f"Agendamento criado: {motivo_agend}"
+                            }
+                            registrar_checkin(dados_agend, cliente.get('Classificação ', 'N/D'), respondeu="SEM_RESPOSTA")
+                            
                             carregar_dados.clear()
                             st.success(f"✅ Agendamento criado!")
                             time.sleep(1)
@@ -1963,6 +1973,16 @@ def render_historico():
                             df_novo = pd.concat([df_suporte_atual, pd.DataFrame([novo_ticket])], ignore_index=True)
                             conn.update(worksheet="SUPORTE", data=df_novo)
                             
+                            # ✅ NOVO: Registrar abertura do ticket
+                            dados_ticket = {
+                                'Nome': nome_cliente,
+                                'Telefone': telefone_cliente,
+                                'Valor': cliente.get('Valor', 0),
+                                'Compras': cliente.get('Compras', 0),
+                                'Relato': f"[TICKET ABERTO] {assunto_suporte}: {descricao_suporte[:100]}"
+                            }
+                            registrar_checkin(dados_ticket, cliente.get('Classificação ', 'N/D'), respondeu="SIM")
+                            
                             carregar_dados.clear()
                             st.success(f"✅ Ticket aberto!")
                             time.sleep(1)
@@ -1976,6 +1996,7 @@ def render_historico():
     
     elif st.session_state.cliente_encontrado is None and not btn_buscar:
         st.info("👆 Digite o telefone ou nome do cliente acima e clique em Buscar")
+
 
 
 # ============================================================================
