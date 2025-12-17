@@ -1739,13 +1739,18 @@ with st.sidebar:
 # ROUTER - CHAMADA DAS PÁGINAS
 # ============================================================================
 
-if pagina == "✅ Check-in":
+# ============================================================================
+# ROTEAMENTO DE PÁGINAS
+# ============================================================================
+
+if menu == "Dashboard 📈":
+    render_dashboard()  # ← NOVO
+elif menu == "✅ Check-in":
     render_checkin()
-elif pagina == "📞 Em Atendimento":
+elif menu == "📞 Em Atendimento":
     render_em_atendimento()
-elif pagina == "🆘 Suporte":
+elif menu == "🆘 Suporte":
     render_suporte()
-elif pagina == "📜 Histórico":
+elif menu == "📜 Histórico":
     render_historico()
-elif menu == "Dashboard 📈":
-    render_dashboard()    
+
