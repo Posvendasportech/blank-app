@@ -1996,7 +1996,7 @@ with st.sidebar:
             }
             
             # Verificar se já existe
-            if not df_hist[df_hist['Nome'] == 'TESTE João Silva'].empty:
+            if not df_hist.empty and not df_hist[df_hist['Nome'] == 'TESTE João Silva'].empty:
                 st.info("✅ Cliente de teste já existe no HISTORICO")
             else:
                 df_hist_novo = pd.concat([df_hist, pd.DataFrame([cliente_teste])], ignore_index=True)
@@ -2007,9 +2007,26 @@ with st.sidebar:
             
             # Agora testar a conversão (valores DEPOIS)
             st.write("**Testando detecção de conversão...**")
+            
             resultado = detectar_conversao(
                 nome_cliente="TESTE João Silva",
-                valor_novo=320.00,   # Era
+                valor_novo=320.00,
+                compras_novas=3
+            )
+            
+            st.markdown("---")
+            
+            if resultado:
+                st.success("🎉 TESTE PASSOU! Conversão foi detectada e salva!")
+                st.balloons()
+            else:
+                st.error("❌ TESTE FALHOU! Conversão não foi detectada.")
+                
+        except Exception as e:
+            st.error(f"❌ Erro no teste: {e}")
+            import traceback
+            st.code(traceback.format_exc())
+
 
 
 
