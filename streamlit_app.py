@@ -1529,6 +1529,16 @@ def render_suporte():
                                     # Salvar
                                     conn.update(worksheet="SUPORTE", data=df_suporte_atual)
                                     
+                                    # ✅ NOVO: Registrar acompanhamento no LOG
+                                    dados_acomp = {
+                                        'Nome': ticket.get('Nome', ''),
+                                        'Telefone': ticket.get('Telefone', ''),
+                                        'Valor': ticket.get('Valor', 0),
+                                        'Compras': ticket.get('Compras', 0),
+                                        'Relato': novo_acompanhamento
+                                    }
+                                    registrar_checkin(dados_acomp, ticket.get('Classificação', ''), respondeu="SIM")
+                                    
                                     carregar_dados.clear()
                                     st.success(f"✅ Ticket atualizado! Progresso: {novo_progresso}%")
                                     time.sleep(1)
@@ -1568,6 +1578,24 @@ def render_suporte():
                                 df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
                                 df_suporte_novo = df_suporte_atual.drop(idx).reset_index(drop=True)
                                 conn.update(worksheet="SUPORTE", data=df_suporte_novo)
+                                
+                                # ✅ NOVO: Registrar finalização no LOG
+                                dados_finalizacao = {
+                                    'Nome': ticket.get('Nome', ''),
+                                    'Telefone': ticket.get('Telefone', ''),
+                                    'Valor': ticket.get('Valor', 0),
+                                    'Compras': ticket.get('Compras', 0),
+                                    'Relato': f"[SUPORTE FINALIZADO] {novo_acompanhamento if novo_acompanhamento else 'Ticket concluído'}"
+                                }
+                                registrar_checkin(dados_finalizacao, ticket.get('Classificação', ''), respondeu="SIM")
+                                
+                                # ✅ NOVO: Detectar conversão pós-suporte
+                                try:
+                                    valor_atual = float(ticket.get('Valor', 0)) if pd.notna(ticket.get('Valor', 0)) else 0
+                                    compras_atual = int(ticket.get('Compras', 0)) if pd.notna(ticket.get('Compras', 0)) else 0
+                                    detectar_conversao(ticket.get('Nome', ''), valor_atual, compras_atual)
+                                except:
+                                    pass  # Se falhar, não interrompe
                                 
                                 carregar_dados.clear()
                                 st.success(f"🎉 Suporte finalizado! Cliente {nome_cliente} movido para Agendamentos Ativos")
