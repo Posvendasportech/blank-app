@@ -592,15 +592,14 @@ def render_checkin():
                     type="secondary",
                     help="Registra tentativa de contato sem resposta"
                 ):
-                    st.write("🔍 DEBUG: Botão foi clicado!")  # TESTE 1
-                    st.write(f"🔍 DEBUG: Nome do cliente: {cliente.get('Nome', 'N/D')}")  # TESTE 2
-                    st.write(f"🔍 DEBUG: Classificação: {classificacao_selecionada}")  # TESTE 3
+                    st.write("🔍 DEBUG: Botão foi clicado!")
+                    st.write(f"🔍 DEBUG: Nome do cliente: {cliente.get('Nome', 'N/D')}")
+                    st.write(f"🔍 DEBUG: Classificação: {classificacao_selecionada}")
                     
                     with st.spinner('Registrando tentativa sem resposta...'):
                         try:
-                            st.write("🔍 DEBUG: Entrando no TRY...")  # TESTE 4
+                            st.write("🔍 DEBUG: Entrando no TRY...")
                             
-                            # APENAS REGISTRAR NO LOG - NÃO ADICIONA EM AGENDAMENTOS
                             id_checkin = registrar_log_checkin(
                                 dados_cliente=cliente,
                                 classificacao=classificacao_selecionada,
@@ -609,7 +608,7 @@ def render_checkin():
                                 criado_por="CRM"
                             )
                             
-                            st.write(f"🔍 DEBUG: ID gerado: {id_checkin}")  # TESTE 5
+                            st.write(f"🔍 DEBUG: ID gerado: {id_checkin}")
                             
                             if id_checkin:
                                 carregar_dados.clear()
@@ -624,13 +623,10 @@ def render_checkin():
                         except Exception as e:
                             st.error(f"❌ ERRO CAPTURADO: {e}")
                             import traceback
-                            st.code(traceback.format_exc())  # Mostrar erro completo
+                            st.code(traceback.format_exc())
                 
                 st.caption("💡 Use este botão para registrar rapidamente tentativas sem resposta")
-🧪 TESTE:
-Clique no botão "❌ Cliente Não Respondeu"
 
-Me diga o que aparece na tela:
             
             # ========== COLUNA DIREITA: FORMULÁRIO DE CHECK-IN ==========
             with col_form:
