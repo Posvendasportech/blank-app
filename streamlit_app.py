@@ -1993,6 +1993,53 @@ with st.sidebar:
     st.markdown("---")
     st.caption("CRM Pós-Vendas v1.0")
 
+# ========== BOTÃO SNAPSHOT DIÁRIO - TESTE ==========
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### 📊 SNAPSHOT DIÁRIO")
+    st.caption("Gera resumo do dia para análises")
+    
+    if st.button("📊 Gerar Snapshot do Dia", type="secondary", use_container_width=True):
+        st.markdown("---")
+        st.write("**🔄 Gerando snapshot das métricas...**")
+        
+        with st.spinner("Coletando dados de todas as abas..."):
+            try:
+                resultado = snapshot_metricas_diarias()
+                
+                if resultado:
+                    st.success("✅ Snapshot gerado com sucesso!")
+                    st.balloons()
+                    
+                    # Mostrar preview do que foi salvo
+                    st.markdown("---")
+                    st.write("**📋 Dados salvos em HISTORICO_METRICAS:**")
+                    
+                    conn = get_gsheets_connection()
+                    df_metricas = conn.read(worksheet="HISTORICO_METRICAS", ttl=0)
+                    
+                    if not df_metricas.empty:
+                        # Mostrar última linha (snapshot de hoje)
+                        ultima_linha = df_metricas.iloc[-1]
+                        
+                        st.write(f"📅 **Data:** {ultima_linha.get('Data', 'N/D')}")
+                        st.write(f"✅ **Check-ins realizados:** {ultima_linha.get('CheckIns_Realizados', 0)}")
+                        st.write(f"🎯 **Meta do dia:** {ultima_linha.get('Meta_Dia', 0)}")
+                        st.write(f"🏆 **Meta atingida:** {ultima_linha.get('Meta_Atingida', 'N/D')}")
+                        st.write(f"💰 **Conversões:** {ultima_linha.get('Conversoes_Dia', 0)}")
+                        st.write(f"👥 **Total de clientes:** {ultima_linha.get('Total_Clientes', 0)}")
+                        
+                        st.success("✅ Verifique a aba HISTORICO_METRICAS no Google Sheets!")
+                    else:
+                        st.warning("⚠️ Nenhum dado encontrado em HISTORICO_METRICAS")
+                else:
+                    st.error("❌ Falha ao gerar snapshot")
+                    
+            except Exception as e:
+                st.error(f"❌ Erro ao gerar snapshot: {e}")
+                import traceback
+                st.code(traceback.format_exc())
+
 
 
 
