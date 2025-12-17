@@ -483,6 +483,29 @@ def render_checkin():
         if clientes_removidos > 0:
             st.warning(f"⚠️ {clientes_removidos} cliente(s) já estão em atendimento ativo e foram removidos da lista")
     
+    # ========== NOVO: REMOVER CLIENTES QUE JÁ FIZERAM CHECK-IN HOJE ==========
+    df_log_checkins = carregar_dados("LOG_CHECKINS")
+    
+    if not df_log_checkins.empty and 'Nome_Cliente' in df_log_checkins.columns and 'Data_Checkin' in df_log_checkins.columns:
+        # Pegar data de hoje
+        timezone_brasilia = pytz.timezone('America/Sao_Paulo')
+        hoje_brasilia = datetime.now(timezone_brasilia)
+        hoje_str = hoje_brasilia.strftime('%d/%m/%Y')
+        
+        # Clientes que já tiveram check-in hoje
+        clientes_checkin_hoje = df_log_checkins[
+            df_log_checkins['Data_Checkin'] == hoje_str
+        ]['Nome_Cliente'].tolist()
+        
+        if clientes_checkin_hoje:
+            df_clientes_antes_filtro = df_clientes.copy()
+            df_clientes = df_clientes[~df_clientes['Nome'].isin(clientes_checkin_hoje)]
+            
+            checkins_removidos = len(df_clientes_antes_filtro) - len(df_clientes)
+            if checkins_removidos > 0:
+                st.success(f"✅ {checkins_removidos} cliente(s) já teve(m) check-in realizado hoje e foram removidos da lista")
+
+    
     if df_clientes.empty:
         st.info("✅ Todos os clientes desta classificação já estão em atendimento!")
         return
