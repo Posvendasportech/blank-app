@@ -86,9 +86,29 @@ def registrar_log_checkin(dados_cliente, classificacao, respondeu, relato_resumo
         conn = get_gsheets_connection()
         df_log = conn.read(worksheet="LOG_CHECKINS", ttl=0)
         
-        # Gerar ID único
+        # HORÁRIO DE BRASÍLIA para pegar o ano
+        timezone_brasilia = pytz.timezone('America/Sao_Paulo')
+        agora = datetime.now(timezone_brasilia)
+        ano_atual = agora.strftime('%Y')  # 2025, 2026, etc.
+        
+        # Gerar ID único no formato CHK-AAAA-NNNNN
         if df_log.empty or 'ID_Checkin' not in df_log.columns:
-            proximo_id = 1
+            numero_sequencial = 1
+        else:
+            # Filtrar IDs do ano atual
+            ids_ano_atual = df_log[df_log['ID_Checkin'].str.contains(f'CHK-{ano_atual}-', na=False)]
+            
+            if len(ids_ano_atual) > 0:
+                # Extrair números dos IDs (CHK-2025-00001 -> 1)
+                ultimos_numeros = ids_ano_atual['ID_Checkin'].str.extract(r'CHK-\d{4}-(\d{5})')[0]
+                ultimo_numero = ultimos_numeros.astype(int).max()
+                numero_sequencial = ultimo_numero + 1
+            else:
+                numero_sequencial = 1
+        
+        # Formatar ID: CHK-2025-00001
+        proximo_id = f"CHK-{ano_atual}-{numero_sequencial:05d}"
+
         else:
             # Pegar o maior ID existente e adicionar 1
             ids_existentes = df_log['ID_Checkin'].dropna()
@@ -576,7 +596,7 @@ def render_checkin():
                 
                 col_btn_checkin = st.columns(1)
                 
-                if st.button(
+                                if st.button(
                     "❌ Cliente Não Respondeu (Check-in Rápido)", 
                     key=f"nao_resp_{index}",
                     use_container_width=True,
@@ -585,26 +605,7 @@ def render_checkin():
                 ):
                     with st.spinner('Registrando tentativa sem resposta...'):
                         try:
-                            conn = get_gsheets_connection()
-                            df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
-                            
-                            nova_linha = {
-                                'Data de contato': datetime.now().strftime('%d/%m/%Y'),
-                                'Nome': cliente.get('Nome', ''),
-                                'Classificação': classificacao_selecionada,
-                                'Valor': cliente.get('Valor', ''),
-                                'Telefone': cliente.get('Telefone', ''),
-                                'Relato da conversa': 'Cliente não respondeu ao contato',
-                                'Follow up': 'Tentar novo contato',
-                                'Data de chamada': '',
-                                'Observação': 'Tentativa de contato sem resposta - Check-in automático'
-                            }
-                            
-                            df_nova_linha = pd.DataFrame([nova_linha])
-                            df_atualizado = pd.concat([df_agendamentos, df_nova_linha], ignore_index=True)
-                            conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_atualizado)
-                            
-                            # REGISTRAR NO LOG
+                            # APENAS REGISTRAR NO LOG - NÃO ADICIONA EM AGENDAMENTOS
                             id_checkin = registrar_log_checkin(
                                 dados_cliente=cliente,
                                 classificacao=classificacao_selecionada,
@@ -614,7 +615,8 @@ def render_checkin():
                             )
                             
                             carregar_dados.clear()
-                            st.warning(f"⏳ Check-in #{id_checkin} registrado - Cliente não respondeu")
+                            st.warning(f"⏳ Tentativa #{id_checkin} registrada - Cliente não respondeu")
+                            st.info("💡 Este cliente permanece disponível para nova tentativa de contato")
                             time.sleep(2)
                             st.rerun()
                             
