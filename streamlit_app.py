@@ -1964,7 +1964,8 @@ with st.sidebar:
     )
     st.markdown("---")
     st.caption("CRM Pós-Vendas v1.0")
-   # ========== BOTÃO DE TESTE - REMOVER DEPOIS ==========
+
+# ========== BOTÃO DE TESTE - REMOVER DEPOIS ==========
 with st.sidebar:
     st.markdown("---")
     st.markdown("### 🧪 ÁREA DE TESTES")
