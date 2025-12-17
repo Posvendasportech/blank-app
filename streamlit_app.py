@@ -442,9 +442,12 @@ def detectar_e_registrar_conversoes_automaticas():
         conn = get_gsheets_connection()
         
         # Ler Total de hoje
-        df_total_hoje = conn.read(worksheet="Total", ttl=0)
+        df_total_hoje_full = conn.read(worksheet="Total", ttl=0)
+        colunas_chave = ['Telefone', 'Nome', 'Valor', 'Compras', 'Classificação', 'Data de contato']
+        colunas_existentes = [c for c in colunas_chave if c in df_total_hoje_full.columns]
+        df_total_hoje = df_total_hoje_full[colunas_existentes].copy()
         
-        # Ler Total do dia anterior
+        # Ler Total do dia anterior (snapshot compacto)
         df_total_ontem = conn.read(worksheet="TOTAL_DIA_ANTERIOR", ttl=0)
         
         if df_total_hoje.empty:
