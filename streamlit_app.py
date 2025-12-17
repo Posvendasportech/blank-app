@@ -10,6 +10,17 @@ import pandas as pd
 from datetime import datetime
 import time
 
+# ============================================================================
+# CONEXÃO CENTRALIZADA
+# ============================================================================
+
+@st.cache_resource
+def get_gsheets_connection():
+    # Retorna conexão única reutilizável com Google Sheets
+    return get_gsheets_connection()
+```
+
+
 def limpar_telefone(telefone):
     """Remove caracteres especiais do telefone, deixando apenas números"""
     if pd.isna(telefone) or telefone == '':
@@ -30,10 +41,10 @@ st.set_page_config(
 # ============================================================================
 
 @st.cache_data(ttl=60)
-def carregar_dados(nome_aba):
-    """Carrega dados de uma aba específica do Google Sheets"""
+def carregar_dados(nome_aba, _force_refresh=False):
+    # O _ no parâmetro faz Streamlit ignorá-lo no cache
     try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
+        conn = get_gsheets_connection()
         df = conn.read(worksheet=nome_aba, ttl=60)
         return df
     except Exception as e:
@@ -44,7 +55,7 @@ def carregar_dados(nome_aba):
 def adicionar_agendamento(dados_cliente, classificacao_origem):
     """Adiciona um cliente na aba AGENDAMENTOS_ATIVOS"""
     try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
+        conn = get_gsheets_connection()
         df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
         
         nova_linha = {
@@ -72,7 +83,7 @@ def adicionar_agendamento(dados_cliente, classificacao_origem):
 def atualizar_agendamento(index, dados_atualizados):
     """Atualiza um registro na aba AGENDAMENTOS_ATIVOS"""
     try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
+        conn = get_gsheets_connection()
         df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
         
         for campo, valor in dados_atualizados.items():
@@ -89,7 +100,7 @@ def atualizar_agendamento(index, dados_atualizados):
 def finalizar_atendimento(index, dados_completos):
     """Move atendimento para HISTORICO e remove de AGENDAMENTOS_ATIVOS"""
     try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
+        conn = get_gsheets_connection()
         
         # Carregar histórico
         df_historico = conn.read(worksheet="HISTORICO", ttl=0)
@@ -112,9 +123,7 @@ def finalizar_atendimento(index, dados_completos):
         st.error(f"Erro ao finalizar: {e}")
         return False
 
-# ============================================================================
-# RENDER - PÁGINA CHECK-IN
-# ============================================================================
+
 
 # ============================================================================
 # RENDER - PÁGINA CHECK-IN (VERSÃO OTIMIZADA)
@@ -122,6 +131,21 @@ def finalizar_atendimento(index, dados_completos):
 
 def render_checkin():
     """Renderiza a página de Check-in de clientes - Versão otimizada"""
+# Primeira vez que a página carrega? Criar valores padrão
+    if 'metas_checkin' not in st.session_state:
+        st.session_state.metas_checkin = {
+            'novo': 5,
+            'promissor': 5,
+            'leal': 5,
+            'campeao': 3,
+            'risco': 5,
+            'dormente': 5
+        }
+
+    # Variável para rastrear se metas foram alteradas nesta sessão
+    if 'metas_alteradas' not in st.session_state:
+        st.session_state.metas_alteradas = False
+
     
     st.title("✅ Check-in de Clientes")
     st.markdown("Selecione clientes para iniciar o fluxo de atendimento")
@@ -147,22 +171,102 @@ def render_checkin():
         col_meta1, col_meta2, col_meta3 = st.columns(3)
         
         with col_meta1:
-            meta_novo = st.number_input("🆕 Novo", min_value=0, max_value=50, value=5, step=1)
-            meta_promissor = st.number_input("⭐ Promissor", min_value=0, max_value=50, value=5, step=1)
+            with col_meta1:
+    meta_novo = st.number_input(
+        "🆕 Novo", 
+        min_value=0, 
+        max_value=50, 
+        value=st.session_state.metas_checkin['novo'],  # ✅ Usa valor salvo
+        step=1,
+        key='input_meta_novo',  # ✅ Identificador único
+        help="Meta de clientes novos para contatar hoje"
+    )
+    # Salva alteração de volta no session_state
+    if meta_novo != st.session_state.metas_checkin['novo']:
+        st.session_state.metas_checkin['novo'] = meta_novo
+        st.session_state.metas_alteradas = True
+            meta_promissor = st.number_input(
+        "⭐ Promissor", 
+        min_value=0, 
+        max_value=50, 
+        value=st.session_state.metas_checkin['promissor'],
+        step=1,
+        key='input_meta_promissor',
+        help="Meta de clientes promissores para contatar hoje"
+    )
+    if meta_promissor != st.session_state.metas_checkin['promissor']:
+        st.session_state.metas_checkin['promissor'] = meta_promissor
+        st.session_state.metas_alteradas = True
         
         with col_meta2:
-            meta_leal = st.number_input("💙 Leal", min_value=0, max_value=50, value=5, step=1)
-            meta_campeao = st.number_input("🏆 Campeão", min_value=0, max_value=50, value=3, step=1)
+            with col_meta2:
+    meta_leal = st.number_input(
+        "💙 Leal", 
+        min_value=0, 
+        max_value=50, 
+        value=st.session_state.metas_checkin['leal'],
+        step=1,
+        key='input_meta_leal',
+        help="Meta de clientes leais para contatar hoje"
+    )
+    if meta_leal != st.session_state.metas_checkin['leal']:
+        st.session_state.metas_checkin['leal'] = meta_leal
+        st.session_state.metas_alteradas = True
+            meta_campeao = st.number_input(
+        "🏆 Campeão", 
+        min_value=0, 
+        max_value=50, 
+        value=st.session_state.metas_checkin['campeao'],
+        step=1,
+        key='input_meta_campeao',
+        help="Meta de clientes campeões para contatar hoje"
+    )
+    if meta_campeao != st.session_state.metas_checkin['campeao']:
+        st.session_state.metas_checkin['campeao'] = meta_campeao
+        st.session_state.metas_alteradas = True
         
         with col_meta3:
-            meta_risco = st.number_input("⚠️ Em risco", min_value=0, max_value=50, value=5, step=1)
-            meta_dormente = st.number_input("😴 Dormente", min_value=0, max_value=50, value=5, step=1)
+    meta_risco = st.number_input(
+        "⚠️ Em risco", 
+        min_value=0, 
+        max_value=50, 
+        value=st.session_state.metas_checkin['risco'],
+        step=1,
+        key='input_meta_risco',
+        help="Meta de clientes em risco para contatar hoje"
+    )
+    if meta_risco != st.session_state.metas_checkin['risco']:
+        st.session_state.metas_checkin['risco'] = meta_risco
+        st.session_state.metas_alteradas = True
+            meta_dormente = st.number_input(
+        "😴 Dormente", 
+        min_value=0, 
+        max_value=50, 
+        value=st.session_state.metas_checkin['dormente'],
+        step=1,
+        key='input_meta_dormente',
+        help="Meta de clientes dormentes para contatar hoje"
+    )
+    if meta_dormente != st.session_state.metas_checkin['dormente']:
+        st.session_state.metas_checkin['dormente'] = meta_dormente
+        st.session_state.metas_alteradas = True
         
         # Calcular meta total
         meta_total = meta_novo + meta_promissor + meta_leal + meta_campeao + meta_risco + meta_dormente
-        
+
         st.markdown("---")
-        st.info(f"🎯 **Meta Total do Dia:** {meta_total} check-ins")
+
+        col_info1, col_info2 = st.columns([2, 1])
+
+        with col_info1:
+            st.info(f"🎯 **Meta Total do Dia:** {meta_total} check-ins")
+
+        with col_info2:
+            # Mostrar se as metas foram salvas
+            if st.session_state.metas_alteradas:
+                st.success("✅ Metas salvas!")
+            else:
+                st.caption("💾 Metas carregadas")
     
     st.markdown("---")
     
@@ -245,13 +349,13 @@ def render_checkin():
     with col_config2:
         # Vincular com o planejamento de metas
         metas_por_classificacao = {
-            "Novo": meta_novo,
-            "Promissor": meta_promissor,
-            "Leal": meta_leal,
-            "Campeão": meta_campeao,
-            "Em risco": meta_risco,
-            "Dormente": meta_dormente
-        }
+    "Novo": st.session_state.metas_checkin['novo'],
+    "Promissor": st.session_state.metas_checkin['promissor'],
+    "Leal": st.session_state.metas_checkin['leal'],
+    "Campeão": st.session_state.metas_checkin['campeao'],
+    "Em risco": st.session_state.metas_checkin['risco'],
+    "Dormente": st.session_state.metas_checkin['dormente']
+}
         
         # Pegar limite baseado na meta definida
         limite_clientes = metas_por_classificacao.get(classificacao_selecionada, 10)
@@ -462,7 +566,7 @@ def render_checkin():
                             with st.spinner('Processando check-in...'):
                                 # Preparar dados para agendamento
                                 try:
-                                    conn = st.connection("gsheets", type=GSheetsConnection)
+                                    conn = get_gsheets_connection()
                                     df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
                                     
                                     nova_linha = {
@@ -481,7 +585,7 @@ def render_checkin():
                                     df_atualizado = pd.concat([df_agendamentos, df_nova_linha], ignore_index=True)
                                     conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_atualizado)
                                     
-                                    st.cache_data.clear()
+                                    carregar_dados.clear()
                                     st.success(f"✅ Check-in realizado com sucesso para **{nome_cliente}**!")
                                     st.balloons()
                                     time.sleep(2)
@@ -810,7 +914,7 @@ def render_em_atendimento():
                         else:
                             with st.spinner("Processando novo agendamento..."):
                                 try:
-                                    conn = st.connection("gsheets", type=GSheetsConnection)
+                                    conn = get_gsheets_connection()
                                     
                                     # 1. Mover agendamento atual para HISTORICO
                                     df_historico = conn.read(worksheet="HISTORICO", ttl=0)
@@ -848,7 +952,7 @@ def render_em_atendimento():
                                     conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_agendamentos_final)
                                     
                                     # Limpar cache e recarregar
-                                    st.cache_data.clear()
+                                    carregar_dados.clear()
                                     st.toast("✅ Agendamento atualizado!", icon="✅")
                                     time.sleep(0.5)
                                     st.rerun()
@@ -1164,7 +1268,7 @@ def render_suporte():
                         else:
                             with st.spinner("Atualizando ticket..."):
                                 try:
-                                    conn = st.connection("gsheets", type=GSheetsConnection)
+                                    conn = get_gsheets_connection()
                                     df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
                                     
                                     # Atualizar campos
@@ -1177,7 +1281,7 @@ def render_suporte():
                                     # Salvar
                                     conn.update(worksheet="SUPORTE", data=df_suporte_atual)
                                     
-                                    st.cache_data.clear()
+                                    carregar_dados.clear()
                                     st.success(f"✅ Ticket atualizado! Progresso: {novo_progresso}%")
                                     time.sleep(1)
                                     st.rerun()
@@ -1192,7 +1296,7 @@ def render_suporte():
                         
                         with st.spinner("Finalizando suporte..."):
                             try:
-                                conn = st.connection("gsheets", type=GSheetsConnection)
+                                conn = get_gsheets_connection()
                                 
                                 # 1. Mover para AGENDAMENTOS_ATIVOS
                                 df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
@@ -1217,7 +1321,7 @@ def render_suporte():
                                 df_suporte_novo = df_suporte_atual.drop(idx).reset_index(drop=True)
                                 conn.update(worksheet="SUPORTE", data=df_suporte_novo)
                                 
-                                st.cache_data.clear()
+                                carregar_dados.clear()
                                 st.success(f"🎉 Suporte finalizado! Cliente {nome_cliente} movido para Agendamentos Ativos")
                                 st.balloons()
                                 time.sleep(2)
@@ -1503,7 +1607,7 @@ def render_historico():
                         st.error("❌ Selecione a data do agendamento!")
                     else:
                         try:
-                            conn = st.connection("gsheets", type=GSheetsConnection)
+                            conn = get_gsheets_connection()
                             df_agend_atual = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
                             
                             novo_agend = {
@@ -1521,7 +1625,7 @@ def render_historico():
                             df_novo = pd.concat([df_agend_atual, pd.DataFrame([novo_agend])], ignore_index=True)
                             conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_novo)
                             
-                            st.cache_data.clear()
+                            carregar_dados.clear()
                             st.success(f"✅ Agendamento criado!")
                             time.sleep(1)
                             st.rerun()
@@ -1564,7 +1668,7 @@ def render_historico():
                         st.error("❌ Descreva o problema!")
                     else:
                         try:
-                            conn = st.connection("gsheets", type=GSheetsConnection)
+                            conn = get_gsheets_connection()
                             df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
                             
                             novo_ticket = {
@@ -1583,7 +1687,7 @@ def render_historico():
                             df_novo = pd.concat([df_suporte_atual, pd.DataFrame([novo_ticket])], ignore_index=True)
                             conn.update(worksheet="SUPORTE", data=df_novo)
                             
-                            st.cache_data.clear()
+                            carregar_dados.clear()
                             st.success(f"✅ Ticket aberto!")
                             time.sleep(1)
                             st.rerun()
