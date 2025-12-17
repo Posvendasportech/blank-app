@@ -571,6 +571,57 @@ def render_checkin():
                             st.metric("📅 Dias", "0")
                     else:
                         st.metric("📅 Dias", "N/D")
+                                        # ========== BOTÃO DE CHECK-IN RÁPIDO SEM RESPOSTA ==========
+                st.markdown("### 📞 Status de Contato")
+                
+                col_btn_checkin = st.columns(1)
+                
+                if st.button(
+                    "❌ Cliente Não Respondeu (Check-in Rápido)", 
+                    key=f"nao_resp_{index}",
+                    use_container_width=True,
+                    type="secondary",
+                    help="Registra tentativa de contato sem resposta"
+                ):
+                    with st.spinner('Registrando tentativa sem resposta...'):
+                        try:
+                            conn = get_gsheets_connection()
+                            df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
+                            
+                            nova_linha = {
+                                'Data de contato': datetime.now().strftime('%d/%m/%Y'),
+                                'Nome': cliente.get('Nome', ''),
+                                'Classificação': classificacao_selecionada,
+                                'Valor': cliente.get('Valor', ''),
+                                'Telefone': cliente.get('Telefone', ''),
+                                'Relato da conversa': 'Cliente não respondeu ao contato',
+                                'Follow up': 'Tentar novo contato',
+                                'Data de chamada': '',
+                                'Observação': 'Tentativa de contato sem resposta - Check-in automático'
+                            }
+                            
+                            df_nova_linha = pd.DataFrame([nova_linha])
+                            df_atualizado = pd.concat([df_agendamentos, df_nova_linha], ignore_index=True)
+                            conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_atualizado)
+                            
+                            # REGISTRAR NO LOG
+                            id_checkin = registrar_log_checkin(
+                                dados_cliente=cliente,
+                                classificacao=classificacao_selecionada,
+                                respondeu="NÃO RESPONDEU",
+                                relato_resumo="Cliente não respondeu ao contato",
+                                criado_por="CRM"
+                            )
+                            
+                            carregar_dados.clear()
+                            st.warning(f"⏳ Check-in #{id_checkin} registrado - Cliente não respondeu")
+                            time.sleep(2)
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"❌ Erro ao registrar: {e}")
+                
+                st.caption("💡 Use este botão para registrar rapidamente tentativas sem resposta")
             
             # ========== COLUNA DIREITA: FORMULÁRIO DE CHECK-IN ==========
             with col_form:
