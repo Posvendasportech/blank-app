@@ -170,85 +170,85 @@ def render_checkin():
         col_meta1, col_meta2, col_meta3 = st.columns(3)
         
         with col_meta1:
-            with col_meta1:
-    meta_novo = st.number_input(
-        "🆕 Novo", 
-        min_value=0, 
-        max_value=50, 
-        value=st.session_state.metas_checkin['novo'],  # ✅ Usa valor salvo
-        step=1,
-        key='input_meta_novo',  # ✅ Identificador único
-        help="Meta de clientes novos para contatar hoje"
-    )
-    # Salva alteração de volta no session_state
-    if meta_novo != st.session_state.metas_checkin['novo']:
-        st.session_state.metas_checkin['novo'] = meta_novo
-        st.session_state.metas_alteradas = True
+            meta_novo = st.number_input(
+                "🆕 Novo", 
+                min_value=0, 
+                max_value=50, 
+                value=st.session_state.metas_checkin['novo'],
+                step=1,
+                key='input_meta_novo',
+                help="Meta de clientes novos para contatar hoje"
+            )
+            if meta_novo != st.session_state.metas_checkin['novo']:
+                st.session_state.metas_checkin['novo'] = meta_novo
+                st.session_state.metas_alteradas = True
+            
             meta_promissor = st.number_input(
-        "⭐ Promissor", 
-        min_value=0, 
-        max_value=50, 
-        value=st.session_state.metas_checkin['promissor'],
-        step=1,
-        key='input_meta_promissor',
-        help="Meta de clientes promissores para contatar hoje"
-    )
-    if meta_promissor != st.session_state.metas_checkin['promissor']:
-        st.session_state.metas_checkin['promissor'] = meta_promissor
-        st.session_state.metas_alteradas = True
+                "⭐ Promissor", 
+                min_value=0, 
+                max_value=50, 
+                value=st.session_state.metas_checkin['promissor'],
+                step=1,
+                key='input_meta_promissor',
+                help="Meta de clientes promissores para contatar hoje"
+            )
+            if meta_promissor != st.session_state.metas_checkin['promissor']:
+                st.session_state.metas_checkin['promissor'] = meta_promissor
+                st.session_state.metas_alteradas = True
         
         with col_meta2:
-            with col_meta2:
-    meta_leal = st.number_input(
-        "💙 Leal", 
-        min_value=0, 
-        max_value=50, 
-        value=st.session_state.metas_checkin['leal'],
-        step=1,
-        key='input_meta_leal',
-        help="Meta de clientes leais para contatar hoje"
-    )
-    if meta_leal != st.session_state.metas_checkin['leal']:
-        st.session_state.metas_checkin['leal'] = meta_leal
-        st.session_state.metas_alteradas = True
+            meta_leal = st.number_input(
+                "💙 Leal", 
+                min_value=0, 
+                max_value=50, 
+                value=st.session_state.metas_checkin['leal'],
+                step=1,
+                key='input_meta_leal',
+                help="Meta de clientes leais para contatar hoje"
+            )
+            if meta_leal != st.session_state.metas_checkin['leal']:
+                st.session_state.metas_checkin['leal'] = meta_leal
+                st.session_state.metas_alteradas = True
+            
             meta_campeao = st.number_input(
-        "🏆 Campeão", 
-        min_value=0, 
-        max_value=50, 
-        value=st.session_state.metas_checkin['campeao'],
-        step=1,
-        key='input_meta_campeao',
-        help="Meta de clientes campeões para contatar hoje"
-    )
-    if meta_campeao != st.session_state.metas_checkin['campeao']:
-        st.session_state.metas_checkin['campeao'] = meta_campeao
-        st.session_state.metas_alteradas = True
+                "🏆 Campeão", 
+                min_value=0, 
+                max_value=50, 
+                value=st.session_state.metas_checkin['campeao'],
+                step=1,
+                key='input_meta_campeao',
+                help="Meta de clientes campeões para contatar hoje"
+            )
+            if meta_campeao != st.session_state.metas_checkin['campeao']:
+                st.session_state.metas_checkin['campeao'] = meta_campeao
+                st.session_state.metas_alteradas = True
         
         with col_meta3:
-    meta_risco = st.number_input(
-        "⚠️ Em risco", 
-        min_value=0, 
-        max_value=50, 
-        value=st.session_state.metas_checkin['risco'],
-        step=1,
-        key='input_meta_risco',
-        help="Meta de clientes em risco para contatar hoje"
-    )
-    if meta_risco != st.session_state.metas_checkin['risco']:
-        st.session_state.metas_checkin['risco'] = meta_risco
-        st.session_state.metas_alteradas = True
+            meta_risco = st.number_input(
+                "⚠️ Em risco", 
+                min_value=0, 
+                max_value=50, 
+                value=st.session_state.metas_checkin['risco'],
+                step=1,
+                key='input_meta_risco',
+                help="Meta de clientes em risco para contatar hoje"
+            )
+            if meta_risco != st.session_state.metas_checkin['risco']:
+                st.session_state.metas_checkin['risco'] = meta_risco
+                st.session_state.metas_alteradas = True
+            
             meta_dormente = st.number_input(
-        "😴 Dormente", 
-        min_value=0, 
-        max_value=50, 
-        value=st.session_state.metas_checkin['dormente'],
-        step=1,
-        key='input_meta_dormente',
-        help="Meta de clientes dormentes para contatar hoje"
-    )
-    if meta_dormente != st.session_state.metas_checkin['dormente']:
-        st.session_state.metas_checkin['dormente'] = meta_dormente
-        st.session_state.metas_alteradas = True
+                "😴 Dormente", 
+                min_value=0, 
+                max_value=50, 
+                value=st.session_state.metas_checkin['dormente'],
+                step=1,
+                key='input_meta_dormente',
+                help="Meta de clientes dormentes para contatar hoje"
+            )
+            if meta_dormente != st.session_state.metas_checkin['dormente']:
+                st.session_state.metas_checkin['dormente'] = meta_dormente
+                st.session_state.metas_alteradas = True
         
         # Calcular meta total
         meta_total = meta_novo + meta_promissor + meta_leal + meta_campeao + meta_risco + meta_dormente
@@ -261,13 +261,13 @@ def render_checkin():
             st.info(f"🎯 **Meta Total do Dia:** {meta_total} check-ins")
 
         with col_info2:
-            # Mostrar se as metas foram salvas
             if st.session_state.metas_alteradas:
                 st.success("✅ Metas salvas!")
             else:
                 st.caption("💾 Metas carregadas")
     
     st.markdown("---")
+
     
     # ========== BARRA DE PROGRESSO E MOTIVAÇÃO ==========
     st.subheader("📈 Progresso do Dia")
