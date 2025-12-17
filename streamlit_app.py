@@ -1729,7 +1729,7 @@ with st.sidebar:
     st.markdown("---")
     pagina = st.radio(
         "Navegação:",
-        ["✅ Check-in", "📞 Em Atendimento", "🆘 Suporte", "📜 Histórico", "Dashboard 📈" ],
+        ["Dashboard 📊", "✅ Check-in", "📞 Em Atendimento", "🆘 Suporte", "📜 Histórico"],
         index=0
     )
     st.markdown("---")
@@ -1743,14 +1743,13 @@ with st.sidebar:
 # ROTEAMENTO DE PÁGINAS
 # ============================================================================
 
-if menu == "Dashboard 📈":
-    render_dashboard()  # ← NOVO
-elif menu == "✅ Check-in":
+if pagina == "Dashboard 📊":
+    render_dashboard()
+elif pagina == "✅ Check-in":
     render_checkin()
-elif menu == "📞 Em Atendimento":
+elif pagina == "📞 Em Atendimento":
     render_em_atendimento()
-elif menu == "🆘 Suporte":
+elif pagina == "🆘 Suporte":
     render_suporte()
-elif menu == "📜 Histórico":
+elif pagina == "📜 Histórico":
     render_historico()
-
