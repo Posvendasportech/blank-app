@@ -18,7 +18,6 @@ import time
 def get_gsheets_connection():
     # Retorna conexão única reutilizável com Google Sheets
     return get_gsheets_connection()
-```
 
 
 def limpar_telefone(telefone):
