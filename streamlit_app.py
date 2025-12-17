@@ -1209,6 +1209,22 @@ def render_em_atendimento():
         
         st.markdown("---")
 
+# ========== BOTÃO DE TESTE - REMOVER DEPOIS ==========
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### 🧪 TESTES")
+    
+    if st.button("🧪 Testar Conversão", help="Cria conversão fake para teste"):
+        try:
+            # Simular conversão de um cliente
+            detectar_conversao(
+                nome_cliente="TESTE João Silva",
+                valor_novo=320.00,  # Valor novo
+                compras_novas=3      # Compras novas
+            )
+            st.success("✅ Conversão de teste registrada! Veja em LOG_CONVERSOES")
+        except Exception as e:
+            st.error(f"Erro: {e}")
 
 # ============================================================================
 # RENDER - PÁGINA SUPORTE
