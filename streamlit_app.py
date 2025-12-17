@@ -192,77 +192,109 @@ def detectar_conversao_automatica():
 
 def detectar_mudanca_classificacao():
     """
-    Detecta se algum cliente mudou de classificação entre hoje e ontem
-    Deve rodar 1x por dia às 00h
+    Detecta mudanças de classificação comparando HISTORICO com abas atuais
+    Lógica: Cliente está em HISTORICO com classificação X, mas agora está na aba Y
     """
     try:
         conn = get_gsheets_connection()
         
-        # Carregar histórico de métricas para comparar
-        df_historico_metricas = conn.read(worksheet="HISTORICO_METRICAS", ttl=0)
+        # Carregar histórico
+        df_historico = conn.read(worksheet="HISTORICO", ttl=0)
         
-        if df_historico_metricas.empty or len(df_historico_metricas) < 2:
-            return False  # Precisa de pelo menos 2 dias de dados
+        if df_historico.empty or 'Telefone' not in df_historico.columns:
+            return False  # Sem dados para comparar
         
-        # Carregar classificação atual de cada cliente
-        classificacoes_atuais = {}
+        # Carregar histórico de classificações
+        df_historico_class = conn.read(worksheet="HISTORICO_CLASSIFICACOES", ttl=0)
+        
+        # Carregar todas as abas de classificação atuais
         abas_classificacao = ['Novo', 'Promissor', 'Leal', 'Campeão', 'Em risco', 'Dormente']
+        clientes_atuais = {}  # {telefone: {dados}}
         
         for aba in abas_classificacao:
             df = conn.read(worksheet=aba, ttl=0)
-            if not df.empty and 'Nome' in df.columns and 'Telefone' in df.columns:
+            if not df.empty and 'Telefone' in df.columns:
                 for _, cliente in df.iterrows():
-                    chave = cliente.get('Telefone', '')  # Usar telefone como ID único
-                    if chave:
-                        classificacoes_atuais[chave] = {
+                    telefone = limpar_telefone(cliente.get('Telefone', ''))
+                    if telefone:
+                        clientes_atuais[telefone] = {
                             'Nome': cliente.get('Nome', ''),
-                            'Classificacao': aba,
-                            'Valor': cliente.get('Valor', 0),
-                            'Compras': cliente.get('Compras', 0)
+                            'Classificacao_Atual': aba,
+                            'Valor_Atual': float(cliente.get('Valor', 0)) if pd.notna(cliente.get('Valor', 0)) else 0,
+                            'Compras_Atual': int(cliente.get('Compras', 0)) if pd.notna(cliente.get('Compras', 0)) else 0
                         }
         
-        # Carregar histórico para comparar classificações anteriores
-        df_historico = conn.read(worksheet="HISTORICO", ttl=0)
-        df_historico_class = conn.read(worksheet="HISTORICO_CLASSIFICACOES", ttl=0)
-        
         mudancas_detectadas = []
+        hoje = datetime.now().strftime('%d/%m/%Y')
         
-        if not df_historico.empty and 'Telefone' in df_historico.columns:
-            # Agrupar por telefone e pegar última classificação conhecida
-            for telefone, dados_atuais in classificacoes_atuais.items():
-                # Buscar última entrada no histórico
-                df_cliente = df_historico[df_historico['Telefone'] == telefone]
+        # Para cada cliente no HISTORICO, verificar se mudou de classificação
+        for telefone in df_historico['Telefone'].unique():
+            if pd.isna(telefone) or telefone == '':
+                continue
+            
+            telefone_limpo = limpar_telefone(str(telefone))
+            
+            # Última entrada no histórico deste cliente
+            df_cliente_hist = df_historico[df_historico['Telefone'] == telefone]
+            if df_cliente_hist.empty:
+                continue
+            
+            ultima_entrada = df_cliente_hist.iloc[-1]
+            classificacao_historico = ultima_entrada.get('Classificação', '')
+            
+            # Verificar se cliente existe nas abas atuais
+            if telefone_limpo in clientes_atuais:
+                dados_atuais = clientes_atuais[telefone_limpo]
+                classificacao_atual = dados_atuais['Classificacao_Atual']
                 
-                if not df_cliente.empty:
-                    ultima_entrada = df_cliente.iloc[-1]
-                    classificacao_anterior = ultima_entrada.get('Classificação', '')
-                    classificacao_nova = dados_atuais['Classificacao']
+                # SE MUDOU DE CLASSIFICAÇÃO
+                if classificacao_historico != classificacao_atual:
                     
-                    # Se mudou de classificação
-                    if classificacao_anterior and classificacao_anterior != classificacao_nova:
+                    # Verificar se já não foi registrada hoje
+                    ja_registrado = False
+                    if not df_historico_class.empty and 'Telefone' in df_historico_class.columns and 'Data' in df_historico_class.columns:
+                        df_mudanca_hoje = df_historico_class[
+                            (df_historico_class['Telefone'] == telefone) & 
+                            (df_historico_class['Data'] == hoje)
+                        ]
+                        ja_registrado = not df_mudanca_hoje.empty
+                    
+                    if not ja_registrado:
                         mudancas_detectadas.append({
-                            'Data': datetime.now().strftime('%d/%m/%Y'),
+                            'Data': hoje,
                             'Nome_Cliente': dados_atuais['Nome'],
                             'Telefone': telefone,
-                            'Classificacao_Anterior': classificacao_anterior,
-                            'Classificacao_Nova': classificacao_nova,
-                            'Valor_Antes': ultima_entrada.get('Valor', 0),
-                            'Valor_Depois': dados_atuais['Valor'],
-                            'Compras_Antes': ultima_entrada.get('Compras', 0),
-                            'Compras_Depois': dados_atuais['Compras']
+                            'Classificacao_Anterior': classificacao_historico,
+                            'Classificacao_Nova': classificacao_atual,
+                            'Valor_Antes': float(ultima_entrada.get('Valor', 0)),
+                            'Valor_Depois': dados_atuais['Valor_Atual'],
+                            'Compras_Antes': int(ultima_entrada.get('Compras', 0)),
+                            'Compras_Depois': dados_atuais['Compras_Atual']
                         })
+                        
+                        # ATUALIZAR O HISTORICO COM A NOVA CLASSIFICAÇÃO
+                        df_historico.loc[df_historico['Telefone'] == telefone, 'Classificação'] = classificacao_atual
+                        df_historico.loc[df_historico['Telefone'] == telefone, 'Valor'] = dados_atuais['Valor_Atual']
+                        df_historico.loc[df_historico['Telefone'] == telefone, 'Compras'] = dados_atuais['Compras_Atual']
         
         # Salvar mudanças detectadas
         if mudancas_detectadas:
+            # Salvar em HISTORICO_CLASSIFICACOES
             df_mudancas = pd.DataFrame(mudancas_detectadas)
-            df_atualizado = pd.concat([df_historico_class, df_mudancas], ignore_index=True)
-            conn.update(worksheet="HISTORICO_CLASSIFICACOES", data=df_atualizado)
+            df_historico_class_atualizado = pd.concat([df_historico_class, df_mudancas], ignore_index=True)
+            conn.update(worksheet="HISTORICO_CLASSIFICACOES", data=df_historico_class_atualizado)
+            
+            # Atualizar HISTORICO com novas classificações
+            conn.update(worksheet="HISTORICO", data=df_historico)
+            
             return True
         
         return False
         
     except Exception as e:
         st.error(f"Erro ao detectar mudanças de classificação: {e}")
+        import traceback
+        st.error(traceback.format_exc())
         return False
 
 def executar_rotinas_diarias():
