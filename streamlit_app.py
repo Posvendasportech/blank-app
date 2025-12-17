@@ -89,12 +89,15 @@ def registrar_log_checkin(dados_cliente, classificacao, respondeu, relato_resumo
         # HORÁRIO DE BRASÍLIA para pegar o ano
         timezone_brasilia = pytz.timezone('America/Sao_Paulo')
         agora = datetime.now(timezone_brasilia)
-        ano_atual = agora.strftime('%Y')  # 2025, 2026, etc.
+        ano_atual = agora.strftime('%Y')
         
         # Gerar ID único no formato CHK-AAAA-NNNNN
         if df_log.empty or 'ID_Checkin' not in df_log.columns:
             numero_sequencial = 1
         else:
+            # CONVERTER COLUNA PARA STRING ANTES DE USAR .str (CORREÇÃO DO BUG)
+            df_log['ID_Checkin'] = df_log['ID_Checkin'].astype(str)
+            
             # Filtrar IDs do ano atual
             ids_ano_atual = df_log[df_log['ID_Checkin'].str.contains(f'CHK-{ano_atual}-', na=False)]
             
@@ -109,7 +112,7 @@ def registrar_log_checkin(dados_cliente, classificacao, respondeu, relato_resumo
         # Formatar ID: CHK-2025-00001
         proximo_id = f"CHK-{ano_atual}-{numero_sequencial:05d}"
         
-        # Resto do código continua igual (não mexa)
+        # Resto do código continua igual
         data_checkin = agora.strftime('%d/%m/%Y')
         hora_checkin = agora.strftime('%H:%M:%S')
         dia_semana = agora.strftime('%A')
