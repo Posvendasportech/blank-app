@@ -49,6 +49,215 @@ def carregar_dados(nome_aba, _force_refresh=False):
     except Exception as e:
         st.error(f"Erro ao carregar aba '{nome_aba}': {e}")
         return pd.DataFrame()
+# ============================================================================
+# FUNÇÕES DE POPULAÇÃO - NOVAS ABAS
+# ============================================================================
+
+def gerar_id_unico(prefixo):
+    """Gera ID único para registros (ex: CHK-20251217-001)"""
+    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    return f"{prefixo}-{timestamp}"
+
+
+def registrar_checkin(dados_cliente, classificacao, respondeu="SEM_RESPOSTA"):
+    """Registra check-in na aba LOG_CHECKINS"""
+    try:
+        conn = get_gsheets_connection()
+        df_log = conn.read(worksheet="LOG_CHECKINS", ttl=0)
+        
+        novo_registro = {
+            'ID_Checkin': gerar_id_unico('CHK'),
+            'Data_Checkin': datetime.now().strftime('%d/%m/%Y %H:%M'),
+            'Nome_Cliente': dados_cliente.get('Nome', ''),
+            'Telefone': dados_cliente.get('Telefone', ''),
+            'Classificacao_Cliente': classificacao,
+            'Valor_Cliente_Antes': dados_cliente.get('Valor', 0),
+            'Compras_Cliente_Antes': dados_cliente.get('Compras', 0),
+            'Respondeu': respondeu,
+            'Relato_Resumo': dados_cliente.get('Relato', '')[:100],
+            'Criado_Por': 'Sistema',
+            'Dia_Semana': datetime.now().strftime('%A'),
+            'Hora_Checkin': datetime.now().strftime('%H:%M')
+        }
+        
+        df_atualizado = pd.concat([df_log, pd.DataFrame([novo_registro])], ignore_index=True)
+        conn.update(worksheet="LOG_CHECKINS", data=df_atualizado)
+        return True
+    except Exception as e:
+        st.error(f"Erro ao registrar check-in: {e}")
+        return False
+
+
+def detectar_conversao(nome_cliente, valor_novo, compras_novas):
+    """Detecta se houve conversão e registra em LOG_CONVERSOES"""
+    try:
+        conn = get_gsheets_connection()
+        
+        # Buscar valor/compras anteriores no histórico
+        df_historico = conn.read(worksheet="HISTORICO", ttl=0)
+        df_cliente = df_historico[df_historico['Nome'] == nome_cliente]
+        
+        if df_cliente.empty:
+            return False
+        
+        ultimo_registro = df_cliente.iloc[-1]
+        valor_antes = float(ultimo_registro.get('Valor', 0))
+        compras_antes = int(ultimo_registro.get('Compras', 0))
+        
+        # Critério de conversão: +R$5 OU +1 compra
+        diferenca_valor = valor_novo - valor_antes
+        diferenca_compras = compras_novas - compras_antes
+        
+        if diferenca_valor >= 5 or diferenca_compras >= 1:
+            # Registrar conversão
+            df_conversoes = conn.read(worksheet="LOG_CONVERSOES", ttl=0)
+            
+            # Calcular dias desde último check-in
+            df_checkins = conn.read(worksheet="LOG_CHECKINS", ttl=0)
+            df_checkins_cliente = df_checkins[df_checkins['Nome_Cliente'] == nome_cliente]
+            
+            if not df_checkins_cliente.empty:
+                ultima_data = pd.to_datetime(df_checkins_cliente.iloc[-1]['Data_Checkin'], format='%d/%m/%Y %H:%M')
+                dias_desde = (datetime.now() - ultima_data).days
+            else:
+                dias_desde = 0
+            
+            nova_conversao = {
+                'ID_Conversao': gerar_id_unico('CONV'),
+                'Data_Conversao': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                'Nome_Cliente': nome_cliente,
+                'Telefone': ultimo_registro.get('Telefone', ''),
+                'Classificacao_Cliente': ultimo_registro.get('Classificação', ''),
+                'Valor_Antes': valor_antes,
+                'Valor_Depois': valor_novo,
+                'Diferenca_Valor': diferenca_valor,
+                'Compras_Antes': compras_antes,
+                'Compras_Depois': compras_novas,
+                'Dias_Desde_Ultimo_Checkin': dias_desde
+            }
+            
+            df_conv_atualizado = pd.concat([df_conversoes, pd.DataFrame([nova_conversao])], ignore_index=True)
+            conn.update(worksheet="LOG_CONVERSOES", data=df_conv_atualizado)
+            return True
+        
+        return False
+    except Exception as e:
+        st.error(f"Erro ao detectar conversão: {e}")
+        return False
+
+
+def salvar_metas_diarias(metas_dict):
+    """Salva metas do dia na aba METAS_DIARIAS"""
+    try:
+        conn = get_gsheets_connection()
+        df_metas = conn.read(worksheet="METAS_DIARIAS", ttl=0)
+        
+        hoje = datetime.now().strftime('%d/%m/%Y')
+        
+        # Verificar se já existe registro de hoje
+        if not df_metas.empty and 'Data' in df_metas.columns:
+            if hoje in df_metas['Data'].values:
+                return True  # Já salvo hoje
+        
+        meta_total = sum(metas_dict.values())
+        
+        novo_registro = {
+            'Data': hoje,
+            'Meta_Novo': metas_dict.get('novo', 5),
+            'Meta_Promissor': metas_dict.get('promissor', 5),
+            'Meta_Leal': metas_dict.get('leal', 5),
+            'Meta_Campeao': metas_dict.get('campeao', 3),
+            'Meta_EmRisco': metas_dict.get('risco', 5),
+            'Meta_Dormente': metas_dict.get('dormente', 5),
+            'Meta_Total': meta_total,
+            'Usuario': 'Sistema',
+            'Hora_Definicao': datetime.now().strftime('%H:%M')
+        }
+        
+        df_atualizado = pd.concat([df_metas, pd.DataFrame([novo_registro])], ignore_index=True)
+        conn.update(worksheet="METAS_DIARIAS", data=df_atualizado)
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar metas: {e}")
+        return False
+
+
+def snapshot_metricas_diarias():
+    """Gera snapshot diário de todas as métricas (rodar 1x por dia)"""
+    try:
+        conn = get_gsheets_connection()
+        df_historico_metricas = conn.read(worksheet="HISTORICO_METRICAS", ttl=0)
+        
+        hoje = datetime.now().strftime('%d/%m/%Y')
+        
+        # Verificar se já existe snapshot de hoje
+        if not df_historico_metricas.empty and 'Data' in df_historico_metricas.columns:
+            if hoje in df_historico_metricas['Data'].values:
+                return True  # Já existe snapshot de hoje
+        
+        # Carregar dados de todas as classificações
+        classificacoes = ['Novo', 'Promissor', 'Leal', 'Campeão', 'Em risco', 'Dormente']
+        totais = {}
+        valores = {}
+        
+        for classif in classificacoes:
+            df = conn.read(worksheet=classif, ttl=0)
+            key = classif.replace(' ', '').replace('ã', 'a').replace('ê', 'e')
+            totais[key] = len(df) if not df.empty else 0
+            valores[key] = df['Valor'].sum() if not df.empty and 'Valor' in df.columns else 0
+        
+        # Carregar check-ins de hoje
+        df_checkins = conn.read(worksheet="LOG_CHECKINS", ttl=0)
+        if not df_checkins.empty and 'Data_Checkin' in df_checkins.columns:
+            checkins_hoje = len(df_checkins[df_checkins['Data_Checkin'].str.startswith(hoje)])
+        else:
+            checkins_hoje = 0
+        
+        # Carregar meta de hoje
+        df_metas = conn.read(worksheet="METAS_DIARIAS", ttl=0)
+        if not df_metas.empty and 'Data' in df_metas.columns:
+            meta_hoje_row = df_metas[df_metas['Data'] == hoje]
+            meta_dia = int(meta_hoje_row.iloc[0]['Meta_Total']) if not meta_hoje_row.empty else 0
+        else:
+            meta_dia = 0
+        
+        meta_atingida = "SIM" if checkins_hoje >= meta_dia else "NAO"
+        
+        # Conversões de hoje
+        df_conversoes = conn.read(worksheet="LOG_CONVERSOES", ttl=0)
+        if not df_conversoes.empty and 'Data_Conversao' in df_conversoes.columns:
+            conversoes_hoje = len(df_conversoes[df_conversoes['Data_Conversao'].str.startswith(hoje)])
+        else:
+            conversoes_hoje = 0
+        
+        novo_snapshot = {
+            'Data': hoje,
+            'Total_Novo': totais.get('Novo', 0),
+            'Total_Promissor': totais.get('Promissor', 0),
+            'Total_Leal': totais.get('Leal', 0),
+            'Total_Campeao': totais.get('Campeao', 0),
+            'Total_EmRisco': totais.get('Emrisco', 0),
+            'Total_Dormente': totais.get('Dormente', 0),
+            'Total_Clientes': sum(totais.values()),
+            'CheckIns_Realizados': checkins_hoje,
+            'Meta_Dia': meta_dia,
+            'Meta_Atingida': meta_atingida,
+            'Conversoes_Dia': conversoes_hoje,
+            'Valor_Total_Novo': valores.get('Novo', 0),
+            'Valor_Total_Promissor': valores.get('Promissor', 0),
+            'Valor_Total_Leal': valores.get('Leal', 0),
+            'Valor_Total_Campeao': valores.get('Campeao', 0),
+            'Valor_Total_EmRisco': valores.get('Emrisco', 0),
+            'Valor_Total_Dormente': valores.get('Dormente', 0),
+            'Valor_Total_Geral': sum(valores.values())
+        }
+        
+        df_atualizado = pd.concat([df_historico_metricas, pd.DataFrame([novo_snapshot])], ignore_index=True)
+        conn.update(worksheet="HISTORICO_METRICAS", data=df_atualizado)
+        return True
+    except Exception as e:
+        st.error(f"Erro ao gerar snapshot: {e}")
+        return False
 
 
 def adicionar_agendamento(dados_cliente, classificacao_origem):
