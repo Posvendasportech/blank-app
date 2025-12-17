@@ -645,7 +645,7 @@ def render_checkin():
                                         'Observação': observacoes if observacoes else 'Check-in realizado via CRM'
                                     }
                                     
-                                    df_nova_linha = pd.DataFrame([nova_linha])
+                                                                        df_nova_linha = pd.DataFrame([nova_linha])
                                     df_atualizado = pd.concat([df_agendamentos, df_nova_linha], ignore_index=True)
                                     conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_atualizado)
                                     
@@ -661,12 +661,14 @@ def render_checkin():
                                     carregar_dados.clear()
                                     st.success(f"✅ Check-in #{id_checkin} realizado com sucesso para **{nome_cliente}**!")
                                     st.balloons()
-
+                                    time.sleep(2)
+                                    st.rerun()
+                                    
+                                except Exception as e:
+                                    st.error(f"❌ Erro ao realizar check-in: {e}")
         
         # Separador entre cards
         st.markdown("---")
-
-
 
 # ============================================================================
 # RENDER - PÁGINA EM ATENDIMENTO
