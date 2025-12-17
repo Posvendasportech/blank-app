@@ -267,37 +267,144 @@ def detectar_mudanca_classificacao():
 
 def executar_rotinas_diarias():
     """
-    Executa todas as rotinas diárias automáticas:
-    - Snapshot de métricas
-    - Detecção de conversões
-    - Detecção de mudanças de classificação
-    
-    Deve rodar 1x por dia às 00h
+    Executa todas as rotinas diárias automáticas COM LOGS DETALHADOS
     """
     try:
-        st.info("🔄 Executando rotinas diárias...")
+        st.markdown("---")
+        st.markdown("### 🔄 Executando Rotinas Diárias...")
         
-        # 1. Snapshot de métricas
-        sucesso_metricas = snapshot_metricas_diarias()
-        if sucesso_metricas:
-            st.success("✅ Snapshot de métricas realizado")
+        # Container para logs
+        log_container = st.container()
         
-        # 2. Detecção de conversões
-        sucesso_conversoes = detectar_conversao_automatica()
-        if sucesso_conversoes:
-            st.success("✅ Conversões detectadas e registradas")
-        
-        # 3. Detecção de mudanças de classificação
-        sucesso_classificacoes = detectar_mudanca_classificacao()
-        if sucesso_classificacoes:
-            st.success("✅ Mudanças de classificação registradas")
+        with log_container:
+            # ========== 1. SNAPSHOT DE MÉTRICAS ==========
+            st.write("**1️⃣ Verificando Snapshot de Métricas...**")
+            
+            try:
+                conn = get_gsheets_connection()
+                df_metricas = conn.read(worksheet="HISTORICO_METRICAS", ttl=0)
+                hoje = datetime.now().strftime('%d/%m/%Y')
+                
+                # Verificar se já existe snapshot de hoje
+                if not df_metricas.empty and 'Data' in df_metricas.columns:
+                    if hoje in df_metricas['Data'].values:
+                        st.info(f"   ℹ️ Snapshot de hoje ({hoje}) já existe. Pulando...")
+                        sucesso_metricas = True
+                    else:
+                        st.write(f"   🔄 Criando snapshot para {hoje}...")
+                        sucesso_metricas = snapshot_metricas_diarias()
+                        if sucesso_metricas:
+                            st.success("   ✅ Snapshot criado com sucesso!")
+                        else:
+                            st.error("   ❌ Erro ao criar snapshot")
+                else:
+                    st.write(f"   🔄 Primeira vez! Criando snapshot para {hoje}...")
+                    sucesso_metricas = snapshot_metricas_diarias()
+                    if sucesso_metricas:
+                        st.success("   ✅ Snapshot criado com sucesso!")
+                    else:
+                        st.error("   ❌ Erro ao criar snapshot")
+                        
+            except Exception as e:
+                st.error(f"   ❌ Erro no snapshot: {e}")
+                sucesso_metricas = False
+            
+            st.markdown("---")
+            
+            # ========== 2. DETECÇÃO DE CONVERSÕES ==========
+            st.write("**2️⃣ Detectando Conversões...**")
+            
+            try:
+                conn = get_gsheets_connection()
+                df_historico = conn.read(worksheet="HISTORICO", ttl=0)
+                df_total = conn.read(worksheet="Total", ttl=0)
+                
+                if df_historico.empty:
+                    st.warning("   ⚠️ Aba HISTORICO vazia. Não há dados para comparar.")
+                    sucesso_conversoes = False
+                elif df_total.empty:
+                    st.warning("   ⚠️ Aba Total vazia. Não há dados para comparar.")
+                    sucesso_conversoes = False
+                else:
+                    total_clientes_historico = len(df_historico['Telefone'].unique())
+                    total_clientes_total = len(df_total)
+                    
+                    st.write(f"   📊 Clientes no HISTORICO: {total_clientes_historico}")
+                    st.write(f"   📊 Clientes no Total: {total_clientes_total}")
+                    st.write("   🔍 Comparando dados...")
+                    
+                    sucesso_conversoes = detectar_conversao_automatica()
+                    
+                    if sucesso_conversoes:
+                        st.success("   ✅ Conversões detectadas e registradas!")
+                    else:
+                        st.info("   ℹ️ Nenhuma conversão detectada hoje")
+                        
+            except Exception as e:
+                st.error(f"   ❌ Erro na detecção de conversões: {e}")
+                sucesso_conversoes = False
+            
+            st.markdown("---")
+            
+            # ========== 3. DETECÇÃO DE MUDANÇAS DE CLASSIFICAÇÃO ==========
+            st.write("**3️⃣ Detectando Mudanças de Classificação...**")
+            
+            try:
+                conn = get_gsheets_connection()
+                
+                # Verificar se aba existe
+                try:
+                    df_hist_class = conn.read(worksheet="HISTORICO_CLASSIFICACOES", ttl=0)
+                    st.write("   📋 Aba HISTORICO_CLASSIFICACOES encontrada")
+                except:
+                    st.error("   ❌ Aba HISTORICO_CLASSIFICACOES não existe! Crie-a no Google Sheets")
+                    sucesso_classificacoes = False
+                    return
+                
+                st.write("   🔍 Analisando mudanças...")
+                sucesso_classificacoes = detectar_mudanca_classificacao()
+                
+                if sucesso_classificacoes:
+                    st.success("   ✅ Mudanças de classificação detectadas!")
+                else:
+                    st.info("   ℹ️ Nenhuma mudança de classificação detectada")
+                    
+            except Exception as e:
+                st.error(f"   ❌ Erro na detecção de mudanças: {e}")
+                sucesso_classificacoes = False
+            
+            st.markdown("---")
+            
+            # ========== RESUMO FINAL ==========
+            st.markdown("### 📊 Resumo da Execução")
+            
+            col_r1, col_r2, col_r3 = st.columns(3)
+            
+            with col_r1:
+                if sucesso_metricas:
+                    st.success("✅ Snapshot")
+                else:
+                    st.error("❌ Snapshot")
+            
+            with col_r2:
+                if sucesso_conversoes:
+                    st.success("✅ Conversões")
+                else:
+                    st.info("ℹ️ Conversões")
+            
+            with col_r3:
+                if sucesso_classificacoes:
+                    st.success("✅ Classificações")
+                else:
+                    st.info("ℹ️ Classificações")
         
         return True
         
     except Exception as e:
-        st.error(f"Erro nas rotinas diárias: {e}")
+        st.error(f"❌ Erro crítico nas rotinas: {e}")
+        import traceback
+        st.code(traceback.format_exc())
         return False
-
 
 def salvar_metas_diarias(metas_dict):
     """Salva metas do dia na aba METAS_DIARIAS"""
