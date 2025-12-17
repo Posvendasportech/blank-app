@@ -222,6 +222,298 @@ def finalizar_atendimento(index, dados_completos):
         st.error(f"Erro ao finalizar: {e}")
         return False
 
+def registrar_conversao(dados_cliente, valor_venda, origem="TOTAL_AUTOMATICO"):
+    """
+    Registra uma conversão (nova compra) na aba LOG_CONVERSOES.
+
+    - dados_cliente: linha do cliente vinda da aba Total (Series do pandas)
+    - valor_venda: apenas o valor da COMPRA nova (diferença entre hoje e ontem)
+    - origem: texto para rastrear de onde veio a conversão (padrão: TOTAL_AUTOMATICO)
+    """
+    try:
+        conn = get_gsheets_connection()
+        df_conversoes = conn.read(worksheet="LOG_CONVERSOES", ttl=0)
+        
+        # Horário de Brasília
+        timezone_brasilia = pytz.timezone('America/Sao_Paulo')
+        agora = datetime.now(timezone_brasilia)
+        ano_atual = agora.strftime('%Y')
+        
+        # Garantir que o DataFrame tem a coluna ID_Conversao
+        if df_conversoes.empty:
+            df_conversoes = pd.DataFrame(columns=[
+                'ID_Conversao',
+                'Data_Conversao',
+                'Nome_Cliente',
+                'Telefone',
+                'Classificacao_Origem',
+                'Valor_Venda',
+                'Origem_Lead',
+                'Dias_Ate_Conversao',
+                'Criado_Por',
+                'Hora_Registro'
+            ])
+        
+        # Gerar ID único no formato CONV-AAAA-NNNNN
+        if 'ID_Conversao' not in df_conversoes.columns or df_conversoes.empty:
+            numero_sequencial = 1
+        else:
+            df_conversoes['ID_Conversao'] = df_conversoes['ID_Conversao'].astype(str)
+            ids_ano_atual = df_conversoes[
+                df_conversoes['ID_Conversao'].str.contains(f'CONV-{ano_atual}-', na=False)
+            ]
+            
+            if len(ids_ano_atual) > 0:
+                ultimos_numeros = ids_ano_atual['ID_Conversao'].str.extract(r'CONV-\d{4}-(\d{5})')[0]
+                ultimo_numero = ultimos_numeros.astype(int).max()
+                numero_sequencial = ultimo_numero + 1
+            else:
+                numero_sequencial = 1
+        
+        proximo_id = f"CONV-{ano_atual}-{numero_sequencial:05d}"
+        
+        # Tentar calcular dias até conversão usando "Data de contato" se existir
+        dias_ate_conversao = ""
+        data_contato_str = str(dados_cliente.get('Data de contato', '') or '')
+        if data_contato_str:
+            for fmt in ['%d/%m/%Y', '%Y-%m-%d', '%Y/%m/%d']:
+                try:
+                    data_contato = datetime.strptime(data_contato_str, fmt)
+                    dias_ate_conversao = (agora - data_contato).days
+                    break
+                except:
+                    continue
+        
+        # Obter classificação de origem com fallback de nomes de coluna
+        classificacao_origem = dados_cliente.get('Classificação', dados_cliente.get('Classificacao', ''))
+        
+        # Preparar linha da conversão
+        nova_conversao = {
+            'ID_Conversao': proximo_id,
+            'Data_Conversao': agora.strftime('%d/%m/%Y'),
+            'Nome_Cliente': dados_cliente.get('Nome', ''),
+            'Telefone': dados_cliente.get('Telefone', ''),
+            'Classificacao_Origem': classificacao_origem,
+            'Valor_Venda': float(valor_venda) if valor_venda is not None else 0,
+            'Origem_Lead': origem,
+            'Dias_Ate_Conversao': dias_ate_conversao,
+            'Criado_Por': 'CRM',
+            'Hora_Registro': agora.strftime('%H:%M:%S')
+        }
+        
+        # Adicionar no DataFrame e salvar na planilha
+        df_conversoes_novo = pd.concat(
+            [df_conversoes, pd.DataFrame([nova_conversao])],
+            ignore_index=True
+        )
+        conn.update(worksheet="LOG_CONVERSOES", data=df_conversoes_novo)
+        
+        return proximo_id
+    
+    except Exception as e:
+        st.error(f"Erro ao registrar conversão: {e}")
+        return None
+
+def gerar_snapshot_diario(data_especifica=None):
+    """Gera snapshot de todas as métricas do dia e salva em HISTORICO_METRICAS"""
+    try:
+        timezone_brasilia = pytz.timezone('America/Sao_Paulo')
+        agora = datetime.now(timezone_brasilia)
+        
+        if data_especifica:
+            data_snapshot = data_especifica
+        else:
+            data_snapshot = agora.strftime('%d/%m/%Y')
+        
+        conn = get_gsheets_connection()
+        
+        # Carregar abas de clientes
+        df_novo = conn.read(worksheet="Novo", ttl=0)
+        df_promissor = conn.read(worksheet="Promissor", ttl=0)
+        df_leal = conn.read(worksheet="Leal", ttl=0)
+        df_campeao = conn.read(worksheet="Campeão", ttl=0)
+        df_emrisco = conn.read(worksheet="Em risco", ttl=0)
+        df_dormente = conn.read(worksheet="Dormente", ttl=0)
+        df_total = conn.read(worksheet="Total", ttl=0)
+        
+        # Outras abas operacionais
+        df_log_checkins = conn.read(worksheet="LOG_CHECKINS", ttl=0)
+        df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
+        df_historico = conn.read(worksheet="HISTORICO", ttl=0)
+        df_suporte = conn.read(worksheet="SUPORTE", ttl=0)
+        df_conversoes = conn.read(worksheet="LOG_CONVERSOES", ttl=0)
+        
+        # Totais de clientes por classificação
+        total_novo = len(df_novo)
+        total_promissor = len(df_promissor)
+        total_leal = len(df_leal)
+        total_campeao = len(df_campeao)
+        total_emrisco = len(df_emrisco)
+        total_dormente = len(df_dormente)
+        total_clientes = len(df_total)
+        
+        # Check-ins do dia
+        checkins_realizados = 0
+        if not df_log_checkins.empty and 'Data_Checkin' in df_log_checkins.columns:
+            checkins_realizados = len(df_log_checkins[df_log_checkins['Data_Checkin'] == data_snapshot])
+        
+        # Meta do dia (do session_state, se for o dia atual)
+        meta_dia = 0
+        if 'metas_checkin' in st.session_state and data_snapshot == agora.strftime('%d/%m/%Y'):
+            meta_dia = sum(st.session_state.metas_checkin.values())
+        
+        # Agendamentos criados no dia (baseado na data de contato)
+        agendamentos_criados = 0
+        if not df_agendamentos.empty and 'Data de contato' in df_agendamentos.columns:
+            agendamentos_criados = len(df_agendamentos[df_agendamentos['Data de contato'] == data_snapshot])
+        
+        # Agendamentos concluídos no dia (HISTORICO)
+        agendamentos_concluidos = 0
+        if not df_historico.empty and 'Data de conclusão' in df_historico.columns:
+            df_hist_temp = df_historico.copy()
+            df_hist_temp['Data_Simples'] = df_hist_temp['Data de conclusão'].astype(str).str[:10]
+            agendamentos_concluidos = len(df_hist_temp[df_hist_temp['Data_Simples'] == data_snapshot])
+        
+        # Tickets abertos no dia (SUPORTE)
+        tickets_abertos = 0
+        if not df_suporte.empty and 'Data de abertura' in df_suporte.columns:
+            tickets_abertos = len(df_suporte[df_suporte['Data de abertura'] == data_snapshot])
+        
+        # Tickets pendentes (total atual em SUPORTE)
+        tickets_pendentes = len(df_suporte)
+        
+        # Tickets resolvidos no dia – para funcionar bem, ideal ter uma coluna "Data_Resolucao" em SUPORTE no futuro
+        tickets_resolvidos = 0  # por enquanto fica 0 até definirmos a lógica
+        
+                # ========== DETECTAR CONVERSÕES AUTOMÁTICAS ==========
+        st.subheader("🤖 Detecção automática de conversões")
+        conversoes_automaticas = detectar_e_registrar_conversoes_automaticas()
+        
+        # Agora recarregar LOG_CONVERSOES para pegar as recém-criadas
+        df_conversoes = conn.read(worksheet="LOG_CONVERSOES", ttl=0)
+        
+        # Conversões do dia (LOG_CONVERSOES)
+        conversoes_dia = 0
+        if not df_conversoes.empty and 'Data_Conversao' in df_conversoes.columns:
+            conversoes_dia = len(df_conversoes[df_conversoes['Data_Conversao'] == data_snapshot])
+
+        
+        snapshot = {
+            'Data': data_snapshot,
+            'Total_Novo': total_novo,
+            'Total_Promissor': total_promissor,
+            'Total_Leal': total_leal,
+            'Total_Campeao': total_campeao,
+            'Total_EmRisco': total_emrisco,
+            'Total_Dormente': total_dormente,
+            'Total_Clientes': total_clientes,
+            'CheckIns_Realizados': checkins_realizados,
+            'Meta_Dia': meta_dia,
+            'Agendamentos_Criados': agendamentos_criados,
+            'Agendamentos_Concluidos': agendamentos_concluidos,
+            'Tickets_Abertos': tickets_abertos,
+            'Tickets_Resolvidos': tickets_resolvidos,
+            'Tickets_Pendentes': tickets_pendentes,
+            'Conversoes_Dia': conversoes_dia
+        }
+        
+        df_metricas = conn.read(worksheet="HISTORICO_METRICAS", ttl=0)
+        
+        # Remove snapshot antigo do mesmo dia, se existir
+        if not df_metricas.empty and 'Data' in df_metricas.columns:
+            df_metricas = df_metricas[df_metricas['Data'] != data_snapshot]
+        
+        df_metricas_novo = pd.concat([df_metricas, pd.DataFrame([snapshot])], ignore_index=True)
+        conn.update(worksheet="HISTORICO_METRICAS", data=df_metricas_novo)
+        
+        st.success(f"✅ Snapshot gerado para {data_snapshot}!")
+        return True
+        
+    except Exception as e:
+        st.error(f"Erro ao gerar snapshot: {e}")
+        import traceback
+        st.code(traceback.format_exc())
+        return False
+
+
+def detectar_e_registrar_conversoes_automaticas():
+    """Compara Total de hoje vs ontem e registra conversões automaticamente"""
+    try:
+        conn = get_gsheets_connection()
+        
+        # Ler Total de hoje
+        df_total_hoje = conn.read(worksheet="Total", ttl=0)
+        
+        # Ler Total do dia anterior
+        df_total_ontem = conn.read(worksheet="TOTAL_DIA_ANTERIOR", ttl=0)
+        
+        if df_total_hoje.empty:
+            st.warning("⚠️ Aba Total está vazia")
+            return 0
+        
+        conversoes_detectadas = 0
+        
+        # Se não tem histórico do dia anterior, apenas salva hoje e sai
+        if df_total_ontem.empty:
+            st.info("📸 Primeira execução - salvando snapshot do Total")
+            conn.update(worksheet="TOTAL_DIA_ANTERIOR", data=df_total_hoje)
+            return 0
+        
+        st.info("🔍 Detectando conversões automáticas...")
+        
+        # Comparar por Telefone (chave única)
+        for idx, cliente_hoje in df_total_hoje.iterrows():
+            telefone = cliente_hoje.get('Telefone', '')
+            
+            if not telefone or telefone == '':
+                continue
+            
+            # Buscar cliente no snapshot de ontem
+            cliente_ontem = df_total_ontem[df_total_ontem['Telefone'] == telefone]
+            
+            if cliente_ontem.empty:
+                # Cliente novo - não é conversão, é primeira compra já registrada
+                continue
+            
+            # Pegar valores
+            valor_hoje = float(cliente_hoje.get('Valor', 0) or 0)
+            valor_ontem = float(cliente_ontem.iloc[0].get('Valor', 0) or 0)
+            
+            compras_hoje = int(cliente_hoje.get('Compras', 0) or 0)
+            compras_ontem = int(cliente_ontem.iloc[0].get('Compras', 0) or 0)
+            
+            # Verificar se houve nova compra
+            if compras_hoje > compras_ontem:
+                # Calcular valor da nova compra
+                valor_nova_compra = valor_hoje - valor_ontem
+                
+                if valor_nova_compra > 0:
+                    # Registrar conversão automaticamente
+                    id_conv = registrar_conversao(
+                        dados_cliente=cliente_hoje,
+                        valor_venda=valor_nova_compra,
+                        origem="TOTAL_AUTOMATICO"
+                    )
+                    
+                    if id_conv:
+                        conversoes_detectadas += 1
+                        st.success(f"✅ Conversão detectada: {cliente_hoje.get('Nome', 'N/D')} - R$ {valor_nova_compra:.2f}")
+        
+        # Atualizar snapshot para o próximo dia
+        conn.update(worksheet="TOTAL_DIA_ANTERIOR", data=df_total_hoje)
+        
+        if conversoes_detectadas > 0:
+            st.success(f"🎉 {conversoes_detectadas} conversão(ões) registrada(s) automaticamente!")
+        else:
+            st.info("✅ Nenhuma conversão nova detectada hoje")
+        
+        return conversoes_detectadas
+        
+    except Exception as e:
+        st.error(f"Erro ao detectar conversões: {e}")
+        import traceback
+        st.code(traceback.format_exc())
+        return 0
 
 
 # ============================================================================
