@@ -604,7 +604,7 @@ def render_checkin():
                             )
                             
                             carregar_dados.clear()
-                            st.warning(f"⏳ Tentativa #{id_checkin} registrada - Cliente não respondeu")
+                            st.warning(f"⏳ Tentativa {id_checkin} registrada - Cliente não respondeu")
                             st.info("💡 Este cliente permanece disponível para nova tentativa de contato")
                             time.sleep(2)
                             st.rerun()
