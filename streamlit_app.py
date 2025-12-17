@@ -1999,6 +1999,352 @@ def render_historico():
         st.info("👆 Digite o telefone ou nome do cliente acima e clique em Buscar")
 
 
+# ============================================================================
+# DASHBOARD - ANÁLISES E MÉTRICAS
+# ============================================================================
+
+def render_dashboard():
+    """Renderiza o Dashboard com análises e métricas do CRM"""
+    
+    st.title("📊 Dashboard de Análises")
+    st.markdown("Visualize métricas, tendências e performance do CRM")
+    st.markdown("---")
+    
+    # Abas do Dashboard
+    aba_dash = st.tabs(["📊 Visão Geral", "📈 Performance", "🎯 Análises Avançadas"])
+    
+    # ========================================================================
+    # ABA 1: VISÃO GERAL
+    # ========================================================================
+    with aba_dash[0]:
+        st.subheader("📊 Visão Geral do Negócio")
+        
+        # Carregar dados necessários
+        with st.spinner("Carregando dados..."):
+            df_metricas = carregar_dados("HISTORICO_METRICAS")
+            df_checkins = carregar_dados("LOG_CHECKINS")
+            df_conversoes = carregar_dados("LOG_CONVERSOES")
+            
+            # Carregar todas as classificações
+            df_novo = carregar_dados("Novo")
+            df_promissor = carregar_dados("Promissor")
+            df_leal = carregar_dados("Leal")
+            df_campeao = carregar_dados("Campeão")
+            df_risco = carregar_dados("Em risco")
+            df_dormente = carregar_dados("Dormente")
+        
+        # ========== FILTRO GLOBAL ==========
+        st.markdown("### 🔍 Filtros")
+        
+        col_f1, col_f2, col_f3 = st.columns(3)
+        
+        with col_f1:
+            filtro_classificacao = st.selectbox(
+                "📂 Classificação:",
+                ["Todas", "Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"],
+                help="Filtrar análises por classificação específica"
+            )
+        
+        with col_f2:
+            periodo_opcoes = ["Últimos 7 dias", "Últimos 15 dias", "Últimos 30 dias", "Todo período"]
+            filtro_periodo = st.selectbox(
+                "📅 Período:",
+                periodo_opcoes,
+                index=2
+            )
+        
+        with col_f3:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("🔄 Atualizar Dados", use_container_width=True):
+                carregar_dados.clear()
+                st.rerun()
+        
+        st.markdown("---")
+        
+        # ========== MÉTRICA 2: TOTAL DE CLIENTES POR CLASSIFICAÇÃO + % CRESCIMENTO ==========
+        st.markdown("### 👥 Total de Clientes por Classificação")
+        
+        # Calcular totais atuais
+        totais = {
+            'Novo': len(df_novo),
+            'Promissor': len(df_promissor),
+            'Leal': len(df_leal),
+            'Campeão': len(df_campeao),
+            'Em risco': len(df_risco),
+            'Dormente': len(df_dormente)
+        }
+        
+        total_geral = sum(totais.values())
+        
+        # Calcular crescimento (comparar com dia anterior se houver dados)
+        crescimentos = {}
+        if not df_metricas.empty and len(df_metricas) >= 2:
+            ultima_linha = df_metricas.iloc[-1]
+            penultima_linha = df_metricas.iloc[-2]
+            
+            crescimentos = {
+                'Novo': calcular_percentual(penultima_linha.get('Total_Novo', 0), ultima_linha.get('Total_Novo', 0)),
+                'Promissor': calcular_percentual(penultima_linha.get('Total_Promissor', 0), ultima_linha.get('Total_Promissor', 0)),
+                'Leal': calcular_percentual(penultima_linha.get('Total_Leal', 0), ultima_linha.get('Total_Leal', 0)),
+                'Campeão': calcular_percentual(penultima_linha.get('Total_Campeao', 0), ultima_linha.get('Total_Campeao', 0)),
+                'Em risco': calcular_percentual(penultima_linha.get('Total_EmRisco', 0), ultima_linha.get('Total_EmRisco', 0)),
+                'Dormente': calcular_percentual(penultima_linha.get('Total_Dormente', 0), ultima_linha.get('Total_Dormente', 0))
+            }
+        
+        # Exibir métricas
+        col_m1, col_m2, col_m3, col_m4, col_m5, col_m6 = st.columns(6)
+        
+        with col_m1:
+            delta_novo = f"+{crescimentos.get('Novo', 0):.1f}%" if crescimentos.get('Novo', 0) > 0 else f"{crescimentos.get('Novo', 0):.1f}%" if crescimentos else None
+            st.metric("🆕 Novo", totais['Novo'], delta=delta_novo)
+        
+        with col_m2:
+            delta_prom = f"+{crescimentos.get('Promissor', 0):.1f}%" if crescimentos.get('Promissor', 0) > 0 else f"{crescimentos.get('Promissor', 0):.1f}%" if crescimentos else None
+            st.metric("⭐ Promissor", totais['Promissor'], delta=delta_prom)
+        
+        with col_m3:
+            delta_leal = f"+{crescimentos.get('Leal', 0):.1f}%" if crescimentos.get('Leal', 0) > 0 else f"{crescimentos.get('Leal', 0):.1f}%" if crescimentos else None
+            st.metric("💙 Leal", totais['Leal'], delta=delta_leal)
+        
+        with col_m4:
+            delta_camp = f"+{crescimentos.get('Campeão', 0):.1f}%" if crescimentos.get('Campeão', 0) > 0 else f"{crescimentos.get('Campeão', 0):.1f}%" if crescimentos else None
+            st.metric("🏆 Campeão", totais['Campeão'], delta=delta_camp)
+        
+        with col_m5:
+            delta_risco = f"+{crescimentos.get('Em risco', 0):.1f}%" if crescimentos.get('Em risco', 0) > 0 else f"{crescimentos.get('Em risco', 0):.1f}%" if crescimentos else None
+            st.metric("⚠️ Em risco", totais['Em risco'], delta=delta_risco, delta_color="inverse")
+        
+        with col_m6:
+            delta_dorm = f"+{crescimentos.get('Dormente', 0):.1f}%" if crescimentos.get('Dormente', 0) > 0 else f"{crescimentos.get('Dormente', 0):.1f}%" if crescimentos else None
+            st.metric("😴 Dormente", totais['Dormente'], delta=delta_dorm, delta_color="inverse")
+        
+        # Gráfico de pizza
+        st.markdown("#### 📊 Distribuição de Clientes")
+        
+        dados_pizza = {
+            'Classificação': list(totais.keys()),
+            'Quantidade': list(totais.values())
+        }
+        
+        import plotly.express as px
+        fig_pizza = px.pie(
+            dados_pizza,
+            values='Quantidade',
+            names='Classificação',
+            title=f'Total de Clientes: {total_geral}',
+            color_discrete_sequence=px.colors.qualitative.Set3
+        )
+        fig_pizza.update_traces(textposition='inside', textinfo='percent+label+value')
+        st.plotly_chart(fig_pizza, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # ========== MÉTRICA 3: EVOLUÇÃO DE CHECK-INS POR DIA ==========
+        st.markdown("### 📈 Evolução de Check-ins por Dia")
+        
+        if not df_checkins.empty and 'Data_Checkin' in df_checkins.columns:
+            # Extrair apenas a data (remover hora)
+            df_checkins['Data'] = pd.to_datetime(df_checkins['Data_Checkin'], format='%d/%m/%Y %H:%M', errors='coerce').dt.date
+            
+            # Agrupar por data
+            checkins_por_dia = df_checkins.groupby('Data').size().reset_index(name='Check-ins')
+            checkins_por_dia['Data'] = pd.to_datetime(checkins_por_dia['Data'])
+            
+            # Gráfico de linha
+            fig_linha = px.line(
+                checkins_por_dia,
+                x='Data',
+                y='Check-ins',
+                title='Check-ins Realizados por Dia',
+                markers=True
+            )
+            fig_linha.update_traces(line_color='#1f77b4', line_width=3)
+            fig_linha.update_xaxes(title_text='Data')
+            fig_linha.update_yaxes(title_text='Quantidade de Check-ins')
+            st.plotly_chart(fig_linha, use_container_width=True)
+            
+            # Estatísticas
+            col_stat1, col_stat2, col_stat3 = st.columns(3)
+            
+            with col_stat1:
+                st.metric("📊 Média Diária", f"{checkins_por_dia['Check-ins'].mean():.1f}")
+            
+            with col_stat2:
+                st.metric("🔝 Dia com Mais", f"{checkins_por_dia['Check-ins'].max()}")
+            
+            with col_stat3:
+                st.metric("📉 Dia com Menos", f"{checkins_por_dia['Check-ins'].min()}")
+        else:
+            st.info("📭 Nenhum check-in registrado ainda")
+        
+        st.markdown("---")
+        
+        # ========== MÉTRICA 4: TAXA DE CONVERSÃO DE ATENDIMENTOS ==========
+        st.markdown("### 💰 Taxa de Conversão de Atendimentos")
+        
+        if not df_conversoes.empty and not df_checkins.empty:
+            total_checkins = len(df_checkins)
+            total_conversoes = len(df_conversoes)
+            
+            if total_checkins > 0:
+                taxa_conversao = (total_conversoes / total_checkins) * 100
+            else:
+                taxa_conversao = 0
+            
+            col_conv1, col_conv2, col_conv3 = st.columns(3)
+            
+            with col_conv1:
+                st.metric("✅ Total de Check-ins", total_checkins)
+            
+            with col_conv2:
+                st.metric("💰 Conversões", total_conversoes)
+            
+            with col_conv3:
+                st.metric("📊 Taxa de Conversão", f"{taxa_conversao:.1f}%")
+            
+            # Barra de progresso visual
+            st.progress(min(taxa_conversao / 100, 1.0))
+            
+            if taxa_conversao >= 50:
+                st.success(f"🎉 Excelente! Taxa de conversão de {taxa_conversao:.1f}%")
+            elif taxa_conversao >= 30:
+                st.info(f"👍 Boa taxa de conversão: {taxa_conversao:.1f}%")
+            elif taxa_conversao >= 15:
+                st.warning(f"⚠️ Taxa pode melhorar: {taxa_conversao:.1f}%")
+            else:
+                st.error(f"🔴 Taxa baixa: {taxa_conversao:.1f}% - Revise estratégias")
+        else:
+            st.info("📭 Dados insuficientes para calcular taxa de conversão")
+        
+        st.markdown("---")
+        
+        # ========== MÉTRICA 5: CLIENTES MAIS ATENDIDOS (POR CLASSIFICAÇÃO) ==========
+        st.markdown("### 📞 Classificação Mais Atendida")
+        
+        if not df_checkins.empty and 'Classificacao_Cliente' in df_checkins.columns:
+            atendimentos_por_class = df_checkins.groupby('Classificacao_Cliente').size().reset_index(name='Atendimentos')
+            atendimentos_por_class = atendimentos_por_class.sort_values('Atendimentos', ascending=False)
+            
+            # Gráfico de barras
+            fig_barras = px.bar(
+                atendimentos_por_class,
+                x='Classificacao_Cliente',
+                y='Atendimentos',
+                title='Quantidade de Atendimentos por Classificação',
+                color='Atendimentos',
+                color_continuous_scale='Blues'
+            )
+            fig_barras.update_xaxes(title_text='Classificação')
+            fig_barras.update_yaxes(title_text='Quantidade de Atendimentos')
+            st.plotly_chart(fig_barras, use_container_width=True)
+            
+            # Tabela detalhada
+            st.dataframe(atendimentos_por_class, use_container_width=True, hide_index=True)
+        else:
+            st.info("📭 Nenhum atendimento registrado ainda")
+        
+        st.markdown("---")
+        
+        # ========== MÉTRICA 21: QUAL CLASSIFICAÇÃO GERA MAIS RESULTADO ==========
+        st.markdown("### 💎 Classificação que Gera Mais Resultado")
+        
+        # Calcular valor total por classificação
+        valores_por_class = {
+            'Novo': df_novo['Valor'].sum() if 'Valor' in df_novo.columns and not df_novo.empty else 0,
+            'Promissor': df_promissor['Valor'].sum() if 'Valor' in df_promissor.columns and not df_promissor.empty else 0,
+            'Leal': df_leal['Valor'].sum() if 'Valor' in df_leal.columns and not df_leal.empty else 0,
+            'Campeão': df_campeao['Valor'].sum() if 'Valor' in df_campeao.columns and not df_campeao.empty else 0,
+            'Em risco': df_risco['Valor'].sum() if 'Valor' in df_risco.columns and not df_risco.empty else 0,
+            'Dormente': df_dormente['Valor'].sum() if 'Valor' in df_dormente.columns and not df_dormente.empty else 0
+        }
+        
+        df_valores = pd.DataFrame({
+            'Classificação': list(valores_por_class.keys()),
+            'Valor Total (R$)': list(valores_por_class.values())
+        }).sort_values('Valor Total (R$)', ascending=False)
+        
+        # Calcular percentual de contribuição
+        total_valor = df_valores['Valor Total (R$)'].sum()
+        if total_valor > 0:
+            df_valores['% Contribuição'] = (df_valores['Valor Total (R$)'] / total_valor * 100).round(1)
+        else:
+            df_valores['% Contribuição'] = 0
+        
+        # Gráfico de barras horizontal
+        fig_resultado = px.bar(
+            df_valores,
+            y='Classificação',
+            x='Valor Total (R$)',
+            title=f'Valor Total por Classificação (Total: R$ {total_valor:,.2f})',
+            orientation='h',
+            color='Valor Total (R$)',
+            color_continuous_scale='Greens',
+            text='% Contribuição'
+        )
+        fig_resultado.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+        fig_resultado.update_xaxes(title_text='Valor Total (R$)')
+        fig_resultado.update_yaxes(title_text='')
+        st.plotly_chart(fig_resultado, use_container_width=True)
+        
+        # Tabela detalhada
+        st.dataframe(df_valores, use_container_width=True, hide_index=True)
+        
+        # Insight
+        if not df_valores.empty:
+            melhor_class = df_valores.iloc[0]
+            st.success(f"🏆 **{melhor_class['Classificação']}** é a classificação mais lucrativa com R$ {melhor_class['Valor Total (R$)']:,.2f} ({melhor_class['% Contribuição']:.1f}% do total)")
+        
+        st.markdown("---")
+        
+        # ========== DOWNLOAD CSV ==========
+        st.markdown("### 💾 Exportar Dados")
+        
+        col_down1, col_down2 = st.columns(2)
+        
+        with col_down1:
+            if not df_checkins.empty:
+                csv_checkins = df_checkins.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download Check-ins (CSV)",
+                    data=csv_checkins,
+                    file_name=f'checkins_{datetime.now().strftime("%Y%m%d")}.csv',
+                    mime='text/csv',
+                    use_container_width=True
+                )
+        
+        with col_down2:
+            if not df_conversoes.empty:
+                csv_conversoes = df_conversoes.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download Conversões (CSV)",
+                    data=csv_conversoes,
+                    file_name=f'conversoes_{datetime.now().strftime("%Y%m%d")}.csv',
+                    mime='text/csv',
+                    use_container_width=True
+                )
+    
+    # ========================================================================
+    # ABA 2: PERFORMANCE (Placeholder - próximo passo)
+    # ========================================================================
+    with aba_dash[1]:
+        st.info("🚧 Aba de Performance em construção... Aguarde próxima atualização!")
+    
+    # ========================================================================
+    # ABA 3: ANÁLISES AVANÇADAS (Placeholder - próximo passo)
+    # ========================================================================
+    with aba_dash[2]:
+        st.info("🚧 Aba de Análises Avançadas em construção... Aguarde próxima atualização!")
+
+
+# ============================================================================
+# FUNÇÃO AUXILIAR PARA CÁLCULO DE PERCENTUAL
+# ============================================================================
+
+def calcular_percentual(valor_anterior, valor_atual):
+    """Calcula percentual de crescimento entre dois valores"""
+    if valor_anterior == 0:
+        return 0
+    return ((valor_atual - valor_anterior) / valor_anterior) * 100
 
 
 
@@ -2366,3 +2712,6 @@ elif pagina == "🆘 Suporte":
     render_suporte()
 elif pagina == "📜 Histórico":
     render_historico()
+elif pagina == "📊 Dashboard":
+    render_dashboard()
+    
