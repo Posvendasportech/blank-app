@@ -108,19 +108,8 @@ def registrar_log_checkin(dados_cliente, classificacao, respondeu, relato_resumo
         
         # Formatar ID: CHK-2025-00001
         proximo_id = f"CHK-{ano_atual}-{numero_sequencial:05d}"
-
-        else:
-            # Pegar o maior ID existente e adicionar 1
-            ids_existentes = df_log['ID_Checkin'].dropna()
-            if len(ids_existentes) > 0:
-                proximo_id = int(ids_existentes.max()) + 1
-            else:
-                proximo_id = 1
         
-        # ========== HORÁRIO DE BRASÍLIA (UTC-3) ==========
-        timezone_brasilia = pytz.timezone('America/Sao_Paulo')
-        agora = datetime.now(timezone_brasilia)
-        
+        # Resto do código continua igual (não mexa)
         data_checkin = agora.strftime('%d/%m/%Y')
         hora_checkin = agora.strftime('%H:%M:%S')
         dia_semana = agora.strftime('%A')
