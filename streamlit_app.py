@@ -1737,6 +1737,7 @@ def render_historico():
                 st.write("**📅 Dias desde última compra:** N/D")
         
         st.markdown("---")
+
         
         # ========== BUSCAR HISTÓRICO POR TELEFONE ==========
         df_historico = carregar_dados("HISTORICO")
@@ -1999,6 +2000,8 @@ def render_historico():
 
 
 
+
+
 # ============================================================================
 # SIDEBAR E NAVEGAÇÃO
 # ============================================================================
@@ -2006,11 +2009,7 @@ def render_historico():
 with st.sidebar:
     st.title("📋 Menu Principal")
     st.markdown("---")
-    pagina = st.radio(
-        "Navegação:",
-        ["✅ Check-in", "📞 Em Atendimento", "🆘 Suporte", "📜 Histórico"],
-        index=0
-    )
+    pagina = st.radio("Navegação", ["Check-in", "Em Atendimento", "Suporte", "Histórico", "📊 Dashboard"], index=0)
     st.markdown("---")
     st.caption("CRM Pós-Vendas v1.0")
 
