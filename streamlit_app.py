@@ -822,16 +822,19 @@ def render_checkin():
         classificacoes = ["Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
         classificacao_selecionada = st.selectbox("📂 Escolha a classificação:", classificacoes, index=0)
     with col_config2:
-    metas_por_classificacao = {
-        "Novo": st.session_state.metas_checkin['novo'],
-        "Promissor": st.session_state.metas_checkin['promissor'],
-        "Leal": st.session_state.metas_checkin['leal'],
-        "Campeão": st.session_state.metas_checkin['campeao'],
-        "Em risco": st.session_state.metas_checkin['risco'],
-        "Dormente": st.session_state.metas_checkin['dormente']
-    }
-    meta_classificacao = metas_por_classificacao.get(classificacao_selecionada, 0)
-    st.info(f"📊 Meta para '{classificacao_selecionada}': **{meta_classificacao}** check-ins hoje")
+        metas_por_classificacao = {
+            "Novo": st.session_state.metas_checkin['novo'],
+            "Promissor": st.session_state.metas_checkin['promissor'],
+            "Leal": st.session_state.metas_checkin['leal'],
+            "Campeão": st.session_state.metas_checkin['campeao'],
+            "Em risco": st.session_state.metas_checkin['risco'],
+            "Dormente": st.session_state.metas_checkin['dormente'],
+        }
+        meta_classificacao = metas_por_classificacao.get(classificacao_selecionada, 0)
+        st.info(
+            f"📊 Meta para '{classificacao_selecionada}': "
+            f"**{meta_classificacao}** check-ins hoje"
+        )
     
     # 🔥 VERIFICAÇÃO OTIMIZADA (1x por minuto) + resto igual...
     # [Continue com o resto do código da resposta anterior]
