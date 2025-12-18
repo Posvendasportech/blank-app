@@ -740,27 +740,75 @@ def render_checkin():
     
     st.markdown("---")
     
-    # ========== BARRA DE PROGRESSO (COMPLETA) ==========
+       # ========= PROGRESSO DO DIA =========
+    # 1) Calcular meta_total a partir das metas
+    meta_total = (
+        st.session_state.metas_checkin['novo']
+        + st.session_state.metas_checkin['promissor']
+        + st.session_state.metas_checkin['leal']
+        + st.session_state.metas_checkin['campeao']
+        + st.session_state.metas_checkin['risco']
+        + st.session_state.metas_checkin['dormente']
+    )
+
+    # 2) Contar check-ins realizados hoje (todas as classificações)
+    df_agendamentos_hoje = carregar_dados("AGENDAMENTOS_ATIVOS")
+    hoje_str = datetime.now().strftime('%d/%m/%Y')
+
+    if (
+        not df_agendamentos_hoje.empty
+        and 'Data de contato' in df_agendamentos_hoje.columns
+    ):
+        checkins_hoje = len(
+            df_agendamentos_hoje[
+                df_agendamentos_hoje['Data de contato'] == hoje_str
+            ]
+        )
+    else:
+        checkins_hoje = 0
+
+    # 3) Calcular progresso geral
+    if meta_total > 0:
+        progresso = min(checkins_hoje / meta_total, 1.0)
+        percentual = int(progresso * 100)
+    else:
+        progresso = 0.0
+        percentual = 0
+
     st.subheader("📈 Progresso do Dia")
-    progresso = min(checkins_hoje / meta_total, 1.0) if meta_total > 0 else 0
-    percentual = int(progresso * 100)
-    
-    frases_motivacao = {
-        0: "🚀 Vamos começar! Todo grande resultado começa com o primeiro passo!",
-        25: "💪 Ótimo começo! Continue assim e você vai longe!",
-        50: "🔥 Você está no meio do caminho! Não pare agora!",
-        75: "⭐ Incrível! Você está quase lá, finalize com chave de ouro!",
-        100: "🎉 PARABÉNS! Meta do dia alcançada! Você é CAMPEÃO! 🏆"
-    }
-    frase = frases_motivacao.get(min(percentual//25*25, 100), frases_motivacao[0])
-    
+
     col_prog1, col_prog2, col_prog3 = st.columns([1, 2, 1])
-    with col_prog1: st.metric("✅ Check-ins Hoje", checkins_hoje, f"{checkins_hoje - meta_total} da meta" if meta_total > 0 else None)
-    with col_prog2: 
+
+    with col_prog1:
+        st.metric(
+            label="✅ Check-ins Hoje",
+            value=checkins_hoje,
+            delta=f"{checkins_hoje}/{meta_total}"
+        )
+
+    with col_prog2:
         st.progress(progresso)
         st.markdown(f"**{percentual}% da meta alcançada**")
-        (st.success if percentual >= 100 else st.info if percentual >= 50 else st.warning)(frase)
-    with col_prog3: st.metric("🎯 Meta do Dia", meta_total, f"Faltam {max(0, meta_total - checkins_hoje)}")
+
+        if percentual >= 100:
+            st.success("🎉 PARABÉNS! Meta do dia alcançada! Você é CAMPEÃO! 🏆")
+        elif percentual >= 75:
+            st.info("⭐ Incrível! Você está quase lá, finalize com chave de ouro!")
+        elif percentual >= 50:
+            st.info("🔥 Você está no meio do caminho! Não pare agora!")
+        elif percentual >= 25:
+            st.warning("💪 Ótimo começo! Continue assim e você vai longe!")
+        else:
+            st.warning("🚀 Vamos começar! Todo grande resultado começa com o primeiro passo!")
+
+    with col_prog3:
+        faltam = max(0, meta_total - checkins_hoje)
+        st.metric(
+            label="🎯 Meta do Dia",
+            value=meta_total,
+            delta=f"Faltam {faltam}"
+        )
+
     
     st.markdown("---")
     
