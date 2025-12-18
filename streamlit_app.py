@@ -822,13 +822,16 @@ def render_checkin():
         classificacoes = ["Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
         classificacao_selecionada = st.selectbox("📂 Escolha a classificação:", classificacoes, index=0)
     with col_config2:
-        metas_por_classificacao = {
-            "Novo": st.session_state.metas_checkin['novo'], "Promissor": st.session_state.metas_checkin['promissor'],
-            "Leal": st.session_state.metas_checkin['leal'], "Campeão": st.session_state.metas_checkin['campeao'],
-            "Em risco": st.session_state.metas_checkin['risco'], "Dormente": st.session_state.metas_checkin['dormente']
-        }
-        limite_clientes = metas_por_classificacao.get(classificacao_selecionada, 10)
-        st.info(f"📊 **{limite_clientes}** clientes da meta do dia")
+    metas_por_classificacao = {
+        "Novo": st.session_state.metas_checkin['novo'],
+        "Promissor": st.session_state.metas_checkin['promissor'],
+        "Leal": st.session_state.metas_checkin['leal'],
+        "Campeão": st.session_state.metas_checkin['campeao'],
+        "Em risco": st.session_state.metas_checkin['risco'],
+        "Dormente": st.session_state.metas_checkin['dormente']
+    }
+    meta_classificacao = metas_por_classificacao.get(classificacao_selecionada, 0)
+    st.info(f"📊 Meta para '{classificacao_selecionada}': **{meta_classificacao}** check-ins hoje")
     
     # 🔥 VERIFICAÇÃO OTIMIZADA (1x por minuto) + resto igual...
     # [Continue com o resto do código da resposta anterior]
@@ -861,7 +864,7 @@ def render_checkin():
         return
     
     # 🔥 FILTRAR CLIENTES JÁ PROCESSADOS (rápido com set)
-    df_filtrado = df_clientes[~df_clientes['Nome'].isin(st.session_state.clientes_excluir)].head(limite_clientes)
+    df_filtrado = df_clientes[~df_clientes['Nome'].isin(st.session_state.clientes_excluir)]
     
     if len(df_filtrado) == 0:
         st.success(f"✅ Todos os clientes de '{classificacao_selecionada}' já foram check-in!")
