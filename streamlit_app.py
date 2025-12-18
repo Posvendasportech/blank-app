@@ -1445,7 +1445,11 @@ def render_suporte():
     st.markdown("Gerencie tickets de suporte com acompanhamento personalizado")
     st.markdown("---")
     
-    # Carregar dados
+    # Inicializar session_state para controle de operações
+    if 'operacao_suporte_concluida' not in st.session_state:
+        st.session_state.operacao_suporte_concluida = False
+    
+    # Carregar dados uma única vez
     with st.spinner("Carregando tickets de suporte..."):
         df_suporte = carregar_dados("SUPORTE")
     
@@ -1546,6 +1550,7 @@ def render_suporte():
     # Cards de tickets
     for idx, ticket in df_filt.iterrows():
         nome_cliente = ticket.get('Nome', 'N/D')
+        telefone_cliente = ticket.get('Telefone', '')
         prioridade = ticket.get('Prioridade', 'Média')
         progresso = ticket.get('Progresso', 0)
         
@@ -1565,7 +1570,7 @@ def render_suporte():
             with col_esq:
                 st.markdown("### 📋 Dados do Ticket")
                 st.write(f"**👤 Nome:** {nome_cliente}")
-                st.write(f"**📱 Telefone:** {ticket.get('Telefone', 'N/D')}")
+                st.write(f"**📱 Telefone:** {telefone_cliente}")
                 st.write(f"**🏷️ Classificação:** {ticket.get('Classificação', 'N/D')}")
                 st.write(f"**{icone} Prioridade:** {prioridade}")
                 st.markdown("---")
@@ -1619,9 +1624,8 @@ def render_suporte():
                 except Exception:
                     df_suporte_full = df_suporte.copy()
                 
-                tel_atual = ticket.get('Telefone', '')
-                if 'Telefone' in df_suporte_full.columns and tel_atual != '':
-                    df_cli = df_suporte_full[df_suporte_full['Telefone'] == tel_atual].copy()
+                if 'Telefone' in df_suporte_full.columns and telefone_cliente != '':
+                    df_cli = df_suporte_full[df_suporte_full['Telefone'] == telefone_cliente].copy()
                 else:
                     df_cli = pd.DataFrame()
                 
@@ -1657,27 +1661,32 @@ def render_suporte():
             with col_dir:
                 st.markdown("### ✏️ Registrar Acompanhamento")
                 
-                with st.form(key=f"form_suporte_{idx}"):
+                form_key = f"form_suporte_{telefone_cliente}_{idx}"
+                
+                with st.form(key=form_key):
                     st.info("💡 Registre o acompanhamento e atualize o status do ticket")
                     
                     novo_acompanhamento = st.text_area(
                         "📝 Como foi o contato de hoje?",
                         height=120,
                         placeholder="Descreva o que foi conversado e as ações tomadas...",
-                        help="Registre o acompanhamento realizado"
+                        help="Registre o acompanhamento realizado",
+                        key=f"acomp_{form_key}"
                     )
                     
                     nova_data_contato = st.date_input(
                         "📅 Próximo Contato:",
                         value=None,
-                        help="Quando será o próximo acompanhamento?"
+                        help="Quando será o próximo acompanhamento?",
+                        key=f"data_{form_key}"
                     )
                     
                     novo_progresso = st.selectbox(
                         "📊 Atualizar Progresso:",
                         [0, 25, 50, 75, 100],
                         index=[0, 25, 50, 75, 100].index(progresso) if progresso in [0, 25, 50, 75, 100] else 0,
-                        help="Atualize o percentual de conclusão do ticket"
+                        help="Atualize o percentual de conclusão do ticket",
+                        key=f"prog_{form_key}"
                     )
                     
                     st.caption("""
@@ -1692,7 +1701,8 @@ def render_suporte():
                     novas_obs = st.text_area(
                         "💬 Observações Adicionais:",
                         height=60,
-                        placeholder="Informações extras relevantes..."
+                        placeholder="Informações extras relevantes...",
+                        key=f"obs_{form_key}"
                     )
                     
                     st.markdown("---")
@@ -1709,7 +1719,7 @@ def render_suporte():
                             "🎉 Finalizar Suporte",
                             type="secondary",
                             use_container_width=True,
-                            help="Move para Agendamentos Ativos"
+                            help="Move para LOG_RESOLVIDOS + AGENDAMENTOS_ATIVOS + HISTORICO"
                         )
                     
                     # ========== ATUALIZAR: CRIA NOVA LINHA ==========
@@ -1727,11 +1737,11 @@ def render_suporte():
                                     novo_registro = ticket.to_dict().copy()
                                     novo_registro.update({
                                         'Nome': nome_cliente,
-                                        'Telefone': ticket.get('Telefone', ''),
+                                        'Telefone': telefone_cliente,
                                         'Assunto': ticket.get('Assunto', 'N/D'),
                                         'Prioridade': ticket.get('Prioridade', 'Média'),
                                         'Status': f'Aberto - Acompanhamento #{len(df_suporte_atual)+1}',
-                                        'Descrição': ticket.get('Descrição', ''),
+                                        'Descrição': ticket.get('Descrição do problema', ''),
                                         'Último contato': novo_acompanhamento,
                                         'Próximo contato': nova_data_contato.strftime('%d/%m/%Y'),
                                         'Progresso': novo_progresso,
@@ -1744,63 +1754,92 @@ def render_suporte():
                                     conn.update(worksheet="SUPORTE", data=df_novo)
                                     
                                     carregar_dados.clear()
+                                    st.session_state.operacao_suporte_concluida = True
                                     st.success(f"✅ Novo acompanhamento criado! Progresso: {novo_progresso}%")
-                                    time.sleep(1)
                                     st.rerun()
                                 
                                 except Exception as e:
-                                    st.error(f"❌ Erro ao criar acompanhamento: {e}")
+                                    st.error(f"❌ Erro ao criar acompanhamento: {str(e)}")
                     
-                    # ========== FINALIZAR SUPORTE ==========
+                    # ========== FINALIZAR SUPORTE - FLUXO COMPLETO ==========
                     if btn_finalizar:
                         if novo_progresso < 100:
                             st.warning("⚠️ Recomendamos marcar o progresso como 100% antes de finalizar")
-                        
-                        with st.spinner("Finalizando suporte..."):
-                            try:
-                                conn = get_gsheets_connection()
+                        else:
+                            with st.spinner("Finalizando suporte e movendo histórico completo..."):
+                                try:
+                                    conn = get_gsheets_connection()
+                                    
+                                    # 1. CRIAR LOG TICKET RESOLVIDO
+                                    registrar_ticket_resolvido(
+                                        dados_cliente={
+                                            'Nome': nome_cliente,
+                                            'Telefone': telefone_cliente,
+                                            'Classificação': ticket.get('Classificação', 'N/D')
+                                        },
+                                        tipo_problema=ticket.get('Assunto', 'N/D'),
+                                        data_abertura=ticket.get('Data de abertura', 'N/D'),
+                                        data_resolucao=datetime.now().strftime('%d/%m/%Y %H:%M'),
+                                        solucao=novo_acompanhamento if novo_acompanhamento else 'Suporte finalizado sem relato adicional',
+                                        resolvido_por="CRM - Suporte"
+                                    )
+                                    
+                                    # 2. CRIAR AGENDAMENTO ATIVO
+                                    df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
+                                    novo_agendamento = {
+                                        'Data de contato': datetime.now().strftime('%d/%m/%Y'),
+                                        'Nome': nome_cliente,
+                                        'Classificação': ticket.get('Classificação', ''),
+                                        'Valor': '',
+                                        'Telefone': telefone_cliente,
+                                        'Relato da conversa': f"[SUPORTE CONCLUÍDO] {novo_acompanhamento if novo_acompanhamento else 'Ticket finalizado'}",
+                                        'Follow up': 'Acompanhamento pós-suporte',
+                                        'Data de chamada': nova_data_contato.strftime('%d/%m/%Y') if nova_data_contato else '',
+                                        'Observação': f"Cliente retornando do suporte. Problema: {ticket.get('Descrição do problema', 'N/D')}"
+                                    }
+                                    
+                                    df_agendamentos_novo = pd.concat([df_agendamentos, pd.DataFrame([novo_agendamento])], ignore_index=True)
+                                    conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_agendamentos_novo)
+                                    
+                                    # 3. MOVER TODAS LINHAS DO CLIENTE PARA HISTORICO
+                                    df_suporte_full = conn.read(worksheet="SUPORTE", ttl=0)
+                                    
+                                    if telefone_cliente and 'Telefone' in df_suporte_full.columns:
+                                        # Pegar TODAS as linhas desse telefone
+                                        df_cliente_completo = df_suporte_full[df_suporte_full['Telefone'] == telefone_cliente].copy()
+                                        
+                                        # Carregar HISTORICO atual
+                                        df_historico = conn.read(worksheet="HISTORICO", ttl=0)
+                                        
+                                        # Adicionar prefixo para identificar origem do suporte
+                                        df_cliente_completo['Origem'] = 'SUPORTE - Histórico Completo'
+                                        df_cliente_completo['Data de migração'] = datetime.now().strftime('%d/%m/%Y %H:%M')
+                                        
+                                        # Concatenar com HISTORICO
+                                        df_historico_novo = pd.concat([df_historico, df_cliente_completo], ignore_index=True)
+                                        conn.update(worksheet="HISTORICO", data=df_historico_novo)
+                                        
+                                        # REMOVER APENAS as linhas desse cliente da aba SUPORTE
+                                        df_suporte_limpo = df_suporte_full[df_suporte_full['Telefone'] != telefone_cliente].reset_index(drop=True)
+                                        conn.update(worksheet="SUPORTE", data=df_suporte_limpo)
+                                        
+                                        qtd_linhas_movidas = len(df_cliente_completo)
+                                    else:
+                                        qtd_linhas_movidas = 0
+                                    
+                                    carregar_dados.clear()
+                                    st.session_state.operacao_suporte_concluida = True
+                                    st.success(f"🎉 **Suporte finalizado com sucesso!**\n\n"
+                                              f"✅ **{nome_cliente}** movido para:\n"
+                                              f"• 📚 **LOG_TICKETS_RESOLVIDOS**\n"
+                                              f"• 📅 **AGENDAMENTOS_ATIVOS**\n"
+                                              f"• 📖 **HISTORICO** ({qtd_linhas_movidas} linhas preservadas)")
+                                    st.balloons()
+                                    time.sleep(2)
+                                    st.rerun()
                                 
-                                registrar_ticket_resolvido(
-                                    dados_cliente={
-                                        'Nome': ticket.get('Nome', ''),
-                                        'Telefone': ticket.get('Telefone', ''),
-                                        'Classificação': ticket.get('Classificação', 'N/D')
-                                    },
-                                    tipo_problema=ticket.get('Assunto', 'N/D'),
-                                    data_abertura=ticket.get('Data de abertura', 'N/D'),
-                                    data_resolucao=datetime.now().strftime('%d/%m/%Y %H:%M'),
-                                    solucao=novo_acompanhamento if novo_acompanhamento else 'Suporte finalizado sem relato adicional',
-                                    resolvido_por="CRM - Suporte"
-                                )
-                                
-                                df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
-                                novo_agendamento = {
-                                    'Data de contato': datetime.now().strftime('%d/%m/%Y'),
-                                    'Nome': ticket.get('Nome', ''),
-                                    'Classificação': ticket.get('Classificação', ''),
-                                    'Valor': '',
-                                    'Telefone': ticket.get('Telefone', ''),
-                                    'Relato da conversa': f"[SUPORTE CONCLUÍDO] {novo_acompanhamento if novo_acompanhamento else 'Ticket finalizado'}",
-                                    'Follow up': 'Acompanhamento pós-suporte',
-                                    'Data de chamada': nova_data_contato.strftime('%d/%m/%Y') if nova_data_contato else '',
-                                    'Observação': f"Cliente retornando do suporte. Problema: {ticket.get('Descrição do problema', 'N/D')}"
-                                }
-                                
-                                df_agendamentos_novo = pd.concat([df_agendamentos, pd.DataFrame([novo_agendamento])], ignore_index=True)
-                                conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_agendamentos_novo)
-                                
-                                df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
-                                df_suporte_novo = df_suporte_atual.drop(idx).reset_index(drop=True)
-                                conn.update(worksheet="SUPORTE", data=df_suporte_novo)
-                                
-                                carregar_dados.clear()
-                                st.success(f"🎉 Suporte finalizado! Cliente {nome_cliente} movido para Agendamentos Ativos")
-                                st.balloons()
-                                time.sleep(2)
-                                st.rerun()
-                            
-                            except Exception as e:
-                                st.error(f"❌ Erro ao finalizar: {e}")
+                                except Exception as e:
+                                    st.error(f"❌ Erro ao finalizar suporte: {str(e)}")
         
         st.markdown("---")
 
