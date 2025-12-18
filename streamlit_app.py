@@ -567,6 +567,126 @@ def detectar_e_registrar_conversoes_automaticas():
         import traceback
         st.code(traceback.format_exc())
         return 0
+def registrar_ticket_aberto(dados_cliente, tipo_problema, prioridade, descricao, aberto_por="CRM"):
+    """Registra abertura de ticket na aba LOG_TICKETS_ABERTOS"""
+    try:
+        conn = get_gsheets_connection()
+        df_log_tickets = conn.read(worksheet="LOG_TICKETS_ABERTOS", ttl=0)
+        
+        # Horário de Brasília
+        timezone_brasilia = pytz.timezone('America/Sao_Paulo')
+        agora = datetime.now(timezone_brasilia)
+        ano_atual = agora.strftime('%Y')
+        
+        # Gerar ID único no formato TKT-AAAA-NNNNN
+        if df_log_tickets.empty or 'ID_Ticket' not in df_log_tickets.columns:
+            numero_sequencial = 1
+        else:
+            df_log_tickets['ID_Ticket'] = df_log_tickets['ID_Ticket'].astype(str)
+            ids_ano_atual = df_log_tickets[
+                df_log_tickets['ID_Ticket'].str.contains(f'TKT-{ano_atual}-', na=False)
+            ]
+            
+            if len(ids_ano_atual) > 0:
+                ultimos_numeros = ids_ano_atual['ID_Ticket'].str.extract(r'TKT-\d{4}-(\d{5})')[0]
+                ultimo_numero = ultimos_numeros.astype(int).max()
+                numero_sequencial = ultimo_numero + 1
+            else:
+                numero_sequencial = 1
+        
+        id_ticket = f"TKT-{ano_atual}-{numero_sequencial:05d}"
+        
+        # Traduzir dia da semana
+        dia_semana = agora.strftime('%A')
+        dias_pt = {
+            'Monday': 'Segunda-feira',
+            'Tuesday': 'Terça-feira',
+            'Wednesday': 'Quarta-feira',
+            'Thursday': 'Quinta-feira',
+            'Friday': 'Sexta-feira',
+            'Saturday': 'Sábado',
+            'Sunday': 'Domingo'
+        }
+        dia_semana = dias_pt.get(dia_semana, dia_semana)
+        
+        # Preparar linha
+        novo_ticket = {
+            'ID_Ticket': id_ticket,
+            'Data_Abertura': agora.strftime('%d/%m/%Y'),
+            'Hora_Abertura': agora.strftime('%H:%M:%S'),
+            'Nome_Cliente': dados_cliente.get('Nome', ''),
+            'Telefone': dados_cliente.get('Telefone', ''),
+            'Classificacao_Cliente': dados_cliente.get('Classificação', dados_cliente.get('Classificacao', '')),
+            'Tipo_Problema': tipo_problema,
+            'Prioridade': prioridade,
+            'Descricao_Resumida': descricao[:200] if descricao else '',
+            'Aberto_Por': aberto_por,
+            'Dia_Semana': dia_semana
+        }
+        
+        # Adicionar
+        df_novo = pd.concat([df_log_tickets, pd.DataFrame([novo_ticket])], ignore_index=True)
+        conn.update(worksheet="LOG_TICKETS_ABERTOS", data=df_novo)
+        
+        return id_ticket
+    
+    except Exception as e:
+        st.error(f"Erro ao registrar ticket aberto: {e}")
+        return None
+
+def registrar_ticket_resolvido(id_ticket, dados_cliente, data_abertura, tipo_problema, prioridade, 
+                                como_resolvido, resultado_final, gerou_conversao=False, resolvido_por="CRM"):
+    """Registra resolução de ticket na aba LOG_TICKETS_RESOLVIDOS"""
+    try:
+        conn = get_gsheets_connection()
+        df_log_resolvidos = conn.read(worksheet="LOG_TICKETS_RESOLVIDOS", ttl=0)
+        
+        # Horário de Brasília
+        timezone_brasilia = pytz.timezone('America/Sao_Paulo')
+        agora = datetime.now(timezone_brasilia)
+        data_resolucao = agora.strftime('%d/%m/%Y')
+        
+        # Calcular tempo de resolução em horas
+        tempo_resolucao_horas = ""
+        if data_abertura:
+            try:
+                # Tentar converter data de abertura
+                for fmt in ['%d/%m/%Y', '%Y-%m-%d', '%d/%m/%Y %H:%M:%S']:
+                    try:
+                        dt_abertura = datetime.strptime(str(data_abertura)[:10], fmt[:10])
+                        diferenca = agora - dt_abertura
+                        tempo_resolucao_horas = round(diferenca.total_seconds() / 3600, 1)
+                        break
+                    except:
+                        continue
+            except:
+                tempo_resolucao_horas = ""
+        
+        # Preparar linha
+        ticket_resolvido = {
+            'ID_Ticket': id_ticket,
+            'Data_Abertura': data_abertura if data_abertura else '',
+            'Data_Resolucao': data_resolucao,
+            'Tempo_Resolucao_Horas': tempo_resolucao_horas,
+            'Nome_Cliente': dados_cliente.get('Nome', ''),
+            'Telefone': dados_cliente.get('Telefone', ''),
+            'Tipo_Problema': tipo_problema,
+            'Prioridade': prioridade,
+            'Como_Foi_Resolvido': como_resolvido[:200] if como_resolvido else '',
+            'Resultado_Final': resultado_final,
+            'Gerou_Conversao': 'SIM' if gerou_conversao else 'NÃO',
+            'Resolvido_Por': resolvido_por
+        }
+        
+        # Adicionar
+        df_novo = pd.concat([df_log_resolvidos, pd.DataFrame([ticket_resolvido])], ignore_index=True)
+        conn.update(worksheet="LOG_TICKETS_RESOLVIDOS", data=df_novo)
+        
+        return True
+    
+    except Exception as e:
+        st.error(f"Erro ao registrar ticket resolvido: {e}")
+        return False
 
 
 # ============================================================================
@@ -2144,7 +2264,23 @@ def render_historico():
                             }
                             
                             df_novo = pd.concat([df_agend_atual, pd.DataFrame([novo_agend])], ignore_index=True)
-                            conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_novo)
+                                conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_novo)
+                                
+                                # ========== REGISTRAR RESOLUÇÃO NO LOG ==========
+                                registrar_ticket_resolvido(
+                                    dados_cliente={
+                                        'Nome': ticket_selecionado.get('Nome', ''),
+                                        'Telefone': ticket_selecionado.get('Telefone', ''),
+                                        'Classificação': ticket_selecionado.get('Classificação', '')
+                                    },
+                                    tipo_problema=ticket_selecionado.get('Assunto', ''),
+                                    data_abertura=ticket_selecionado.get('Data de abertura', ''),
+                                    data_resolucao=datetime.now().strftime('%d/%m/%Y %H:%M'),
+                                    solucao=solucao_texto,
+                                    resolvido_por="CRM"
+                                )
+                                
+
                             
                             carregar_dados.clear()
                             st.success(f"✅ Agendamento criado!")
@@ -2187,34 +2323,49 @@ def render_historico():
                         st.error("❌ Informe o assunto!")
                     elif not descricao_suporte:
                         st.error("❌ Descreva o problema!")
-                    else:
-                        try:
-                            conn = get_gsheets_connection()
-                            df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
-                            
-                            novo_ticket = {
-                                'Data de abertura': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                                'Nome': nome_cliente,
-                                'Telefone': telefone_cliente,
-                                'Assunto': assunto_suporte,
-                                'Prioridade': prioridade,
-                                'Status': 'Aberto',
-                                'Descrição': descricao_suporte,
-                                'Data de atualização': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                                'Solução': '',
-                                'Data de resolução': ''
-                            }
-                            
-                            df_novo = pd.concat([df_suporte_atual, pd.DataFrame([novo_ticket])], ignore_index=True)
-                            conn.update(worksheet="SUPORTE", data=df_novo)
-                            
-                            carregar_dados.clear()
-                            st.success(f"✅ Ticket aberto!")
-                            time.sleep(1)
-                            st.rerun()
-                            
-                        except Exception as e:
-                            st.error(f"❌ Erro: {str(e)}")
+                        else:
+                            try:
+                                conn = get_gsheets_connection()
+                                df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
+                                
+                                novo_ticket = {
+                                    'Data de abertura': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                                    'Nome': nome_cliente,
+                                    'Telefone': telefone_cliente,
+                                    'Assunto': assunto_suporte,
+                                    'Prioridade': prioridade,
+                                    'Status': 'Aberto',
+                                    'Descrição': descricao_suporte,
+                                    'Data de atualização': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                                    'Solução': '',
+                                    'Data de resolução': ''
+                                }
+                                
+                                df_novo = pd.concat([df_suporte_atual, pd.DataFrame([novo_ticket])], ignore_index=True)
+                                conn.update(worksheet="SUPORTE", data=df_novo)
+                                
+                                # ========== REGISTRAR NO LOG_TICKETS_ABERTOS ==========
+                                id_ticket = registrar_ticket_aberto(
+                                    dados_cliente={
+                                        'Nome': novo_ticket.get('Nome', ''),
+                                        'Telefone': novo_ticket.get('Telefone', ''),
+                                        'Classificação': ''  # não tem classificação aqui
+                                    },
+                                    tipo_problema=novo_ticket.get('Assunto', ''),
+                                    prioridade=novo_ticket.get('Prioridade', ''),
+                                    descricao=novo_ticket.get('Descrição', ''),
+                                    aberto_por="CRM"
+                                )
+                                
+                                carregar_dados.clear()
+                                st.success(f"✅ Ticket {id_ticket} criado com sucesso!")
+                                st.balloons()
+                                time.sleep(2)
+                                st.rerun()
+                                
+                            except Exception as e:
+                                st.error(f"❌ Erro ao criar ticket: {e}")
+
     
     elif btn_buscar and not termo_busca:
         st.warning("⚠️ Digite um telefone ou nome para buscar")
