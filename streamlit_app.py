@@ -674,76 +674,105 @@ def registrar_ticket_resolvido(id_ticket, dados_cliente, data_abertura, tipo_pro
 
 def render_checkin():
     """Renderiza a página de Check-in - COMPLETA + OTIMIZADA"""
-    # Session state completo
+
+    # ---------------- SESSION STATE ----------------
     if 'metas_checkin' not in st.session_state:
-        st.session_state.metas_checkin = {'novo': 5, 'promissor': 5, 'leal': 5, 'campeao': 3, 'risco': 5, 'dormente': 5}
-    if 'metas_alteradas' not in st.session_state: st.session_state.metas_alteradas = False
-    if 'ultima_verificacao' not in st.session_state: st.session_state.ultima_verificacao = 0
-    if 'clientes_excluir' not in st.session_state: st.session_state.clientes_excluir = set()
-    
+        st.session_state.metas_checkin = {
+            'novo': 5,
+            'promissor': 5,
+            'leal': 5,
+            'campeao': 3,
+            'risco': 5,
+            'dormente': 5,
+        }
+    if 'metas_alteradas' not in st.session_state:
+        st.session_state.metas_alteradas = False
+    if 'ultima_verificacao' not in st.session_state:
+        st.session_state.ultima_verificacao = 0
+    if 'clientes_excluir' not in st.session_state:
+        st.session_state.clientes_excluir = set()
+
     st.title("✅ Check-in de Clientes")
     st.markdown("Selecione clientes para iniciar o fluxo de atendimento")
     st.markdown("---")
-    
-    # ========== PAINEL DE PLANEJAMENTO DIÁRIO (COMPLETO) ==========
+
+    # ---------------- PAINEL DE PLANEJAMENTO ----------------
     st.subheader("📊 Planejamento de Check-ins do Dia")
-    
-    df_agendamentos_hoje = carregar_dados("AGENDAMENTOS_ATIVOS")
-    hoje = datetime.now().strftime('%d/%m/%Y')
-    checkins_hoje = len(df_agendamentos_hoje[df_agendamentos_hoje['Data de contato'] == hoje]) if not df_agendamentos_hoje.empty and 'Data de contato' in df_agendamentos_hoje.columns else 0
-    
+
     with st.expander("🎯 Definir Metas de Check-in por Classificação", expanded=True):
         st.write("**Defina quantos clientes de cada grupo você quer contatar hoje:**")
-        
+
         col_meta1, col_meta2, col_meta3 = st.columns(3)
-        
+
         with col_meta1:
-            meta_novo = st.number_input("🆕 Novo", 0, 50, st.session_state.metas_checkin['novo'], 1, key='input_meta_novo', help="Meta de clientes novos")
-            if meta_novo != st.session_state.metas_checkin['novo']: 
+            meta_novo = st.number_input(
+                "🆕 Novo", 0, 50, st.session_state.metas_checkin['novo'],
+                1, key='input_meta_novo', help="Meta de clientes novos"
+            )
+            if meta_novo != st.session_state.metas_checkin['novo']:
                 st.session_state.metas_checkin['novo'] = meta_novo
                 st.session_state.metas_alteradas = True
-            
-            meta_promissor = st.number_input("⭐ Promissor", 0, 50, st.session_state.metas_checkin['promissor'], 1, key='input_meta_promissor', help="Meta de clientes promissores")
-            if meta_promissor != st.session_state.metas_checkin['promissor']: 
+
+            meta_promissor = st.number_input(
+                "⭐ Promissor", 0, 50, st.session_state.metas_checkin['promissor'],
+                1, key='input_meta_promissor', help="Meta de clientes promissores"
+            )
+            if meta_promissor != st.session_state.metas_checkin['promissor']:
                 st.session_state.metas_checkin['promissor'] = meta_promissor
                 st.session_state.metas_alteradas = True
-        
+
         with col_meta2:
-            meta_leal = st.number_input("💙 Leal", 0, 50, st.session_state.metas_checkin['leal'], 1, key='input_meta_leal', help="Meta de clientes leais")
-            if meta_leal != st.session_state.metas_checkin['leal']: 
+            meta_leal = st.number_input(
+                "💙 Leal", 0, 50, st.session_state.metas_checkin['leal'],
+                1, key='input_meta_leal', help="Meta de clientes leais"
+            )
+            if meta_leal != st.session_state.metas_checkin['leal']:
                 st.session_state.metas_checkin['leal'] = meta_leal
                 st.session_state.metas_alteradas = True
-            
-            meta_campeao = st.number_input("🏆 Campeão", 0, 50, st.session_state.metas_checkin['campeao'], 1, key='input_meta_campeao', help="Meta de clientes campeões")
-            if meta_campeao != st.session_state.metas_checkin['campeao']: 
+
+            meta_campeao = st.number_input(
+                "🏆 Campeão", 0, 50, st.session_state.metas_checkin['campeao'],
+                1, key='input_meta_campeao', help="Meta de clientes campeões"
+            )
+            if meta_campeao != st.session_state.metas_checkin['campeao']:
                 st.session_state.metas_checkin['campeao'] = meta_campeao
                 st.session_state.metas_alteradas = True
-        
+
         with col_meta3:
-            meta_risco = st.number_input("⚠️ Em risco", 0, 50, st.session_state.metas_checkin['risco'], 1, key='input_meta_risco', help="Meta de clientes em risco")
-            if meta_risco != st.session_state.metas_checkin['risco']: 
+            meta_risco = st.number_input(
+                "⚠️ Em risco", 0, 50, st.session_state.metas_checkin['risco'],
+                1, key='input_meta_risco', help="Meta de clientes em risco"
+            )
+            if meta_risco != st.session_state.metas_checkin['risco']:
                 st.session_state.metas_checkin['risco'] = meta_risco
                 st.session_state.metas_alteradas = True
-            
-            meta_dormente = st.number_input("😴 Dormente", 0, 50, st.session_state.metas_checkin['dormente'], 1, key='input_meta_dormente', help="Meta de clientes dormentes")
-            if meta_dormente != st.session_state.metas_checkin['dormente']: 
+
+            meta_dormente = st.number_input(
+                "😴 Dormente", 0, 50, st.session_state.metas_checkin['dormente'],
+                1, key='input_meta_dormente', help="Meta de clientes dormentes"
+            )
+            if meta_dormente != st.session_state.metas_checkin['dormente']:
                 st.session_state.metas_checkin['dormente'] = meta_dormente
                 st.session_state.metas_alteradas = True
-        
-        meta_total = meta_novo + meta_promissor + meta_leal + meta_campeao + meta_risco + meta_dormente
+
+        meta_total = (
+            meta_novo + meta_promissor + meta_leal +
+            meta_campeao + meta_risco + meta_dormente
+        )
+
         col_info1, col_info2 = st.columns([2, 1])
-        with col_info1: st.info(f"🎯 **Meta Total do Dia:** {meta_total} check-ins")
+        with col_info1:
+            st.info(f"🎯 **Meta Total do Dia:** {meta_total} check-ins")
         with col_info2:
             if st.session_state.metas_alteradas:
-                st.success("✅ Salvo!")
-                st.session_state.metas_alteradas = False  # Reset após mostrar
-    
+                st.success("✅ Metas salvas!")
+                st.session_state.metas_alteradas = False
+
     st.markdown("---")
-    
-    # ========== BARRA DE PROGRESSO (COMPLETA) ==========
+
+    # ---------------- BARRA DE PROGRESSO ----------------
     st.subheader("📈 Progresso do Dia")
 
-    # 1) Meta total do dia (só a partir do que você definiu nas metas)
     meta_total = (
         st.session_state.metas_checkin['novo']
         + st.session_state.metas_checkin['promissor']
@@ -753,7 +782,6 @@ def render_checkin():
         + st.session_state.metas_checkin['dormente']
     )
 
-    # 2) Check-ins de hoje em AGENDAMENTOS_ATIVOS
     df_agendamentos_hoje = carregar_dados("AGENDAMENTOS_ATIVOS")
     hoje_str = datetime.now().strftime('%d/%m/%Y')
 
@@ -761,13 +789,11 @@ def render_checkin():
         not df_agendamentos_hoje.empty
         and 'Data de contato' in df_agendamentos_hoje.columns
     ):
-        # Garante que a coluna é string antes de comparar
         datas_contato = df_agendamentos_hoje['Data de contato'].astype(str)
         checkins_hoje = (datas_contato == hoje_str).sum()
     else:
         checkins_hoje = 0
 
-    # 3) Progresso
     if meta_total > 0:
         progresso = min(checkins_hoje / meta_total, 1.0)
         percentual = int(progresso * 100)
@@ -775,13 +801,12 @@ def render_checkin():
         progresso = 0.0
         percentual = 0
 
-    # 4) UI
     frases_motivacao = {
         0: "🚀 Vamos começar! Todo grande resultado começa com o primeiro passo!",
         25: "💪 Ótimo começo! Continue assim e você vai longe!",
         50: "🔥 Você está no meio do caminho! Não pare agora!",
         75: "⭐ Incrível! Você está quase lá, finalize com chave de ouro!",
-        100: "🎉 PARABÉNS! Meta do dia alcançada! Você é CAMPEÃO! 🏆"
+        100: "🎉 PARABÉNS! Meta do dia alcançada! Você é CAMPEÃO! 🏆",
     }
     chave_frase = min((percentual // 25) * 25, 100)
     frase = frases_motivacao.get(chave_frase, frases_motivacao[0])
@@ -807,20 +832,19 @@ def render_checkin():
 
     with col_prog3:
         faltam = max(0, meta_total - checkins_hoje)
-        st.metric(
-            label="🎯 Meta do Dia",
-            value=meta_total,
-            delta=f"Faltam {faltam}",
-        )
+        st.metric("🎯 Meta do Dia", meta_total, f"Faltam {faltam}")
 
-    
     st.markdown("---")
-    
-    # ========== RESTO DO CÓDIGO (igual ao anterior) ==========
+
+    # ---------------- CONFIGURAÇÕES DE FILTRO ----------------
     col_config1, col_config2 = st.columns([2, 1])
     with col_config1:
         classificacoes = ["Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
-        classificacao_selecionada = st.selectbox("📂 Escolha a classificação:", classificacoes, index=0)
+        classificacao_selecionada = st.selectbox(
+            "📂 Escolha a classificação:",
+            classificacoes,
+            index=0
+        )
     with col_config2:
         metas_por_classificacao = {
             "Novo": st.session_state.metas_checkin['novo'],
@@ -835,46 +859,58 @@ def render_checkin():
             f"📊 Meta para '{classificacao_selecionada}': "
             f"**{meta_classificacao}** check-ins hoje"
         )
-    
-    # 🔥 VERIFICAÇÃO OTIMIZADA (1x por minuto) + resto igual...
-    # [Continue com o resto do código da resposta anterior]
 
-    
     st.markdown("---")
-    
-    # 🔥 VERIFICAÇÃO OTIMIZADA (SÓ 1X POR MINUTO)
-    agora = time.time()
-    if agora - st.session_state.ultima_verificacao > 60:  # 60s
+
+    # ---------------- VERIFICAÇÃO 1x POR MINUTO ----------------
+    agora_ts = time.time()
+    if agora_ts - st.session_state.ultima_verificacao > 60:
         with st.status("🔄 Atualizando filtros...", expanded=False):
             df_agendamentos_ativos = carregar_dados("AGENDAMENTOS_ATIVOS")
             df_log_checkins = carregar_dados("LOG_CHECKINS")
-            hoje_str = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%d/%m/%Y')
-            
+            hoje_br = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%d/%m/%Y')
+
             st.session_state.clientes_excluir = set()
+
             if not df_agendamentos_ativos.empty and 'Nome' in df_agendamentos_ativos.columns:
-                st.session_state.clientes_excluir.update(df_agendamentos_ativos['Nome'].tolist())
-            if not df_log_checkins.empty and 'Nome_Cliente' in df_log_checkins.columns:
-                hoje_checkins = df_log_checkins[df_log_checkins['Data_Checkin'] == hoje_str]['Nome_Cliente'].tolist()
+                st.session_state.clientes_excluir.update(
+                    df_agendamentos_ativos['Nome'].tolist()
+                )
+
+            if (
+                not df_log_checkins.empty
+                and 'Nome_Cliente' in df_log_checkins.columns
+                and 'Data_Checkin' in df_log_checkins.columns
+            ):
+                hoje_checkins = df_log_checkins[
+                    df_log_checkins['Data_Checkin'] == hoje_br
+                ]['Nome_Cliente'].tolist()
                 st.session_state.clientes_excluir.update(hoje_checkins)
-            
-            st.session_state.ultima_verificacao = agora
+
+            st.session_state.ultima_verificacao = agora_ts
             st.toast("✅ Filtros atualizados!", icon="🔄")
-    
-    # Carregar clientes da classificação
+
+    # ---------------- CARREGAR CLIENTES DA CLASSIFICAÇÃO ----------------
     df_clientes = carregar_dados(classificacao_selecionada)
     if df_clientes.empty:
         st.warning(f"⚠️ Nenhum cliente em '{classificacao_selecionada}'")
         return
-    
-    # 🔥 FILTRAR CLIENTES JÁ PROCESSADOS (rápido com set)
-    df_filtrado = df_clientes[~df_clientes['Nome'].isin(st.session_state.clientes_excluir)]
-    
+
+    # limitar lista de trabalho pela meta da classificação
+    if meta_classificacao > 0:
+        df_clientes = df_clientes.head(meta_classificacao)
+
+    # remover já processados (em atendimento ou já fizeram check-in hoje)
+    df_filtrado = df_clientes[
+        ~df_clientes['Nome'].isin(st.session_state.clientes_excluir)
+    ]
+
     if len(df_filtrado) == 0:
         st.success(f"✅ Todos os clientes de '{classificacao_selecionada}' já foram check-in!")
         st.info("👉 Vá para '📞 Em Atendimento'")
         return
-    
-           # Filtros rápidos
+
+    # ---------------- FILTROS RÁPIDOS ----------------
     col_info, col_busca, col_dias = st.columns([1, 2, 2])
 
     with col_info:
@@ -889,12 +925,10 @@ def render_checkin():
 
     with col_dias:
         if 'Dias desde a compra' in df_filtrado.columns:
-            # Garantir número seguro para o max
             max_bruto = pd.to_numeric(
                 df_filtrado['Dias desde a compra'],
                 errors='coerce'
             ).max()
-
             if pd.isna(max_bruto):
                 max_bruto = 0
 
@@ -917,7 +951,6 @@ def render_checkin():
         else:
             filtro_dias = None
 
-    # Aplicar filtros
     if busca_nome and 'Nome' in df_filtrado.columns:
         df_filtrado = df_filtrado[
             df_filtrado['Nome'].str.contains(busca_nome, case=False, na=False)
@@ -940,60 +973,99 @@ def render_checkin():
     st.markdown("---")
     st.subheader(f"📋 Clientes para Check-in ({len(df_filtrado)})")
 
-    
-    # ========== CARDS COM CHECK-IN CORRIGIDO ==========
+    # ---------------- CARDS DE CLIENTES ----------------
     for index, cliente in df_filtrado.iterrows():
         nome_cliente = cliente.get('Nome', 'N/D')
-        valor_formatado = f"R$ {float(cliente.get('Valor', 0)):.2f}"
-        
+        try:
+            valor_formatado = f"R$ {float(cliente.get('Valor', 0)):.2f}"
+        except Exception:
+            valor_formatado = "R$ 0,00"
+
         with st.expander(f"👤 {nome_cliente} | 💰 {valor_formatado}", expanded=False):
-            col_info, col_form = st.columns([1, 1])
-            
-            with col_info:
-                st.write(f"**📱** {cliente.get('Telefone', 'N/D')} | **🏷️** {classificacao_selecionada}")
-                # [Métricas igual]
-            
+            col_info_card, col_form = st.columns([1, 1])
+
+            with col_info_card:
+                st.markdown("### 📊 Informações do Cliente")
+                st.write(f"**📱** {cliente.get('Telefone', 'N/D')}")
+                st.write(f"**📧** {cliente.get('Email', 'N/D')}")
+                st.write(f"**🏷️** {classificacao_selecionada}")
+
             with col_form:
-                # ✅ BOTÃO RÁPIDO SEM RESPOSTA
-                if st.button("❌ Não Respondeu", key=f"nao_{index}", type="secondary", use_container_width=True):
-                    id_checkin = registrar_log_checkin(cliente, classificacao_selecionada, "NÃO RESPONDEU", "Cliente não respondeu", "CRM")
-                    st.session_state.clientes_excluir.add(nome_cliente)  # 🔥 Remove IMEDIATAMENTE
+                if st.button(
+                    "❌ Não Respondeu",
+                    key=f"nao_{index}",
+                    type="secondary",
+                    use_container_width=True
+                ):
+                    id_checkin = registrar_log_checkin(
+                        cliente,
+                        classificacao_selecionada,
+                        "NÃO RESPONDEU",
+                        "Cliente não respondeu",
+                        "CRM"
+                    )
+                    st.session_state.clientes_excluir.add(nome_cliente)
                     st.success(f"✅ {id_checkin} registrado!")
                     st.toast("Card removido ➡️", icon="✅")
                     st.rerun()
-                
-                # ✅ FORMULÁRIO CHECK-IN (CORRIGIDO)
+
                 with st.form(key=f"checkin_{index}"):
                     conversa = st.text_area("📝 Conversa:", height=100)
                     proximo = st.text_input("🎯 Próximo:")
                     data_prox = st.date_input("📅 Data:")
-                    
-                    if st.form_submit_button("✅ Check-in", type="primary", use_container_width=True):
+
+                    if st.form_submit_button(
+                        "✅ Check-in",
+                        type="primary",
+                        use_container_width=True
+                    ):
                         if conversa and proximo:
                             with st.status("💾 Salvando...", expanded=False):
-                                # 🔥 SALVAR EM AGENDAMENTOS_ATIVOS (CORRIGIDO)
                                 conn = get_gsheets_connection()
-                                df_agend = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
+                                df_agend = conn.read(
+                                    worksheet="AGENDAMENTOS_ATIVOS",
+                                    ttl=0
+                                )
                                 nova_linha = {
                                     'Data de contato': datetime.now().strftime('%d/%m/%Y'),
-                                    'Nome': nome_cliente, 'Classificação': classificacao_selecionada,
-                                    'Valor': cliente.get('Valor', ''), 'Telefone': cliente.get('Telefone', ''),
-                                    'Relato da conversa': conversa, 'Follow up': proximo,
+                                    'Nome': nome_cliente,
+                                    'Classificação': classificacao_selecionada,
+                                    'Valor': cliente.get('Valor', ''),
+                                    'Telefone': cliente.get('Telefone', ''),
+                                    'Relato da conversa': conversa,
+                                    'Follow up': proximo,
                                     'Data de chamada': data_prox.strftime('%d/%m/%Y') if data_prox else '',
                                     'Observação': 'Check-in via CRM'
                                 }
-                                df_novo = pd.concat([df_agend, pd.DataFrame([nova_linha])], ignore_index=True)
-                                conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_novo)
-                                
-                                # 🔥 LOG DO CHECK-IN (CORRIGIDO)
-                                id_checkin = registrar_log_checkin(cliente, classificacao_selecionada, "SIM", conversa[:200], "CRM")
-                                
-                                st.session_state.clientes_excluir.add(nome_cliente)  # 🔥 Remove da lista
-                                st.success(f"✅ Check-in #{id_checkin} ➡️ AGENDAMENTOS_ATIVOS")
-                                st.toast("Cliente em '📞 Em Atendimento' ➡️", icon="✅")
+                                df_novo = pd.concat(
+                                    [df_agend, pd.DataFrame([nova_linha])],
+                                    ignore_index=True
+                                )
+                                conn.update(
+                                    worksheet="AGENDAMENTOS_ATIVOS",
+                                    data=df_novo
+                                )
+
+                                id_checkin = registrar_log_checkin(
+                                    cliente,
+                                    classificacao_selecionada,
+                                    "SIM",
+                                    conversa[:200],
+                                    "CRM"
+                                )
+
+                                st.session_state.clientes_excluir.add(nome_cliente)
+                                st.success(
+                                    f"✅ Check-in #{id_checkin} ➡️ AGENDAMENTOS_ATIVOS"
+                                )
+                                st.toast(
+                                    "Cliente em '📞 Em Atendimento' ➡️",
+                                    icon="✅"
+                                )
                                 st.rerun()
                         else:
                             st.error("❌ Preencha conversa + próximo contato!")
+
 
 # ============================================================================
 # RENDER - PÁGINA EM ATENDIMENTO
