@@ -2267,8 +2267,8 @@ def render_historico():
                             conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_novo)
                                 
                                 # ========== REGISTRAR RESOLUÇÃO NO LOG ==========
-                                registrar_ticket_resolvido(
-                                    dados_cliente={
+                            registrar_ticket_resolvido(
+                                 dados_cliente={
                                         'Nome': ticket_selecionado.get('Nome', ''),
                                         'Telefone': ticket_selecionado.get('Telefone', ''),
                                         'Classificação': ticket_selecionado.get('Classificação', '')
