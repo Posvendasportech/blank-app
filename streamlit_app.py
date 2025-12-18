@@ -1209,9 +1209,7 @@ def render_checkin():
                                     
                                     carregar_dados.clear()
                                     st.success(f"✅ Check-in #{id_checkin} realizado com sucesso para **{nome_cliente}**!")
-                                    st.balloons()
-                                    time.sleep(2)
-                                    st.rerun()
+                                    st.toast("Cliente removido da lista ➡️", icon="✅")
                                     
                                 except Exception as e:
                                     st.error(f"❌ Erro ao realizar check-in: {e}")
