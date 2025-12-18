@@ -2010,7 +2010,6 @@ def render_historico():
     
     # ========== REALIZAR BUSCA ==========
     if btn_buscar and termo_busca:
-        
         with st.spinner("🔎 Buscando em todas as bases..."):
             # Carregar todas as abas necessárias
             df_total = carregar_dados("Total")
@@ -2046,7 +2045,6 @@ def render_historico():
     
     # ========== EXIBIR RESULTADO ==========
     if st.session_state.cliente_encontrado is not None:
-        
         cliente = st.session_state.cliente_encontrado
         nome_cliente = cliente.get('Nome', 'N/D')
         telefone_cliente = cliente.get('Telefone', '')
@@ -2218,7 +2216,6 @@ def render_historico():
             st.info("💡 Use para vendas, follow-ups comerciais ou satisfação")
             
             with st.form(key="form_novo_agendamento"):
-                
                 motivo_agend = st.text_input(
                     "🎯 Motivo do contato:",
                     placeholder="Ex: Oferta de novo produto..."
@@ -2265,22 +2262,6 @@ def render_historico():
                             
                             df_novo = pd.concat([df_agend_atual, pd.DataFrame([novo_agend])], ignore_index=True)
                             conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_novo)
-                                
-                                # ========== REGISTRAR RESOLUÇÃO NO LOG ==========
-                            registrar_ticket_resolvido(
-                                 dados_cliente={
-                                        'Nome': ticket_selecionado.get('Nome', ''),
-                                        'Telefone': ticket_selecionado.get('Telefone', ''),
-                                        'Classificação': ticket_selecionado.get('Classificação', '')
-                                    },
-                                    tipo_problema=ticket_selecionado.get('Assunto', ''),
-                                    data_abertura=ticket_selecionado.get('Data de abertura', ''),
-                                    data_resolucao=datetime.now().strftime('%d/%m/%Y %H:%M'),
-                                    solucao=solucao_texto,
-                                    resolvido_por="CRM"
-                                )
-                                
-
                             
                             carregar_dados.clear()
                             st.success(f"✅ Agendamento criado!")
@@ -2295,7 +2276,6 @@ def render_historico():
             st.warning("⚠️ Use para problemas técnicos ou reclamações")
             
             with st.form(key="form_novo_suporte"):
-                
                 assunto_suporte = st.text_input(
                     "📌 Assunto:",
                     placeholder="Ex: Produto com defeito..."
@@ -2319,62 +2299,59 @@ def render_historico():
                 )
                 
                 if btn_criar_suporte:
-    if not assunto_suporte:
-        st.error("❌ Informe o assunto!")
-    elif not descricao_suporte:
-        st.error("❌ Descreva o problema!")
-    else:
-        try:
-            conn = get_gsheets_connection()
-            df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
+                    if not assunto_suporte:
+                        st.error("❌ Informe o assunto!")
+                    elif not descricao_suporte:
+                        st.error("❌ Descreva o problema!")
+                    else:
+                        try:
+                            conn = get_gsheets_connection()
+                            df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
 
-            novo_ticket = {
-                'Data de abertura': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                'Nome': nome_cliente,
-                'Telefone': telefone_cliente,
-                'Assunto': assunto_suporte,
-                'Prioridade': prioridade,
-                'Status': 'Aberto',
-                'Descrição': descricao_suporte,
-                'Data de atualização': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                'Solução': '',
-                'Data de resolução': ''
-            }
+                            novo_ticket = {
+                                'Data de abertura': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                                'Nome': nome_cliente,
+                                'Telefone': telefone_cliente,
+                                'Assunto': assunto_suporte,
+                                'Prioridade': prioridade,
+                                'Status': 'Aberto',
+                                'Descrição': descricao_suporte,
+                                'Data de atualização': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                                'Solução': '',
+                                'Data de resolução': ''
+                            }
 
-            df_novo = pd.concat([df_suporte_atual, pd.DataFrame([novo_ticket])], ignore_index=True)
-            conn.update(worksheet="SUPORTE", data=df_novo)
-        except Exception as e:
-            st.error(f"Erro ao criar o ticket: {e}")
-
-                                
-                                # ========== REGISTRAR NO LOG_TICKETS_ABERTOS ==========
-                                id_ticket = registrar_ticket_aberto(
-                                    dados_cliente={
-                                        'Nome': novo_ticket.get('Nome', ''),
-                                        'Telefone': novo_ticket.get('Telefone', ''),
-                                        'Classificação': ''  # não tem classificação aqui
-                                    },
-                                    tipo_problema=novo_ticket.get('Assunto', ''),
-                                    prioridade=novo_ticket.get('Prioridade', ''),
-                                    descricao=novo_ticket.get('Descrição', ''),
-                                    aberto_por="CRM"
-                                )
-                                
-                                carregar_dados.clear()
-                                st.success(f"✅ Ticket {id_ticket} criado com sucesso!")
-                                st.balloons()
-                                time.sleep(2)
-                                st.rerun()
-                                
-                            except Exception as e:
-                                st.error(f"❌ Erro ao criar ticket: {e}")
-
+                            df_novo = pd.concat([df_suporte_atual, pd.DataFrame([novo_ticket])], ignore_index=True)
+                            conn.update(worksheet="SUPORTE", data=df_novo)
+                            
+                            # ========== REGISTRAR NO LOG_TICKETS_ABERTOS ==========
+                            id_ticket = registrar_ticket_aberto(
+                                dados_cliente={
+                                    'Nome': novo_ticket.get('Nome', ''),
+                                    'Telefone': novo_ticket.get('Telefone', ''),
+                                    'Classificação': ''  # não tem classificação aqui
+                                },
+                                tipo_problema=novo_ticket.get('Assunto', ''),
+                                prioridade=novo_ticket.get('Prioridade', ''),
+                                descricao=novo_ticket.get('Descrição', ''),
+                                aberto_por="CRM"
+                            )
+                            
+                            carregar_dados.clear()
+                            st.success(f"✅ Ticket {id_ticket} criado com sucesso!")
+                            st.balloons()
+                            time.sleep(2)
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"❌ Erro ao criar ticket: {e}")
     
     elif btn_buscar and not termo_busca:
         st.warning("⚠️ Digite um telefone ou nome para buscar")
     
     elif st.session_state.cliente_encontrado is None and not btn_buscar:
         st.info("👆 Digite o telefone ou nome do cliente acima e clique em Buscar")
+
 
 # ============================================================================
 # RENDER - PÁGINA DASHBOARD
