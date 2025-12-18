@@ -770,9 +770,10 @@ def render_checkin():
 
     st.markdown("---")
 
-    # ---------------- BARRA DE PROGRESSO ----------------
+        # ========== BARRA DE PROGRESSO (COMPLETA) ==========
     st.subheader("📈 Progresso do Dia")
 
+    # 1) Meta total do dia (a partir das metas salvas)
     meta_total = (
         st.session_state.metas_checkin['novo']
         + st.session_state.metas_checkin['promissor']
@@ -782,6 +783,7 @@ def render_checkin():
         + st.session_state.metas_checkin['dormente']
     )
 
+    # 2) Check-ins realizados hoje (AGENDAMENTOS_ATIVOS → Data de contato)
     df_agendamentos_hoje = carregar_dados("AGENDAMENTOS_ATIVOS")
     hoje_str = datetime.now().strftime('%d/%m/%Y')
 
@@ -790,10 +792,11 @@ def render_checkin():
         and 'Data de contato' in df_agendamentos_hoje.columns
     ):
         datas_contato = df_agendamentos_hoje['Data de contato'].astype(str)
-        checkins_hoje = (datas_contato == hoje_str).sum()
+        checkins_hoje = int((datas_contato == hoje_str).sum())
     else:
         checkins_hoje = 0
 
+    # 3) Cálculo de progresso
     if meta_total > 0:
         progresso = min(checkins_hoje / meta_total, 1.0)
         percentual = int(progresso * 100)
@@ -801,6 +804,7 @@ def render_checkin():
         progresso = 0.0
         percentual = 0
 
+    # 4) Texto motivacional
     frases_motivacao = {
         0: "🚀 Vamos começar! Todo grande resultado começa com o primeiro passo!",
         25: "💪 Ótimo começo! Continue assim e você vai longe!",
@@ -811,6 +815,7 @@ def render_checkin():
     chave_frase = min((percentual // 25) * 25, 100)
     frase = frases_motivacao.get(chave_frase, frases_motivacao[0])
 
+    # 5) UI
     col_prog1, col_prog2, col_prog3 = st.columns([1, 2, 1])
 
     with col_prog1:
@@ -833,8 +838,6 @@ def render_checkin():
     with col_prog3:
         faltam = max(0, meta_total - checkins_hoje)
         st.metric("🎯 Meta do Dia", meta_total, f"Faltam {faltam}")
-
-    st.markdown("---")
 
     # ---------------- CONFIGURAÇÕES DE FILTRO ----------------
     col_config1, col_config2 = st.columns([2, 1])
