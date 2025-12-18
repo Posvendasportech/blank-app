@@ -733,7 +733,10 @@ def render_checkin():
         meta_total = meta_novo + meta_promissor + meta_leal + meta_campeao + meta_risco + meta_dormente
         col_info1, col_info2 = st.columns([2, 1])
         with col_info1: st.info(f"🎯 **Meta Total do Dia:** {meta_total} check-ins")
-        with col_info2: st.success("✅ Metas salvas!") if st.session_state.metas_alteradas else st.caption("💾 Metas carregadas")
+        with col_info2:
+            if st.session_state.metas_alteradas:
+                st.success("✅ Salvo!")
+                st.session_state.metas_alteradas = False  # Reset após mostrar
     
     st.markdown("---")
     
