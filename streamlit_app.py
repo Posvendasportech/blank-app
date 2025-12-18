@@ -1902,45 +1902,47 @@ def render_suporte():
                     
                     # ========== AÇÃO: ATUALIZAR TICKET ==========
                     # ========== AÇÃO: ATUALIZAR TICKET (CRIA NOVA LINHA) ==========
-if btn_atualizar:
-    if not novo_acompanhamento:
-        st.error("❌ Preencha como foi o contato de hoje!")
-    elif not nova_data_contato:
-        st.error("❌ Selecione a data do próximo contato!")
-    else:
-        with st.spinner("Criando novo registro de acompanhamento..."):
-            try:
-                conn = get_gsheets_connection()
-                df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
-                
-                # ✅ CRIAR NOVA LINHA com todos os dados atuais + atualizações
-                novo_registro = ticket.to_dict().copy()  # Copia todos os dados atuais
-                novo_registro.update({
-                    'Nome': nome_cliente,
-                    'Telefone': ticket.get('Telefone', ''),
-                    'Assunto': ticket.get('Assunto', 'N/D'),
-                    'Prioridade': ticket.get('Prioridade', 'Média'),
-                    'Status': f'Aberto - Acompanhamento #{len(df_suporte_atual)+1}',
-                    'Descrição': ticket.get('Descrição', ''),
-                    'Último contato': novo_acompanhamento,
-                    'Próximo contato': nova_data_contato.strftime('%d/%m/%Y'),
-                    'Progresso': novo_progresso,
-                    'Data de atualização': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                    'Observações': novas_obs if novas_obs else ticket.get('Observações', ''),
-                    'Data de abertura': ticket.get('Data de abertura', 'N/D')  # Mantém original
-                })
-                
-                # Adicionar NOVA LINHA
-                df_novo = pd.concat([df_suporte_atual, pd.DataFrame([novo_registro])], ignore_index=True)
-                conn.update(worksheet="SUPORTE", data=df_novo)
-                
-                carregar_dados.clear()
-                st.success(f"✅ Novo acompanhamento criado! Progresso: {novo_progresso}% | Total: {len(df_novo)} registros")
-                time.sleep(1)
-                st.rerun()
-                
-            except Exception as e:
-                st.error(f"❌ Erro ao criar acompanhamento: {e}")
+                    # ========== AÇÃO: ATUALIZAR TICKET (CRIA NOVA LINHA) ==========
+                    if btn_atualizar:
+                        if not novo_acompanhamento:
+                            st.error("❌ Preencha como foi o contato de hoje!")
+                        elif not nova_data_contato:
+                            st.error("❌ Selecione a data do próximo contato!")
+                        else:
+                            with st.spinner("Criando novo registro de acompanhamento..."):
+                                try:
+                                    conn = get_gsheets_connection()
+                                    df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
+                                    
+                                    # ✅ CRIAR NOVA LINHA com todos os dados atuais + atualizações
+                                    novo_registro = ticket.to_dict().copy()  # Copia todos os dados atuais
+                                    novo_registro.update({
+                                        'Nome': nome_cliente,
+                                        'Telefone': ticket.get('Telefone', ''),
+                                        'Assunto': ticket.get('Assunto', 'N/D'),
+                                        'Prioridade': ticket.get('Prioridade', 'Média'),
+                                        'Status': f'Aberto - Acompanhamento #{len(df_suporte_atual)+1}',
+                                        'Descrição': ticket.get('Descrição', ''),
+                                        'Último contato': novo_acompanhamento,
+                                        'Próximo contato': nova_data_contato.strftime('%d/%m/%Y'),
+                                        'Progresso': novo_progresso,
+                                        'Data de atualização': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                                        'Observações': novas_obs if novas_obs else ticket.get('Observações', ''),
+                                        'Data de abertura': ticket.get('Data de abertura', 'N/D')  # Mantém original
+                                    })
+                                    
+                                    # Adicionar NOVA LINHA
+                                    df_novo = pd.concat([df_suporte_atual, pd.DataFrame([novo_registro])], ignore_index=True)
+                                    conn.update(worksheet="SUPORTE", data=df_novo)
+                                    
+                                    carregar_dados.clear()
+                                    st.success(f"✅ Novo acompanhamento criado! Progresso: {novo_progresso}% | Total: {len(df_novo)} registros")
+                                    time.sleep(1)
+                                    st.rerun()
+                                    
+                                except Exception as e:
+                                    st.error(f"❌ Erro ao criar acompanhamento: {e}")
+
 
                     
                     # ========== AÇÃO: FINALIZAR SUPORTE ==========
