@@ -1901,7 +1901,8 @@ def render_suporte():
                         )
                     
                     # ========== AÇÃO: ATUALIZAR TICKET ==========
-                    if btn_atualizar:
+                    # ========== AÇÃO: ATUALIZAR TICKET (CRIA NOVA LINHA) ==========
+if btn_atualizar:
     if not novo_acompanhamento:
         st.error("❌ Preencha como foi o contato de hoje!")
     elif not nova_data_contato:
@@ -1940,6 +1941,7 @@ def render_suporte():
                 
             except Exception as e:
                 st.error(f"❌ Erro ao criar acompanhamento: {e}")
+
                     
                     # ========== AÇÃO: FINALIZAR SUPORTE ==========
                     if btn_finalizar:
