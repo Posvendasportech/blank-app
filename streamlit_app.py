@@ -1235,7 +1235,7 @@ def render_em_atendimento():
             .drop_duplicates(subset=['Nome'], keep='last')
         )
 
-    # ========== LISTA DE AGENDAMENTOS ==========
+       # ========== LISTA DE AGENDAMENTOS ==========
     st.subheader(f"📋 Atendamentos ({len(df_filt)})")
     
     if df_filt.empty:
@@ -1246,17 +1246,53 @@ def render_em_atendimento():
         else:
             st.info("Nenhum agendamento encontrado")
         return
-
+    
+    # Cards de agendamentos
+    for idx, agend in df_filt.iterrows():
+        
+        # Verificar se está vencido
+        esta_vencido = False
+        data_chamada_str = agend.get('Data de chamada', '')
+        
+        if data_chamada_str and data_chamada_str != '':
+            try:
+                data_chamada_dt = None
+                try:
+                    data_chamada_dt = datetime.strptime(data_chamada_str, '%d/%m/%Y')
+                except:
+                    pass
+                if not data_chamada_dt:
+                    try:
+                        data_chamada_dt = datetime.strptime(data_chamada_str, '%Y/%m/%d')
+                    except:
+                        pass
+                if not data_chamada_dt:
+                    try:
+                        data_chamada_dt = datetime.strptime(data_chamada_str, '%Y-%m-%d')
+                    except:
+                        pass
+                
+                if data_chamada_dt and data_chamada_dt.date() < hoje_dt.date():
+                    esta_vencido = True
+            except:
+                pass
+        
+        nome_cliente = agend.get('Nome', 'N/D')
+        classificacao = agend.get('Classificação', 'N/D')
+        status_badge = "🔥 VENCIDO" if esta_vencido else "📅 HOJE"
+        titulo_card = f"{status_badge} | 👤 {nome_cliente} | 🏷️ {classificacao}"
+        
+        with st.expander(titulo_card, expanded=False):
+            col_esq, col_dir = st.columns([1, 1])
+            
             # ========== COLUNA ESQUERDA: INFORMAÇÕES ==========
             with col_esq:
                 st.markdown("### 📊 Dados do Cliente")
                 
-                # Informações básicas
                 st.write(f"**👤 Nome:** {nome_cliente}")
                 st.write(f"**📱 Telefone:** {agend.get('Telefone', 'N/D')}")
                 st.write(f"**🏷️ Classificação:** {classificacao}")
                 
-                # Valor com formatação
                 val = agend.get('Valor', 0)
                 if pd.notna(val) and val != '':
                     try:
@@ -1268,7 +1304,6 @@ def render_em_atendimento():
                 
                 st.markdown("---")
                 
-                # Histórico do último atendimento
                 st.markdown("### 📝 Último Atendimento")
                 
                 data_contato = agend.get('Data de contato', 'N/D')
@@ -1301,10 +1336,8 @@ def render_em_atendimento():
                 st.markdown("### ✏️ Registrar Novo Atendimento")
                 
                 with st.form(key=f"form_atend_{idx}"):
-                    
                     st.info("💡 Preencha como foi a conversa de hoje e agende o próximo contato")
                     
-                    # Campos do formulário
                     novo_relato = st.text_area(
                         "📝 Como foi a conversa de hoje?",
                         height=120,
@@ -1332,16 +1365,13 @@ def render_em_atendimento():
                     
                     st.markdown("---")
                     
-                    # Botão único: Realizar Novo Agendamento
                     btn_novo_agendamento = st.form_submit_button(
                         "✅ Realizar Novo Agendamento",
                         type="primary",
                         use_container_width=True
                     )
                     
-                    # ========== AÇÃO DO BOTÃO ==========
                     if btn_novo_agendamento:
-                        # Validação
                         if not novo_relato:
                             st.error("❌ Preencha como foi a conversa de hoje!")
                         elif not novo_follow:
@@ -1353,18 +1383,16 @@ def render_em_atendimento():
                                 try:
                                     conn = get_gsheets_connection()
                                     
-                                    # 1. Mover agendamento atual para HISTORICO
                                     df_historico = conn.read(worksheet="HISTORICO", ttl=0)
-                                    
-                                    # Preparar linha para histórico com data de conclusão
                                     linha_historico = agend.to_dict()
                                     linha_historico['Data de conclusão'] = datetime.now().strftime('%d/%m/%Y %H:%M')
                                     
-                                    # Adicionar ao histórico
-                                    df_historico_novo = pd.concat([df_historico, pd.DataFrame([linha_historico])], ignore_index=True)
+                                    df_historico_novo = pd.concat(
+                                        [df_historico, pd.DataFrame([linha_historico])],
+                                        ignore_index=True
+                                    )
                                     conn.update(worksheet="HISTORICO", data=df_historico_novo)
                                     
-                                    # 2. Criar NOVO agendamento em AGENDAMENTOS_ATIVOS
                                     df_agendamentos_atual = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
                                     
                                     novo_agendamento = {
@@ -1379,25 +1407,24 @@ def render_em_atendimento():
                                         'Observação': nova_obs
                                     }
                                     
-                                    # 3. Remover o agendamento antigo
                                     df_agendamentos_atualizado = df_agendamentos_atual.drop(idx).reset_index(drop=True)
+                                    df_agendamentos_final = pd.concat(
+                                        [df_agendamentos_atualizado, pd.DataFrame([novo_agendamento])],
+                                        ignore_index=True
+                                    )
                                     
-                                    # 4. Adicionar o novo agendamento
-                                    df_agendamentos_final = pd.concat([df_agendamentos_atualizado, pd.DataFrame([novo_agendamento])], ignore_index=True)
-                                    
-                                    # 5. Salvar em AGENDAMENTOS_ATIVOS
                                     conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_agendamentos_final)
                                     
-                                    # Limpar cache e recarregar
                                     carregar_dados.clear()
                                     st.toast("✅ Agendamento atualizado!", icon="✅")
                                     time.sleep(0.5)
                                     st.rerun()
-                                    
+                                
                                 except Exception as e:
                                     st.error(f"❌ Erro ao processar agendamento: {e}")
         
         st.markdown("---")
+
 
 
 # ============================================================================
