@@ -816,17 +816,63 @@ def render_checkin():
         st.info("👉 Vá para '📞 Em Atendimento'")
         return
     
-    # Filtros rápidos
+       # Filtros rápidos
     col_info, col_busca, col_dias = st.columns([1, 2, 2])
-    with col_info: st.metric("✅ Disponíveis", len(df_filtrado))
-    with col_busca: busca_nome = st.text_input("🔍 Buscar:", placeholder="Nome...", label_visibility="collapsed")
-    with col_dias: filtro_dias = st.slider("📅 Dias:", 0, 365, (0, 365), label_visibility="collapsed") if 'Dias desde a compra' in df_filtrado else None
-    
-    if busca_nome: df_filtrado = df_filtrado[df_filtrado['Nome'].str.contains(busca_nome, case=False, na=False)]
-    if filtro_dias and 'Dias desde a compra' in df_filtrado: df_filtrado = df_filtrado[(df_filtrado['Dias desde a compra'] >= filtro_dias[0]) & (df_filtrado['Dias desde a compra'] <= filtro_dias[1])]
-    
+
+    with col_info:
+        st.metric("✅ Disponíveis", len(df_filtrado))
+
+    with col_busca:
+        busca_nome = st.text_input(
+            "🔍 Buscar:",
+            placeholder="Nome...",
+            label_visibility="collapsed"
+        )
+
+    with col_dias:
+        if 'Dias desde a compra' in df_filtrado.columns:
+            # Para "Em risco" e "Dormente", permitir até 2 anos (730 dias)
+            if classificacao_selecionada in ["Em risco", "Dormente"]:
+                dias_min = 0
+                dias_max = max(
+                    730,
+                    int(df_filtrado['Dias desde a compra'].max() or 0)
+                )
+            else:
+                dias_min = 0
+                dias_max = int(df_filtrado['Dias desde a compra'].max() or 0)
+                if dias_max <= 0:
+                    dias_max = 365
+
+            filtro_dias = st.slider(
+                "📅 Dias:",
+                dias_min,
+                dias_max,
+                (dias_min, dias_max),
+                label_visibility="collapsed"
+            )
+        else:
+            filtro_dias = None
+
+    # Aplicar filtros
+    if busca_nome:
+        df_filtrado = df_filtrado[
+            df_filtrado['Nome'].str.contains(busca_nome, case=False, na=False)
+        ]
+
+    if (
+        filtro_dias
+        and 'Dias desde a compra' in df_filtrado.columns
+        and classificacao_selecionada not in ["Em risco", "Dormente"]
+    ):
+        df_filtrado = df_filtrado[
+            (df_filtrado['Dias desde a compra'] >= filtro_dias[0]) &
+            (df_filtrado['Dias desde a compra'] <= filtro_dias[1])
+        ]
+
     st.markdown("---")
     st.subheader(f"📋 Clientes para Check-in ({len(df_filtrado)})")
+
     
     # ========== CARDS COM CHECK-IN CORRIGIDO ==========
     for index, cliente in df_filtrado.iterrows():
