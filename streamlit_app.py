@@ -2323,10 +2323,10 @@ def render_historico():
                         st.error("❌ Informe o assunto!")
                     elif not descricao_suporte:
                         st.error("❌ Descreva o problema!")
-                        else:
-                            try:
-                                conn = get_gsheets_connection()
-                                df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
+                    else:
+                        try:
+                            conn = get_gsheets_connection()
+                            df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
                                 
                                 novo_ticket = {
                                     'Data de abertura': datetime.now().strftime('%d/%m/%Y %H:%M'),
