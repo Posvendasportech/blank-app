@@ -816,7 +816,7 @@ def render_checkin():
         st.info("👉 Vá para '📞 Em Atendimento'")
         return
     
-       # Filtros rápidos
+           # Filtros rápidos
     col_info, col_busca, col_dias = st.columns([1, 2, 2])
 
     with col_info:
@@ -831,16 +831,21 @@ def render_checkin():
 
     with col_dias:
         if 'Dias desde a compra' in df_filtrado.columns:
-            # Para "Em risco" e "Dormente", permitir até 2 anos (730 dias)
+            # Garantir número seguro para o max
+            max_bruto = pd.to_numeric(
+                df_filtrado['Dias desde a compra'],
+                errors='coerce'
+            ).max()
+
+            if pd.isna(max_bruto):
+                max_bruto = 0
+
             if classificacao_selecionada in ["Em risco", "Dormente"]:
                 dias_min = 0
-                dias_max = max(
-                    730,
-                    int(df_filtrado['Dias desde a compra'].max() or 0)
-                )
+                dias_max = max(730, int(max_bruto))
             else:
                 dias_min = 0
-                dias_max = int(df_filtrado['Dias desde a compra'].max() or 0)
+                dias_max = int(max_bruto)
                 if dias_max <= 0:
                     dias_max = 365
 
@@ -855,7 +860,7 @@ def render_checkin():
             filtro_dias = None
 
     # Aplicar filtros
-    if busca_nome:
+    if busca_nome and 'Nome' in df_filtrado.columns:
         df_filtrado = df_filtrado[
             df_filtrado['Nome'].str.contains(busca_nome, case=False, na=False)
         ]
@@ -865,9 +870,13 @@ def render_checkin():
         and 'Dias desde a compra' in df_filtrado.columns
         and classificacao_selecionada not in ["Em risco", "Dormente"]
     ):
+        dias_num = pd.to_numeric(
+            df_filtrado['Dias desde a compra'],
+            errors='coerce'
+        )
         df_filtrado = df_filtrado[
-            (df_filtrado['Dias desde a compra'] >= filtro_dias[0]) &
-            (df_filtrado['Dias desde a compra'] <= filtro_dias[1])
+            (dias_num >= filtro_dias[0]) &
+            (dias_num <= filtro_dias[1])
         ]
 
     st.markdown("---")
