@@ -1219,7 +1219,21 @@ def render_em_atendimento():
         df_filt = df_filt[df_filt['Classificação'] == filtro_class]
     
     st.markdown("---")
-    
+    # ====== AGRUPAR POR CLIENTE (1 CARD POR PESSOA) ======
+if 'Telefone' in df_filt.columns:
+    df_filt = (
+        df_filt
+        .sort_values('Data de atualização')  # garante que a última atualização fica por último
+        .drop_duplicates(subset=['Telefone'], keep='last')  # mantém só 1 linha por telefone
+    )
+else:
+    # fallback: agrupar por Nome se não tiver telefone (menos seguro)
+    df_filt = (
+        df_filt
+        .sort_values('Data de atualização')
+        .drop_duplicates(subset=['Nome'], keep='last')
+    )
+
     # ========== LISTA DE AGENDAMENTOS ==========
     st.subheader(f"📋 Atendamentos ({len(df_filt)})")
     
