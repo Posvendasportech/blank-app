@@ -2264,7 +2264,7 @@ def render_historico():
                             }
                             
                             df_novo = pd.concat([df_agend_atual, pd.DataFrame([novo_agend])], ignore_index=True)
-                                conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_novo)
+                            conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_novo)
                                 
                                 # ========== REGISTRAR RESOLUÇÃO NO LOG ==========
                                 registrar_ticket_resolvido(
