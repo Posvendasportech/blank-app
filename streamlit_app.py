@@ -2329,7 +2329,7 @@ def render_historico():
                                 dados_cliente={
                                     'Nome': novo_ticket.get('Nome', ''),
                                     'Telefone': novo_ticket.get('Telefone', ''),
-                                    'Classificação': ''  # não tem classificação aqui
+                                    'Classificação': cliente.get('Classificação ', 'N/D')  # não tem classificação aqui
                                 },
                                 tipo_problema=novo_ticket.get('Assunto', ''),
                                 prioridade=novo_ticket.get('Prioridade', ''),
