@@ -2319,30 +2319,33 @@ def render_historico():
                 )
                 
                 if btn_criar_suporte:
-                    if not assunto_suporte:
-                        st.error("❌ Informe o assunto!")
-                    elif not descricao_suporte:
-                        st.error("❌ Descreva o problema!")
-                    else:
-                        try:
-                            conn = get_gsheets_connection()
-                            df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
-                                
-                                novo_ticket = {
-                                    'Data de abertura': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                                    'Nome': nome_cliente,
-                                    'Telefone': telefone_cliente,
-                                    'Assunto': assunto_suporte,
-                                    'Prioridade': prioridade,
-                                    'Status': 'Aberto',
-                                    'Descrição': descricao_suporte,
-                                    'Data de atualização': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                                    'Solução': '',
-                                    'Data de resolução': ''
-                                }
-                                
-                                df_novo = pd.concat([df_suporte_atual, pd.DataFrame([novo_ticket])], ignore_index=True)
-                                conn.update(worksheet="SUPORTE", data=df_novo)
+    if not assunto_suporte:
+        st.error("❌ Informe o assunto!")
+    elif not descricao_suporte:
+        st.error("❌ Descreva o problema!")
+    else:
+        try:
+            conn = get_gsheets_connection()
+            df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
+
+            novo_ticket = {
+                'Data de abertura': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                'Nome': nome_cliente,
+                'Telefone': telefone_cliente,
+                'Assunto': assunto_suporte,
+                'Prioridade': prioridade,
+                'Status': 'Aberto',
+                'Descrição': descricao_suporte,
+                'Data de atualização': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                'Solução': '',
+                'Data de resolução': ''
+            }
+
+            df_novo = pd.concat([df_suporte_atual, pd.DataFrame([novo_ticket])], ignore_index=True)
+            conn.update(worksheet="SUPORTE", data=df_novo)
+        except Exception as e:
+            st.error(f"Erro ao criar o ticket: {e}")
+
                                 
                                 # ========== REGISTRAR NO LOG_TICKETS_ABERTOS ==========
                                 id_ticket = registrar_ticket_aberto(
