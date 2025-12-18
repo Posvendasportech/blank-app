@@ -437,81 +437,131 @@ def gerar_snapshot_diario(data_especifica=None):
 
 
 def detectar_e_registrar_conversoes_automaticas():
-    """Compara Total de hoje vs ontem e registra conversões automaticamente"""
+    """
+    Detecta conversões automaticamente usando a aba PEDIDOS da Shopify.
+    Filtra pedidos de hoje e verifica se o cliente passou pelo CRM.
+    """
     try:
         conn = get_gsheets_connection()
         
-        # Ler Total de hoje
-        df_total_hoje_full = conn.read(worksheet="Total", ttl=0)
-        colunas_chave = ['Telefone', 'Nome', 'Valor', 'Compras', 'Classificação', 'Data de contato']
-        colunas_existentes = [c for c in colunas_chave if c in df_total_hoje_full.columns]
-        df_total_hoje = df_total_hoje_full[colunas_existentes].copy()
+        # Horário de Brasília
+        timezone_brasilia = pytz.timezone('America/Sao_Paulo')
+        hoje = datetime.now(timezone_brasilia)
+        hoje_str = hoje.strftime('%d/%m/%Y')
         
-        # Ler Total do dia anterior (snapshot compacto)
-        df_total_ontem = conn.read(worksheet="TOTAL_DIA_ANTERIOR", ttl=0)
+        st.info(f"🔍 Buscando pedidos de hoje ({hoje_str})...")
         
-        if df_total_hoje.empty:
-            st.warning("⚠️ Aba Total está vazia")
+        # Ler aba PEDIDOS
+        df_pedidos = conn.read(worksheet="PEDIDOS", ttl=0)
+        
+        if df_pedidos.empty:
+            st.warning("⚠️ Aba PEDIDOS está vazia")
             return 0
+        
+        # Verificar colunas necessárias
+        if 'Data' not in df_pedidos.columns or 'Telefone' not in df_pedidos.columns:
+            st.error("❌ Aba PEDIDOS precisa ter colunas 'Data' e 'Telefone'")
+            return 0
+        
+        # Filtrar pedidos de hoje
+        # A coluna Data vem como datetime do Google Sheets
+        df_pedidos['Data_Formatada'] = pd.to_datetime(df_pedidos['Data'], errors='coerce').dt.strftime('%d/%m/%Y')
+        df_pedidos_hoje = df_pedidos[df_pedidos['Data_Formatada'] == hoje_str].copy()
+        
+        if df_pedidos_hoje.empty:
+            st.info(f"✅ Nenhum pedido encontrado para hoje ({hoje_str})")
+            return 0
+        
+        st.success(f"📦 {len(df_pedidos_hoje)} pedido(s) encontrado(s) hoje")
+        
+        # Carregar abas do CRM
+        df_checkins = conn.read(worksheet="LOG_CHECKINS", ttl=0)
+        df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
+        df_historico = conn.read(worksheet="HISTORICO", ttl=0)
+        df_conversoes = conn.read(worksheet="LOG_CONVERSOES", ttl=0)
+        
+        # Criar dicionário de telefones do CRM com origem
+        telefones_crm = {}
+        
+        if not df_checkins.empty and 'Telefone' in df_checkins.columns:
+            for tel in df_checkins['Telefone'].dropna():
+                tel_limpo = str(tel).strip()
+                if tel_limpo:
+                    telefones_crm[tel_limpo] = "Check-in"
+        
+        if not df_agendamentos.empty and 'Telefone' in df_agendamentos.columns:
+            for tel in df_agendamentos['Telefone'].dropna():
+                tel_limpo = str(tel).strip()
+                if tel_limpo:
+                    telefones_crm[tel_limpo] = "Atendimento Ativo"
+        
+        if not df_historico.empty and 'Telefone' in df_historico.columns:
+            for tel in df_historico['Telefone'].dropna():
+                tel_limpo = str(tel).strip()
+                if tel_limpo:
+                    telefones_crm[tel_limpo] = "Histórico"
+        
+        # Criar lista de números de pedidos já convertidos (evitar duplicatas)
+        numeros_ja_convertidos = set()
+        if not df_conversoes.empty and 'Numero_do_pedido' in df_conversoes.columns:
+            numeros_ja_convertidos = set(df_conversoes['Numero_do_pedido'].dropna().astype(str).tolist())
         
         conversoes_detectadas = 0
         
-        # Se não tem histórico do dia anterior, apenas salva hoje e sai
-        if df_total_ontem.empty:
-            st.info("📸 Primeira execução - salvando snapshot do Total")
-            conn.update(worksheet="TOTAL_DIA_ANTERIOR", data=df_total_hoje)
-            return 0
-        
-        st.info("🔍 Detectando conversões automáticas...")
-        
-        # Comparar por Telefone (chave única)
-        for idx, cliente_hoje in df_total_hoje.iterrows():
-            telefone = cliente_hoje.get('Telefone', '')
+        # Verificar cada pedido de hoje
+        for idx, pedido in df_pedidos_hoje.iterrows():
+            numero_pedido = str(pedido.get('Numero_do_pedido', ''))
+            telefone = str(pedido.get('Telefone', '')).strip()
             
-            if not telefone or telefone == '':
+            # Pular se não tem telefone ou já foi convertido
+            if not telefone:
                 continue
             
-            # Buscar cliente no snapshot de ontem
-            cliente_ontem = df_total_ontem[df_total_ontem['Telefone'] == telefone]
-            
-            if cliente_ontem.empty:
-                # Cliente novo - não é conversão, é primeira compra já registrada
+            if numero_pedido in numeros_ja_convertidos:
                 continue
             
-            # Pegar valores
-            valor_hoje = float(cliente_hoje.get('Valor', 0) or 0)
-            valor_ontem = float(cliente_ontem.iloc[0].get('Valor', 0) or 0)
-            
-            compras_hoje = int(cliente_hoje.get('Compras', 0) or 0)
-            compras_ontem = int(cliente_ontem.iloc[0].get('Compras', 0) or 0)
-            
-            # Verificar se houve nova compra
-            if compras_hoje > compras_ontem:
-                # Calcular valor da nova compra
-                valor_nova_compra = valor_hoje - valor_ontem
+            # Verificar se cliente passou pelo CRM
+            if telefone in telefones_crm:
+                # É CONVERSÃO DO CRM!
+                origem = telefones_crm[telefone]
                 
-                if valor_nova_compra > 0:
-                    # Registrar conversão automaticamente
-                    id_conv = registrar_conversao(
-                        dados_cliente=cliente_hoje,
-                        valor_venda=valor_nova_compra,
-                        origem="TOTAL_AUTOMATICO"
-                    )
+                # Preparar dados do cliente
+                dados_cliente = {
+                    'Nome': pedido.get('Nome_Cliente', ''),
+                    'Telefone': telefone,
+                    'Email': pedido.get('Email', ''),
+                    'Classificação': '',  # não temos no pedido
+                    'Data de contato': ''  # não temos no pedido
+                }
+                
+                valor_pedido = float(pedido.get('Valor_Pedido', 0) or 0)
+                
+                # Registrar conversão
+                id_conv = registrar_conversao(
+                    dados_cliente=dados_cliente,
+                    valor_venda=valor_pedido,
+                    origem=origem
+                )
+                
+                if id_conv:
+                    # Adicionar número do pedido na conversão para evitar duplicatas
+                    df_conv_atualizado = conn.read(worksheet="LOG_CONVERSOES", ttl=0)
+                    df_conv_atualizado.loc[df_conv_atualizado['ID_Conversao'] == id_conv, 'Numero_do_pedido'] = numero_pedido
+                    conn.update(worksheet="LOG_CONVERSOES", data=df_conv_atualizado)
                     
-                    if id_conv:
-                        conversoes_detectadas += 1
-                        st.success(f"✅ Conversão detectada: {cliente_hoje.get('Nome', 'N/D')} - R$ {valor_nova_compra:.2f}")
+                    conversoes_detectadas += 1
+                    st.success(
+                        f"✅ Conversão CRM: {dados_cliente['Nome']} - "
+                        f"R$ {valor_pedido:.2f} - Pedido #{numero_pedido} ({origem})"
+                    )
         
-        # Atualizar snapshot para o próximo dia
-        conn.update(worksheet="TOTAL_DIA_ANTERIOR", data=df_total_hoje)
-        
-        if conversoes_detectadas > 0:
-            st.success(f"🎉 {conversoes_detectadas} conversão(ões) registrada(s) automaticamente!")
+        if conversoes_detectadas == 0:
+            st.info("✅ Nenhuma conversão nova de clientes do CRM detectada nos pedidos de hoje")
         else:
-            st.info("✅ Nenhuma conversão nova detectada hoje")
+            st.success(f"🎉 {conversoes_detectadas} conversão(ões) do CRM registrada(s)!")
         
         return conversoes_detectadas
-        
+    
     except Exception as e:
         st.error(f"Erro ao detectar conversões: {e}")
         import traceback
