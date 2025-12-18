@@ -1772,16 +1772,19 @@ def render_suporte():
                 st.markdown("---")
                 
                 # Barra de progresso
+                # Barra de progresso
                 st.markdown("### 📊 Progresso do Atendimento")
                 
-                # Converter progresso para decimal
+                # Converter progresso para decimal COM VALIDAÇÃO
                 try:
-                    progresso_decimal = float(progresso) / 100
-                except:
-                    progresso_decimal = 0
+                    progresso_num = float(progresso) if progresso != '' else 0
+                    progresso_decimal = max(0, min(1.0, progresso_num / 100))  # Garante 0.0 a 1.0
+                except (ValueError, TypeError):
+                    progresso_decimal = 0.0
                 
                 st.progress(progresso_decimal)
-                st.write(f"**{progresso}% concluído**")
+                st.write(f"**{int(progresso_num)}% concluído**")
+
                 
                 # Labels de progresso
                 if progresso == 0:
