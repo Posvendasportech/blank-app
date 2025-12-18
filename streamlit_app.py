@@ -1209,7 +1209,7 @@ def render_em_atendimento():
         else:
             filtro_class = 'Todos'
     
-    # Aplicar filtros
+        # Aplicar filtros
     df_filt = df_trabalho.copy()
     
     if busca and 'Nome' in df_filt.columns:
@@ -1219,20 +1219,21 @@ def render_em_atendimento():
         df_filt = df_filt[df_filt['Classificação'] == filtro_class]
     
     st.markdown("---")
+    
     # ====== AGRUPAR POR CLIENTE (1 CARD POR PESSOA) ======
-if 'Telefone' in df_filt.columns:
-    df_filt = (
-        df_filt
-        .sort_values('Data de atualização')  # garante que a última atualização fica por último
-        .drop_duplicates(subset=['Telefone'], keep='last')  # mantém só 1 linha por telefone
-    )
-else:
-    # fallback: agrupar por Nome se não tiver telefone (menos seguro)
-    df_filt = (
-        df_filt
-        .sort_values('Data de atualização')
-        .drop_duplicates(subset=['Nome'], keep='last')
-    )
+    if 'Telefone' in df_filt.columns:
+        df_filt = (
+            df_filt
+            .sort_values('Data de atualização')  # garante que a última atualização fica por último
+            .drop_duplicates(subset=['Telefone'], keep='last')  # mantém só 1 linha por telefone
+        )
+    else:
+        # fallback: agrupar por Nome se não tiver telefone (menos seguro)
+        df_filt = (
+            df_filt
+            .sort_values('Data de atualização')
+            .drop_duplicates(subset=['Nome'], keep='last')
+        )
 
     # ========== LISTA DE AGENDAMENTOS ==========
     st.subheader(f"📋 Atendamentos ({len(df_filt)})")
@@ -1245,56 +1246,7 @@ else:
         else:
             st.info("Nenhum agendamento encontrado")
         return
-    
-    # Cards de agendamentos
-    for idx, agend in df_filt.iterrows():
-        
-        # Verificar se está vencido
-        esta_vencido = False
-        data_chamada_str = agend.get('Data de chamada', '')
-        
-        if data_chamada_str and data_chamada_str != '':
-            try:
-                # Tentar múltiplos formatos de data
-                data_chamada_dt = None
-                
-                # Formato brasileiro DD/MM/YYYY
-                try:
-                    data_chamada_dt = datetime.strptime(data_chamada_str, '%d/%m/%Y')
-                except:
-                    pass
-                
-                # Formato ISO YYYY/MM/DD
-                if not data_chamada_dt:
-                    try:
-                        data_chamada_dt = datetime.strptime(data_chamada_str, '%Y/%m/%d')
-                    except:
-                        pass
-                
-                # Formato ISO com hífen YYYY-MM-DD
-                if not data_chamada_dt:
-                    try:
-                        data_chamada_dt = datetime.strptime(data_chamada_str, '%Y-%m-%d')
-                    except:
-                        pass
-                
-                # Verificar se está vencido
-                if data_chamada_dt and data_chamada_dt.date() < hoje_dt.date():
-                    esta_vencido = True
-            except:
-                pass
-        
-        # Badge de status
-        nome_cliente = agend.get('Nome', 'N/D')
-        classificacao = agend.get('Classificação', 'N/D')
-        status_badge = "🔥 VENCIDO" if esta_vencido else "📅 HOJE"
-        
-        # Título do expander com status visual
-        titulo_card = f"{status_badge} | 👤 {nome_cliente} | 🏷️ {classificacao}"
-        
-        with st.expander(titulo_card, expanded=False):
-            col_esq, col_dir = st.columns([1, 1])
-            
+
             # ========== COLUNA ESQUERDA: INFORMAÇÕES ==========
             with col_esq:
                 st.markdown("### 📊 Dados do Cliente")
