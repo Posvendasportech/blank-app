@@ -1211,29 +1211,24 @@ def render_em_atendimento():
     
         # Aplicar filtros
     df_filt = df_trabalho.copy()
-    
     if busca and 'Nome' in df_filt.columns:
         df_filt = df_filt[df_filt['Nome'].str.contains(busca, case=False, na=False)]
-    
-    if filtro_class != 'Todos' and 'Classificação' in df_filt.columns:
-        df_filt = df_filt[df_filt['Classificação'] == filtro_class]
+    if filtro_prioridade != 'Todas' and 'Prioridade' in df_filt.columns:
+        df_filt = df_filt[df_filt['Prioridade'] == filtro_prioridade]
     
     st.markdown("---")
-    
+
     # ====== AGRUPAR POR CLIENTE (1 CARD POR PESSOA) ======
-    if 'Telefone' in df_filt.columns:
-        df_filt = (
-            df_filt
-            .sort_values('Data de atualização')  # garante que a última atualização fica por último
-            .drop_duplicates(subset=['Telefone'], keep='last')  # mantém só 1 linha por telefone
-        )
-    else:
-        # fallback: agrupar por Nome se não tiver telefone (menos seguro)
-        df_filt = (
-            df_filt
-            .sort_values('Data de atualização')
-            .drop_duplicates(subset=['Nome'], keep='last')
-        )
+    if not df_filt.empty:
+        # se existir coluna de data, ordenar para pegar a última atualização
+        if 'Data de atualização' in df_filt.columns:
+            df_filt = df_filt.sort_values('Data de atualização')
+        # agrupar por telefone (mais seguro)
+        if 'Telefone' in df_filt.columns:
+            df_filt = df_filt.drop_duplicates(subset=['Telefone'], keep='last')
+        # fallback: se por acaso não tiver telefone, agrupa por nome
+        elif 'Nome' in df_filt.columns:
+            df_filt = df_filt.drop_duplicates(subset=['Nome'], keep='last')
 
        # ========== LISTA DE AGENDAMENTOS ==========
     st.subheader(f"📋 Atendamentos ({len(df_filt)})")
