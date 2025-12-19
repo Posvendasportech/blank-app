@@ -1162,69 +1162,73 @@ def render_em_atendimento():
         st.metric("⏳ Pendentes", pendentes_hoje, help="Atendimentos que faltam finalizar hoje")
     
     with col_m3:
-        st.metric("🔥 Vencidos", total_vencidos, 
-                  delta=f"-{total_vencidos}" if total_vencidos > 0 else "0",
-                  delta_color="inverse", 
-                  help="Atendimentos de dias anteriores não concluídos")
-    
+        st.metric(
+            "🔥 Vencidos",
+            total_vencidos,
+            delta=f"-{total_vencidos}" if total_vencidos > 0 else "0",
+            delta_color="inverse",
+            help="Atendimentos de dias anteriores não concluídos"
+        )
+
     # Alerta de vencidos
     if total_vencidos > 0:
-        st.error(f"⚠️ **ATENÇÃO:** Você tem {total_vencidos} atendimento(s) vencido(s) de dias anteriores! Priorize-os.")
-    
+        st.error(
+            f"⚠️ **ATENÇÃO:** Você tem {total_vencidos} atendimento(s) vencido(s) de dias anteriores! Priorize-os."
+        )
+
     st.markdown("---")
-    
+
     # ========== FILTROS ==========
     st.subheader("🔍 Filtros")
 
-col_f1, col_f2, col_f3 = st.columns(3)
+    col_f1, col_f2, col_f3 = st.columns(3)
 
-with col_f1:
-    # Escolher se quer ver hoje ou vencidos
-    visualizar = st.selectbox(
-        "Visualizar:",
-        ["Hoje", "Vencidos", "Todos"],
-        help="Escolha qual grupo de atendimentos deseja ver"
-    )
+    with col_f1:
+        visualizar = st.selectbox(
+            "Visualizar:",
+            ["Hoje", "Vencidos", "Todos"],
+            help="Escolha qual grupo de atendimentos deseja ver"
+        )
 
-with col_f2:
-    busca = st.text_input(
-        "Buscar cliente:",
-        "",
-        placeholder="Digite o nome...",
-        key="busca_atend"
-    )
+    with col_f2:
+        busca = st.text_input(
+            "Buscar cliente:",
+            "",
+            placeholder="Digite o nome...",
+            key="busca_atend"
+        )
 
-with col_f3:
-    # Selecionar dataset baseado na visualização
-    if visualizar == "Hoje":
-        df_trabalho = df_hoje.copy()
-    elif visualizar == "Vencidos":
-        df_trabalho = df_vencidos.copy()
-    else:  # Todos
-        df_trabalho = pd.concat([df_hoje, df_vencidos]).drop_duplicates()
+    with col_f3:
+        # Selecionar dataset baseado na visualização
+        if visualizar == "Hoje":
+            df_trabalho = df_hoje.copy()
+        elif visualizar == "Vencidos":
+            df_trabalho = df_vencidos.copy()
+        else:  # Todos
+            df_trabalho = pd.concat([df_hoje, df_vencidos]).drop_duplicates()
 
-    if 'Classificação' in df_trabalho.columns and not df_trabalho.empty:
-        class_opts = ['Todos'] + sorted(list(df_trabalho['Classificação'].dropna().unique()))
-        filtro_class = st.selectbox("Classificação:", class_opts)
-    else:
-        filtro_class = 'Todos'
+        if 'Classificação' in df_trabalho.columns and not df_trabalho.empty:
+            class_opts = ['Todos'] + sorted(list(df_trabalho['Classificação'].dropna().unique()))
+            filtro_class = st.selectbox("Classificação:", class_opts)
+        else:
+            filtro_class = 'Todos'
 
-# Aplicar filtros (fora do with col_f3)
-df_filt = df_trabalho.copy()
+    # Aplicar filtros (fora do with col_f3)
+    df_filt = df_trabalho.copy()
 
-if busca and 'Nome' in df_filt.columns:
-    df_filt = df_filt[df_filt['Nome'].str.contains(busca, case=False, na=False)]
+    if busca and 'Nome' in df_filt.columns:
+        df_filt = df_filt[df_filt['Nome'].str.contains(busca, case=False, na=False)]
 
-if filtro_class != 'Todos' and 'Classificação' in df_filt.columns:
-    df_filt = df_filt[df_filt['Classificação'] == filtro_class]
+    if filtro_class != 'Todos' and 'Classificação' in df_filt.columns:
+        df_filt = df_filt[df_filt['Classificação'] == filtro_class]
 
-# ATENÇÃO: filtro_prioridade precisa existir nessa função, senão dá NameError.
-# Se você ainda não criou o selectbox de prioridade aqui, comente esse bloco OU defina um default.
-# filtro_prioridade = 'Todas'
-if filtro_prioridade != 'Todas' and 'Prioridade' in df_filt.columns:
-    df_filt = df_filt[df_filt['Prioridade'] == filtro_prioridade]
+    # ATENÇÃO: filtro_prioridade precisa existir nessa função, senão dá NameError (variável não definida) [web:71].
+    # Se você não tiver o selectbox de prioridade aqui, defina um default:
+    # filtro_prioridade = 'Todas'
+    if filtro_prioridade != 'Todas' and 'Prioridade' in df_filt.columns:
+        df_filt = df_filt[df_filt['Prioridade'] == filtro_prioridade]
 
-st.markdown("---")
+    st.markdown("---")
 
 
 
