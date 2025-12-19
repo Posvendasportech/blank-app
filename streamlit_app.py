@@ -1176,14 +1176,14 @@ def render_em_atendimento():
     # ========== FILTROS ==========
     st.subheader("🔍 Filtros")
 
-col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+col_f1, col_f2, col_f3 = st.columns(3)
 
 with col_f1:
+    # Escolher se quer ver hoje ou vencidos
     visualizar = st.selectbox(
         "Visualizar:",
         ["Hoje", "Vencidos", "Todos"],
-        help="Escolha qual grupo de atendimentos deseja ver",
-        key="visualizar_atend"
+        help="Escolha qual grupo de atendimentos deseja ver"
     )
 
 with col_f2:
@@ -1194,36 +1194,29 @@ with col_f2:
         key="busca_atend"
     )
 
-# Selecionar dataset baseado na visualização (fora das colunas)
-if visualizar == "Hoje":
-    df_trabalho = df_hoje.copy()
-elif visualizar == "Vencidos":
-    df_trabalho = df_vencidos.copy()
-else:
-    df_trabalho = pd.concat([df_hoje, df_vencidos], ignore_index=True).drop_duplicates()
-
 with col_f3:
+    # Selecionar dataset baseado na visualização
+    if visualizar == "Hoje":
+        df_trabalho = df_hoje.copy()
+    elif visualizar == "Vencidos":
+        df_trabalho = df_vencidos.copy()
+    else:  # Todos
+        df_trabalho = pd.concat([df_hoje, df_vencidos]).drop_duplicates()
+
     if 'Classificação' in df_trabalho.columns and not df_trabalho.empty:
         class_opts = ['Todos'] + sorted(list(df_trabalho['Classificação'].dropna().unique()))
-        filtro_class = st.selectbox("Classificação:", class_opts, key="class_atend")
+        filtro_class = st.selectbox("Classificação:", class_opts)
     else:
         filtro_class = 'Todos'
 
-with col_f4:
-    if 'Prioridade' in df_trabalho.columns and not df_trabalho.empty:
-        prio_opts = ['Todas'] + sorted(list(df_trabalho['Prioridade'].dropna().unique()))
-        filtro_prioridade = st.selectbox("Prioridade:", prio_opts, key="prio_atend")
-    else:
-        filtro_prioridade = 'Todas'
-
-# Aplicar filtros (fora dos with)
+# Aplicar filtros (fora do with col_f3)
 df_filt = df_trabalho.copy()
 
 if busca and 'Nome' in df_filt.columns:
     df_filt = df_filt[df_filt['Nome'].str.contains(busca, case=False, na=False)]
 
-if filtro_class != 'Todos' and 'Classificação' in df_filt.columns:
-    df_filt = df_filt[df_filt['Classificação'] == filtro_class]
+# Se você ainda não tiver filtro_prioridade definido nessa tela, defina um default:
+# filtro_prioridade = 'Todas'
 
 if filtro_prioridade != 'Todas' and 'Prioridade' in df_filt.columns:
     df_filt = df_filt[df_filt['Prioridade'] == filtro_prioridade]
