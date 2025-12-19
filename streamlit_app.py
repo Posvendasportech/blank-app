@@ -1529,6 +1529,8 @@ def render_suporte():
     df_filt = df_trabalho.copy()
     if busca and 'Nome' in df_filt.columns:
         df_filt = df_filt[df_filt['Nome'].str.contains(busca, case=False, na=False)]
+    filtro_prioridade = 'Todas'
+
     if filtro_prioridade != 'Todas' and 'Prioridade' in df_filt.columns:
         df_filt = df_filt[df_filt['Prioridade'] == filtro_prioridade]
     
