@@ -1215,13 +1215,17 @@ df_filt = df_trabalho.copy()
 if busca and 'Nome' in df_filt.columns:
     df_filt = df_filt[df_filt['Nome'].str.contains(busca, case=False, na=False)]
 
-# Se você ainda não tiver filtro_prioridade definido nessa tela, defina um default:
-# filtro_prioridade = 'Todas'
+if filtro_class != 'Todos' and 'Classificação' in df_filt.columns:
+    df_filt = df_filt[df_filt['Classificação'] == filtro_class]
 
+# ATENÇÃO: filtro_prioridade precisa existir nessa função, senão dá NameError.
+# Se você ainda não criou o selectbox de prioridade aqui, comente esse bloco OU defina um default.
+# filtro_prioridade = 'Todas'
 if filtro_prioridade != 'Todas' and 'Prioridade' in df_filt.columns:
     df_filt = df_filt[df_filt['Prioridade'] == filtro_prioridade]
 
 st.markdown("---")
+
 
 
     # ====== AGRUPAR POR CLIENTE (1 CARD POR PESSOA) ======
