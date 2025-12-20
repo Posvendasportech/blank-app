@@ -866,66 +866,64 @@ def render_checkin():
     st.markdown("---")
 
     # ---------------- VERIFICAÇÃO 1x POR MINUTO ----------------
+    # ---------------- VERIFICAÇÃO 1x POR MINUTO ----------------
     agora_ts = time.time()
     if agora_ts - st.session_state.ultima_verificacao > 60:
-    with st.status("🔄 Atualizando filtros...", expanded=False):
-        df_agendamentos_ativos = carregar_dados("AGENDAMENTOS_ATIVOS")
-        df_log_checkins = carregar_dados("LOG_CHECKINS")
+        with st.status("🔄 Atualizando filtros...", expanded=False):
+            df_agendamentos_ativos = carregar_dados("AGENDAMENTOS_ATIVOS")
+            df_log_checkins = carregar_dados("LOG_CHECKINS")
 
-        st.session_state.clientes_excluir = set()
+            st.session_state.clientes_excluir = set()
 
-        # 1) Clientes que já estão em atendimento (AGENDAMENTOS_ATIVOS)
-        if (
-            not df_agendamentos_ativos.empty
-            and 'Telefone' in df_agendamentos_ativos.columns
-        ):
-            tels_agenda = (
-                df_agendamentos_ativos['Telefone']
-                .astype(str)
-                .str.strip()
-                .tolist()
-            )
-            st.session_state.clientes_excluir.update(tels_agenda)
+            # 1) Clientes que já estão em atendimento (AGENDAMENTOS_ATIVOS)
+            if (
+                not df_agendamentos_ativos.empty
+                and 'Telefone' in df_agendamentos_ativos.columns
+            ):
+                tels_agenda = (
+                    df_agendamentos_ativos['Telefone']
+                    .astype(str)
+                    .str.strip()
+                    .tolist()
+                )
+                st.session_state.clientes_excluir.update(tels_agenda)
 
-        # 2) Clientes que já tiveram check-in (LOG_CHECKINS) – qualquer dia
-        if (
-            not df_log_checkins.empty
-            and 'Telefone' in df_log_checkins.columns
-        ):
-            tels_log = (
-                df_log_checkins['Telefone']
-                .astype(str)
-                .str.strip()
-                .tolist()
-            )
-            st.session_state.clientes_excluir.update(tels_log)
+            # 2) Clientes que já tiveram check-in (LOG_CHECKINS) – qualquer dia
+            if (
+                not df_log_checkins.empty
+                and 'Telefone' in df_log_checkins.columns
+            ):
+                tels_log = (
+                    df_log_checkins['Telefone']
+                    .astype(str)
+                    .str.strip()
+                    .tolist()
+                )
+                st.session_state.clientes_excluir.update(tels_log)
 
-        st.session_state.ultima_verificacao = agora_ts
-        st.toast("✅ Filtros atualizados!", icon="🔄")
-
+            st.session_state.ultima_verificacao = agora_ts
+            st.toast("✅ Filtros atualizados!", icon="🔄")
 
     # ---------------- CARREGAR CLIENTES DA CLASSIFICAÇÃO ----------------
-    # ---------------- CARREGAR CLIENTES DA CLASSIFICAÇÃO ----------------
-df_clientes = carregar_dados(classificacao_selecionada)
-if df_clientes.empty:
-    st.warning(f"⚠️ Nenhum cliente em '{classificacao_selecionada}'")
-    return
+    df_clientes = carregar_dados(classificacao_selecionada)
+    if df_clientes.empty:
+        st.warning(f"⚠️ Nenhum cliente em '{classificacao_selecionada}'")
+        return
 
-# limitar lista de trabalho pela meta da classificação
-if meta_classificacao > 0:
-    df_clientes = df_clientes.head(meta_classificacao)
+    # limitar lista de trabalho pela meta da classificação
+    if meta_classificacao > 0:
+        df_clientes = df_clientes.head(meta_classificacao)
 
-# remover já processados (em atendimento ou já fizeram check-in)
-if 'Telefone' in df_clientes.columns:
-    df_clientes['Telefone'] = df_clientes['Telefone'].astype(str).str.strip()
-    df_filtrado = df_clientes[
-        ~df_clientes['Telefone'].isin(st.session_state.clientes_excluir)
-    ]
-else:
-    df_filtrado = df_clientes[
-        ~df_clientes['Nome'].isin(st.session_state.clientes_excluir)
-    ]
-
+    # remover já processados (em atendimento ou já fizeram check-in)
+    if 'Telefone' in df_clientes.columns:
+        df_clientes['Telefone'] = df_clientes['Telefone'].astype(str).str.strip()
+        df_filtrado = df_clientes[
+            ~df_clientes['Telefone'].isin(st.session_state.clientes_excluir)
+        ]
+    else:
+        df_filtrado = df_clientes[
+            ~df_clientes['Nome'].isin(st.session_state.clientes_excluir)
+        ]
 
     if len(df_filtrado) == 0:
         st.success(f"✅ Todos os clientes de '{classificacao_selecionada}' já foram check-in!")
