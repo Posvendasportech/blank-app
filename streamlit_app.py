@@ -678,12 +678,12 @@ def render_checkin():
     # ---------------- SESSION STATE ----------------
     if 'metas_checkin' not in st.session_state:
         st.session_state.metas_checkin = {
-            'novo': 5,
-            'promissor': 5,
-            'leal': 5,
-            'campeao': 3,
-            'risco': 5,
-            'dormente': 5,
+            'novo': 0,
+            'promissor': 0,
+            'leal': 0,
+            'campeao': 0,
+            'risco': 0,
+            'dormente': 0,
         }
     if 'metas_alteradas' not in st.session_state:
         st.session_state.metas_alteradas = False
