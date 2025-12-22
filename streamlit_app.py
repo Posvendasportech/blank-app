@@ -1081,6 +1081,10 @@ def render_em_atendimento():
 # RENDER - PÁGINA SUPORTE (VERSÃO COMPLETA COM BUSCA E LOGS)
 # ============================================================================
 
+# ============================================================================
+# RENDER - PÁGINA SUPORTE (VERSÃO COMPLETA CORRIGIDA)
+# ============================================================================
+
 def render_suporte():
     """Renderiza a página de Suporte - Gestão de Tickets com Busca Unificada"""
     
@@ -1091,6 +1095,9 @@ def render_suporte():
     # ========== INICIALIZAR SESSION STATE ==========
     if 'ticket_encontrado' not in st.session_state:
         st.session_state.ticket_encontrado = None
+    
+    if 'mostrar_form_novo' not in st.session_state:
+        st.session_state.mostrar_form_novo = False
     
     # ========== BARRA DE BUSCA E CRIAÇÃO ==========
     st.subheader("🔍 Buscar Ticket ou Criar Novo")
@@ -1114,9 +1121,11 @@ def render_suporte():
     st.markdown("---")
     
     # ========== FORMULÁRIO: CRIAR NOVO TICKET ==========
-    if btn_novo_ticket or 'mostrar_form_novo' in st.session_state:
+    if btn_novo_ticket:
         st.session_state.mostrar_form_novo = True
-        
+        st.session_state.ticket_encontrado = None
+    
+    if st.session_state.mostrar_form_novo:
         st.subheader("🎫 Abrir Novo Ticket de Suporte")
         
         with st.form(key="form_novo_ticket_suporte"):
@@ -1166,11 +1175,25 @@ def render_suporte():
             
             st.markdown("---")
             
-            btn_criar_ticket = st.form_submit_button(
-                "✅ Criar Ticket de Suporte",
-                type="primary",
-                use_container_width=True
-            )
+            col_btn_form1, col_btn_form2 = st.columns(2)
+            
+            with col_btn_form1:
+                btn_criar_ticket = st.form_submit_button(
+                    "✅ Criar Ticket de Suporte",
+                    type="primary",
+                    use_container_width=True
+                )
+            
+            with col_btn_form2:
+                btn_cancelar_form = st.form_submit_button(
+                    "❌ Cancelar",
+                    use_container_width=True
+                )
+            
+            # ========== AÇÃO: CANCELAR ==========
+            if btn_cancelar_form:
+                st.session_state.mostrar_form_novo = False
+                st.rerun()
             
             # ========== AÇÃO: CRIAR TICKET ==========
             if btn_criar_ticket:
@@ -1228,19 +1251,15 @@ def render_suporte():
                             st.balloons()
                             
                             # Limpar formulário
-                            del st.session_state.mostrar_form_novo
+                            st.session_state.mostrar_form_novo = False
                             time.sleep(2)
                             st.rerun()
                             
                         except Exception as e:
                             st.error(f"❌ Erro ao criar ticket: {e}")
         
-        # Botão para cancelar
-        if st.button("❌ Cancelar", key="cancelar_novo_ticket"):
-            del st.session_state.mostrar_form_novo
-            st.rerun()
-        
         st.markdown("---")
+        return  # Retorna para não mostrar a lista enquanto está criando
     
     # ========== REALIZAR BUSCA ==========
     if btn_buscar and termo_busca:
@@ -1292,7 +1311,7 @@ def render_suporte():
     elif btn_buscar and not termo_busca:
         st.warning("⚠️ Digite um ID, nome ou telefone para buscar")
     
-    # ========== EXIBIR TICKET ENCONTRADO ==========
+    # ========== EXIBIR TICKET ENCONTRADO (VISÃO DETALHADA) ==========
     if st.session_state.ticket_encontrado is not None:
         ticket = st.session_state.ticket_encontrado
         
@@ -1310,6 +1329,12 @@ def render_suporte():
         icone = icones_prioridade.get(prioridade, '⚪')
         
         st.success(f"✅ Ticket encontrado: **{id_ticket}** - {nome_cliente}")
+        
+        # Botão para voltar à lista
+        if st.button("⬅️ Voltar para Lista de Tickets", key="voltar_lista"):
+            st.session_state.ticket_encontrado = None
+            st.rerun()
+        
         st.markdown("---")
         
         # ========== BUSCAR HISTÓRICO COMPLETO DO CLIENTE ==========
@@ -1557,39 +1582,58 @@ def render_suporte():
                                         if novo_progresso < 100:
                                             st.warning("⚠️ Recomendamos marcar como 100% antes de finalizar")
                                         
-                                        # Campos adicionais para finalização
-                                        st.markdown("---")
-                                        st.markdown("### 📝 Informações de Finalização")
-                                        
+                                        st.session_state[f'finalizar_{id_ticket}'] = True
+                                
+                                # Campos de finalização fora do form
+                                if st.session_state.get(f'finalizar_{id_ticket}', False):
+                                    st.markdown("---")
+                                    st.markdown("### 📝 Informações de Finalização")
+                                    
+                                    with st.form(key=f"form_finalizar_{id_ticket}"):
                                         solucao_final = st.text_area(
                                             "Como foi resolvido? *",
                                             height=100,
-                                            placeholder="Descreva a solução aplicada...",
-                                            key=f"solucao_{id_ticket}"
+                                            placeholder="Descreva a solução aplicada..."
                                         )
                                         
                                         resultado_final = st.selectbox(
                                             "Resultado Final *",
                                             ["Problema Resolvido", "Cliente Satisfeito", 
                                              "Reembolso Concedido", "Troca Realizada", 
-                                             "Não Resolvido", "Cliente Insatisfeito"],
-                                            key=f"resultado_{id_ticket}"
+                                             "Não Resolvido", "Cliente Insatisfeito"]
                                         )
                                         
                                         gerou_conversao = st.radio(
                                             "Gerou nova venda?",
                                             ["Não", "Sim"],
-                                            horizontal=True,
-                                            key=f"conversao_{id_ticket}"
+                                            horizontal=True
                                         )
                                         
                                         resolvido_por = st.text_input(
                                             "Resolvido por",
-                                            value="Sistema CRM",
-                                            key=f"resolvido_{id_ticket}"
+                                            value="Sistema CRM"
                                         )
                                         
-                                        if st.button("✅ Confirmar Finalização", type="primary", key=f"confirmar_fin_{id_ticket}"):
+                                        col_fin1, col_fin2 = st.columns(2)
+                                        
+                                        with col_fin1:
+                                            btn_confirmar_fin = st.form_submit_button(
+                                                "✅ Confirmar",
+                                                type="primary",
+                                                use_container_width=True
+                                            )
+                                        
+                                        with col_fin2:
+                                            btn_cancelar_fin = st.form_submit_button(
+                                                "❌ Cancelar",
+                                                use_container_width=True
+                                            )
+                                        
+                                        if btn_cancelar_fin:
+                                            del st.session_state[f'finalizar_{id_ticket}']
+                                            st.rerun()
+                                        
+                                        if btn_confirmar_fin:
                                             if not solucao_final:
                                                 st.error("❌ Descreva como foi resolvido!")
                                             else:
@@ -1607,6 +1651,9 @@ def render_suporte():
                                                         # 2. Mover para AGENDAMENTOS_ATIVOS
                                                         df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
                                                         
+                                                        # Buscar próximo contato do form de atualização
+                                                        prox_contato = nova_data_contato.strftime('%d/%m/%Y') if nova_data_contato else ''
+                                                        
                                                         novo_agendamento = {
                                                             'Data de contato': datetime.now().strftime('%d/%m/%Y'),
                                                             'Nome': ticket.get('Nome', ''),
@@ -1615,7 +1662,7 @@ def render_suporte():
                                                             'Telefone': ticket.get('Telefone', ''),
                                                             'Relato da conversa': f"[SUPORTE {id_ticket} CONCLUÍDO] {solucao_final}",
                                                             'Follow up': 'Acompanhamento pós-suporte',
-                                                            'Data de chamada': nova_data_contato.strftime('%d/%m/%Y') if nova_data_contato else '',
+                                                            'Data de chamada': prox_contato,
                                                             'Observação': f"Ticket resolvido. Resultado: {resultado_final}"
                                                         }
                                                         
@@ -1633,6 +1680,7 @@ def render_suporte():
                                                         
                                                         # Limpar busca
                                                         st.session_state.ticket_encontrado = None
+                                                        del st.session_state[f'finalizar_{id_ticket}']
                                                         time.sleep(2)
                                                         st.rerun()
                                                         
@@ -1649,63 +1697,245 @@ def render_suporte():
         except Exception as e:
             st.error(f"❌ Erro ao carregar histórico: {e}")
         
-        # Botão para nova busca
-        if st.button("🔄 Nova Busca", key="nova_busca_ticket"):
-            st.session_state.ticket_encontrado = None
-            st.rerun()
+        return  # Retorna para não mostrar a lista quando está em modo busca
     
-    # ========== VISÃO GERAL (quando não há busca ativa) ==========
-    elif st.session_state.ticket_encontrado is None and not btn_novo_ticket:
-        st.subheader("📊 Visão Geral de Suporte")
+    # ========== VISÃO GERAL - LISTA DE TICKETS ==========
+    st.subheader("📊 Gestão de Tickets de Suporte")
+    
+    # Carregar dados
+    with st.spinner("Carregando tickets de suporte..."):
+        df_suporte = carregar_dados("SUPORTE")
+    
+    if df_suporte.empty:
+        st.info("✅ Nenhum ticket de suporte ativo no momento")
+        st.write("👉 Use o botão **➕ Novo Ticket** acima para abrir um chamado")
+        return
+    
+    # ========== FILTRAR TICKETS DO DIA E VENCIDOS ==========
+    hoje_dt = datetime.now()
+    hoje_str_br = hoje_dt.strftime('%d/%m/%Y')
+    
+    df_hoje = pd.DataFrame()
+    df_vencidos = pd.DataFrame()
+    
+    if 'Próximo contato' in df_suporte.columns:
+        # Tickets de hoje
+        df_hoje = df_suporte[df_suporte['Próximo contato'] == hoje_str_br].copy()
         
-        with st.spinner("Carregando tickets..."):
-            df_suporte = carregar_dados("SUPORTE")
+        # Tickets vencidos
+        vencidos_lista = []
+        for idx, row in df_suporte.iterrows():
+            data_contato_str = row.get('Próximo contato', '')
+            if data_contato_str and data_contato_str != '':
+                try:
+                    # Tentar formato brasileiro DD/MM/YYYY
+                    data_contato_dt = datetime.strptime(data_contato_str, '%d/%m/%Y')
+                    if data_contato_dt.date() < hoje_dt.date():
+                        vencidos_lista.append(idx)
+                except:
+                    pass
         
-        if df_suporte.empty:
-            st.info("✅ Nenhum ticket de suporte ativo no momento")
-            st.write("👉 Use o botão **➕ Novo Ticket** para abrir um chamado")
+        if vencidos_lista:
+            df_vencidos = df_suporte.loc[vencidos_lista].copy()
+    
+    # ========== DASHBOARD DE MÉTRICAS ==========
+    st.subheader("📊 Resumo de Suporte")
+    
+    # Contar por prioridade
+    prioridades = {'Urgente': 0, 'Alta': 0, 'Média': 0, 'Baixa': 0}
+    
+    if 'Prioridade' in df_suporte.columns:
+        for p in prioridades.keys():
+            prioridades[p] = len(df_suporte[df_suporte['Prioridade'] == p])
+    
+    # Métricas
+    col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
+    
+    with col_m1:
+        st.metric("📋 Total de Tickets", len(df_suporte))
+    
+    with col_m2:
+        st.metric("📅 Hoje", len(df_hoje), help="Tickets agendados para hoje")
+    
+    with col_m3:
+        st.metric("🔥 Vencidos", len(df_vencidos),
+                  delta=f"-{len(df_vencidos)}" if len(df_vencidos) > 0 else "0",
+                  delta_color="inverse",
+                  help="Tickets com data de contato vencida")
+    
+    with col_m4:
+        st.metric("🔴 Urgente", prioridades['Urgente'], 
+                  delta=f"-{prioridades['Urgente']}" if prioridades['Urgente'] > 0 else "0",
+                  delta_color="inverse")
+    
+    with col_m5:
+        total_criticos = prioridades['Urgente'] + prioridades['Alta']
+        st.metric("⚠️ Críticos", total_criticos,
+                  delta=f"-{total_criticos}" if total_criticos > 0 else "0",
+                  delta_color="inverse")
+    
+    # Alertas
+    if prioridades['Urgente'] > 0:
+        st.error(f"🚨 **ATENÇÃO:** Você tem {prioridades['Urgente']} ticket(s) URGENTE(S)! Priorize-os imediatamente.")
+    
+    if len(df_vencidos) > 0:
+        st.warning(f"⚠️ **ATENÇÃO:** Você tem {len(df_vencidos)} ticket(s) VENCIDO(S) de dias anteriores!")
+    
+    st.markdown("---")
+    
+    # ========== FILTROS ==========
+    st.subheader("🔍 Filtros")
+    
+    col_f1, col_f2, col_f3 = st.columns(3)
+    
+    with col_f1:
+        visualizar = st.selectbox(
+            "Visualizar:",
+            ["Todos", "Hoje", "Vencidos"],
+            help="Escolha quais tickets deseja ver"
+        )
+    
+    with col_f2:
+        busca_lista = st.text_input(
+            "Buscar na lista:",
+            "",
+            placeholder="Digite o nome...",
+            key="busca_lista_suporte"
+        )
+    
+    with col_f3:
+        filtro_prioridade = st.selectbox(
+            "Prioridade:",
+            ["Todas", "Urgente", "Alta", "Média", "Baixa"]
+        )
+    
+    # Selecionar dataset
+    if visualizar == "Hoje":
+        df_trabalho = df_hoje.copy()
+    elif visualizar == "Vencidos":
+        df_trabalho = df_vencidos.copy()
+    else:
+        df_trabalho = df_suporte.copy()
+    
+    # Aplicar filtros
+    df_filt = df_trabalho.copy()
+    
+    if busca_lista and 'Nome' in df_filt.columns:
+        df_filt = df_filt[df_filt['Nome'].str.contains(busca_lista, case=False, na=False)]
+    
+    if filtro_prioridade != 'Todas' and 'Prioridade' in df_filt.columns:
+        df_filt = df_filt[df_filt['Prioridade'] == filtro_prioridade]
+    
+    st.markdown("---")
+    
+    # ========== LISTA DE TICKETS ==========
+    st.subheader(f"🎫 Tickets de Suporte ({len(df_filt)})")
+    
+    if df_filt.empty:
+        if visualizar == "Hoje":
+            st.info("✅ Nenhum ticket agendado para hoje!")
+        elif visualizar == "Vencidos":
+            st.success("✅ Você não tem tickets vencidos! Parabéns!")
         else:
-            # Dashboard de métricas
-            hoje_dt = datetime.now()
-            hoje_str_br = hoje_dt.strftime('%d/%m/%Y')
+            st.info("Nenhum ticket encontrado com os filtros aplicados")
+        return
+    
+    # Ordenar por prioridade (Urgente > Alta > Média > Baixa)
+    ordem_prioridade = {'Urgente': 0, 'Alta': 1, 'Média': 2, 'Baixa': 3}
+    if 'Prioridade' in df_filt.columns:
+        df_filt['_ordem'] = df_filt['Prioridade'].map(ordem_prioridade).fillna(4)
+        df_filt = df_filt.sort_values('_ordem')
+    
+    # Ícones de prioridade
+    icones_prioridade = {
+        'Urgente': '🔴',
+        'Alta': '🟠',
+        'Média': '🟡',
+        'Baixa': '🟢'
+    }
+    
+    # Cards de tickets (versão resumida para lista)
+    for idx, ticket in df_filt.iterrows():
+        
+        # Dados do ticket
+        id_ticket = ticket.get('ID_Ticket', 'N/D')
+        nome_cliente = ticket.get('Nome', 'N/D')
+        prioridade = ticket.get('Prioridade', 'Média')
+        progresso = ticket.get('Progresso', 0)
+        
+        icone = icones_prioridade.get(prioridade, '⚪')
+        
+        # Verificar se está vencido
+        esta_vencido = False
+        proximo_contato_str = ticket.get('Próximo contato', '')
+        if proximo_contato_str and proximo_contato_str != '':
+            try:
+                data_contato_dt = datetime.strptime(proximo_contato_str, '%d/%m/%Y')
+                if data_contato_dt.date() < hoje_dt.date():
+                    esta_vencido = True
+            except:
+                pass
+        
+        # Badge de status
+        if esta_vencido:
+            badge = "🔥 VENCIDO"
+        elif proximo_contato_str == hoje_str_br:
+            badge = "📅 HOJE"
+        else:
+            badge = "📋 ATIVO"
+        
+        # Título do card
+        titulo_card = f"{badge} | {icone} {prioridade.upper()} | 🎫 {id_ticket} | 👤 {nome_cliente} | 📊 {progresso}%"
+        
+        # Expandir automaticamente tickets urgentes ou vencidos
+        expandir = (prioridade == 'Urgente' or esta_vencido)
+        
+        with st.expander(titulo_card, expanded=expandir):
             
-            df_hoje = pd.DataFrame()
-            if 'Próximo contato' in df_suporte.columns:
-                df_hoje = df_suporte[df_suporte['Próximo contato'] == hoje_str_br].copy()
+            col_info, col_acoes = st.columns([2, 1])
             
-            # Contar por prioridade
-            prioridades = {'Urgente': 0, 'Alta': 0, 'Média': 0, 'Baixa': 0}
+            with col_info:
+                st.write(f"**🎫 ID do Ticket:** {id_ticket}")
+                st.write(f"**👤 Cliente:** {nome_cliente}")
+                st.write(f"**📱 Telefone:** {ticket.get('Telefone', 'N/D')}")
+                st.write(f"**🔧 Tipo:** {ticket.get('Tipo_Problema', 'N/D')}")
+                st.write(f"**{icone} Prioridade:** {prioridade}")
+                
+                # Progresso
+                try:
+                    progresso_decimal = float(progresso) / 100
+                except:
+                    progresso_decimal = 0
+                
+                st.progress(progresso_decimal)
+                st.caption(f"{progresso}% concluído")
+                
+                # Descrição resumida
+                descricao = ticket.get('Descrição do problema', '')
+                if descricao:
+                    st.info(f"**Problema:** {descricao[:150]}{'...' if len(descricao) > 150 else ''}")
+                
+                # Datas
+                st.write(f"**📅 Aberto em:** {ticket.get('Data de abertura', 'N/D')}")
+                if proximo_contato_str:
+                    if esta_vencido:
+                        st.error(f"**⚠️ Próximo contato:** {proximo_contato_str} (VENCIDO)")
+                    elif proximo_contato_str == hoje_str_br:
+                        st.success(f"**📅 Próximo contato:** {proximo_contato_str} (HOJE)")
+                    else:
+                        st.info(f"**📅 Próximo contato:** {proximo_contato_str}")
             
-            if 'Prioridade' in df_suporte.columns:
-                for p in prioridades.keys():
-                    prioridades[p] = len(df_suporte[df_suporte['Prioridade'] == p])
-            
-            # Métricas
-            col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
-            
-            with col_m1:
-                st.metric("📋 Total", len(df_suporte))
-            
-            with col_m2:
-                st.metric("📅 Hoje", len(df_hoje))
-            
-            with col_m3:
-                st.metric("🔴 Urgente", prioridades['Urgente'], 
-                          delta=f"-{prioridades['Urgente']}" if prioridades['Urgente'] > 0 else "0",
-                          delta_color="inverse")
-            
-            with col_m4:
-                st.metric("🟠 Alta", prioridades['Alta'])
-            
-            with col_m5:
-                total_criticos = prioridades['Urgente'] + prioridades['Alta']
-                st.metric("⚠️ Críticos", total_criticos)
-            
-            if prioridades['Urgente'] > 0:
-                st.error(f"🚨 **ATENÇÃO:** {prioridades['Urgente']} ticket(s) URGENTE(S)! Priorize-os.")
-            
-            st.markdown("---")
-            st.info("💡 **Dica:** Use a busca acima para localizar tickets específicos por ID, nome ou telefone do cliente")
+            with col_acoes:
+                st.markdown("### 🎯 Ações")
+                
+                # Botão para ver detalhes completos
+                if st.button(f"📋 Ver Detalhes", key=f"ver_detalhes_{id_ticket}", use_container_width=True):
+                    st.session_state.ticket_encontrado = ticket.to_dict()
+                    st.rerun()
+                
+                st.caption(f"Clique para ver o histórico completo e atualizar o ticket")
+        
+        st.markdown("---")
 
 
 
