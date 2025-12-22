@@ -10,6 +10,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 import time
+import pytz
 
 # ============================================================================
 # CONFIGURAÇÃO DA PÁGINA
@@ -79,6 +80,104 @@ def adicionar_agendamento(dados_cliente, classificacao_origem):
         st.error(f"Erro ao adicionar agendamento: {e}")
         return False
 
+def registrar_log_checkin(dados_cliente, classificacao, respondeu, relato_resumo, criado_por="Sistema"):
+    """Registra cada check-in realizado na aba LOG_CHECKINS com ID único - Horário de Brasília"""
+    try:
+        st.write("🔍 DEBUG FUNÇÃO: Início da função")
+        
+        conn = get_gsheets_connection()
+        df_log = conn.read(worksheet="LOG_CHECKINS", ttl=0)
+        
+        st.write(f"🔍 DEBUG FUNÇÃO: LOG carregado. Linhas: {len(df_log)}")
+        st.write(f"🔍 DEBUG FUNÇÃO: Colunas: {df_log.columns.tolist()}")
+        
+        if not df_log.empty and 'ID_Checkin' in df_log.columns:
+            st.write(f"🔍 DEBUG FUNÇÃO: Primeiros IDs: {df_log['ID_Checkin'].head().tolist()}")
+        
+        # HORÁRIO DE BRASÍLIA para pegar o ano
+        timezone_brasilia = pytz.timezone('America/Sao_Paulo')
+        agora = datetime.now(timezone_brasilia)
+        ano_atual = agora.strftime('%Y')
+        
+        st.write(f"🔍 DEBUG FUNÇÃO: Ano atual: {ano_atual}")
+        
+        # Gerar ID único no formato CHK-AAAA-NNNNN
+        if df_log.empty or 'ID_Checkin' not in df_log.columns:
+            numero_sequencial = 1
+            st.write("🔍 DEBUG FUNÇÃO: LOG vazio, usando número 1")
+        else:
+            # CONVERTER COLUNA PARA STRING
+            df_log['ID_Checkin'] = df_log['ID_Checkin'].astype(str)
+            st.write(f"🔍 DEBUG FUNÇÃO: IDs convertidos para string")
+            
+            # Filtrar IDs do ano atual
+            ids_ano_atual = df_log[df_log['ID_Checkin'].str.contains(f'CHK-{ano_atual}-', na=False)]
+            st.write(f"🔍 DEBUG FUNÇÃO: IDs do ano {ano_atual}: {len(ids_ano_atual)}")
+            
+            if len(ids_ano_atual) > 0:
+                st.write(f"🔍 DEBUG FUNÇÃO: Último ID: {ids_ano_atual['ID_Checkin'].iloc[-1]}")
+                # Extrair números dos IDs (CHK-2025-00001 -> 1)
+                ultimos_numeros = ids_ano_atual['ID_Checkin'].str.extract(r'CHK-\d{4}-(\d{5})')[0]
+                ultimo_numero = ultimos_numeros.astype(int).max()
+                numero_sequencial = ultimo_numero + 1
+                st.write(f"🔍 DEBUG FUNÇÃO: Próximo número: {numero_sequencial}")
+            else:
+                numero_sequencial = 1
+                st.write("🔍 DEBUG FUNÇÃO: Nenhum ID do ano atual, usando 1")
+        
+        # Formatar ID: CHK-2025-00001
+        proximo_id = f"CHK-{ano_atual}-{numero_sequencial:05d}"
+        st.write(f"🔍 DEBUG FUNÇÃO: ID gerado: {proximo_id}")
+        
+        # Resto do código continua igual
+        data_checkin = agora.strftime('%d/%m/%Y')
+        hora_checkin = agora.strftime('%H:%M:%S')
+        dia_semana = agora.strftime('%A')
+        
+        # Traduzir dia da semana para português
+        dias_pt = {
+            'Monday': 'Segunda-feira',
+            'Tuesday': 'Terça-feira',
+            'Wednesday': 'Quarta-feira',
+            'Thursday': 'Quinta-feira',
+            'Friday': 'Sexta-feira',
+            'Saturday': 'Sábado',
+            'Sunday': 'Domingo'
+        }
+        dia_semana = dias_pt.get(dia_semana, dia_semana)
+        
+        # Preparar linha de log
+        nova_linha_log = {
+            'ID_Checkin': proximo_id,
+            'Data_Checkin': data_checkin,
+            'Nome_Cliente': dados_cliente.get('Nome', ''),
+            'Telefone': dados_cliente.get('Telefone', ''),
+            'Classificacao_Cliente': classificacao,
+            'Valor_Cliente_Antes': dados_cliente.get('Valor', 0),
+            'Compras_Cliente_Antes': dados_cliente.get('Compras', 0),
+            'Respondeu': respondeu,
+            'Relato_Resumo': relato_resumo[:200] if relato_resumo else '',
+            'Criado_Por': criado_por,
+            'Dia_Semana': dia_semana,
+            'Hora_Checkin': hora_checkin
+        }
+        
+        st.write("🔍 DEBUG FUNÇÃO: Linha preparada, salvando...")
+        
+        # Adicionar ao log
+        df_log_novo = pd.concat([df_log, pd.DataFrame([nova_linha_log])], ignore_index=True)
+        conn.update(worksheet="LOG_CHECKINS", data=df_log_novo)
+        
+        st.write("🔍 DEBUG FUNÇÃO: Salvo com sucesso!")
+        
+        return proximo_id
+        
+    except Exception as e:
+        st.error(f"Erro ao registrar log: {e}")
+        import traceback
+        st.code(traceback.format_exc())
+        return None
+
 
 def atualizar_agendamento(index, dados_atualizados):
     """Atualiza um registro na aba AGENDAMENTOS_ATIVOS"""
@@ -123,6 +222,301 @@ def finalizar_atendimento(index, dados_completos):
         st.error(f"Erro ao finalizar: {e}")
         return False
 
+def registrar_conversao(dados_cliente, valor_venda, origem="TOTAL_AUTOMATICO"):
+    """
+    Registra uma conversão (nova compra) na aba LOG_CONVERSOES.
+
+    - dados_cliente: linha do cliente vinda da aba Total (Series do pandas)
+    - valor_venda: apenas o valor da COMPRA nova (diferença entre hoje e ontem)
+    - origem: texto para rastrear de onde veio a conversão (padrão: TOTAL_AUTOMATICO)
+    """
+    try:
+        conn = get_gsheets_connection()
+        df_conversoes = conn.read(worksheet="LOG_CONVERSOES", ttl=0)
+        
+        # Horário de Brasília
+        timezone_brasilia = pytz.timezone('America/Sao_Paulo')
+        agora = datetime.now(timezone_brasilia)
+        ano_atual = agora.strftime('%Y')
+        
+        # Garantir que o DataFrame tem a coluna ID_Conversao
+        if df_conversoes.empty:
+            df_conversoes = pd.DataFrame(columns=[
+                'ID_Conversao',
+                'Data_Conversao',
+                'Nome_Cliente',
+                'Telefone',
+                'Classificacao_Origem',
+                'Valor_Venda',
+                'Origem_Lead',
+                'Dias_Ate_Conversao',
+                'Criado_Por',
+                'Hora_Registro'
+            ])
+        
+        # Gerar ID único no formato CONV-AAAA-NNNNN
+        if 'ID_Conversao' not in df_conversoes.columns or df_conversoes.empty:
+            numero_sequencial = 1
+        else:
+            df_conversoes['ID_Conversao'] = df_conversoes['ID_Conversao'].astype(str)
+            ids_ano_atual = df_conversoes[
+                df_conversoes['ID_Conversao'].str.contains(f'CONV-{ano_atual}-', na=False)
+            ]
+            
+            if len(ids_ano_atual) > 0:
+                ultimos_numeros = ids_ano_atual['ID_Conversao'].str.extract(r'CONV-\d{4}-(\d{5})')[0]
+                ultimo_numero = ultimos_numeros.astype(int).max()
+                numero_sequencial = ultimo_numero + 1
+            else:
+                numero_sequencial = 1
+        
+        proximo_id = f"CONV-{ano_atual}-{numero_sequencial:05d}"
+        
+        # Tentar calcular dias até conversão usando "Data de contato" se existir
+        dias_ate_conversao = ""
+        data_contato_str = str(dados_cliente.get('Data de contato', '') or '')
+        if data_contato_str:
+            for fmt in ['%d/%m/%Y', '%Y-%m-%d', '%Y/%m/%d']:
+                try:
+                    data_contato = datetime.strptime(data_contato_str, fmt)
+                    dias_ate_conversao = (agora - data_contato).days
+                    break
+                except:
+                    continue
+        
+        # Obter classificação de origem com fallback de nomes de coluna
+        classificacao_origem = dados_cliente.get('Classificação', dados_cliente.get('Classificacao', ''))
+        
+        # Preparar linha da conversão
+        nova_conversao = {
+            'ID_Conversao': proximo_id,
+            'Data_Conversao': agora.strftime('%d/%m/%Y'),
+            'Nome_Cliente': dados_cliente.get('Nome', ''),
+            'Telefone': dados_cliente.get('Telefone', ''),
+            'Classificacao_Origem': classificacao_origem,
+            'Valor_Venda': float(valor_venda) if valor_venda is not None else 0,
+            'Origem_Lead': origem,
+            'Dias_Ate_Conversao': dias_ate_conversao,
+            'Criado_Por': 'CRM',
+            'Hora_Registro': agora.strftime('%H:%M:%S')
+        }
+        
+        # Adicionar no DataFrame e salvar na planilha
+        df_conversoes_novo = pd.concat(
+            [df_conversoes, pd.DataFrame([nova_conversao])],
+            ignore_index=True
+        )
+        conn.update(worksheet="LOG_CONVERSOES", data=df_conversoes_novo)
+        
+        return proximo_id
+    
+    except Exception as e:
+        st.error(f"Erro ao registrar conversão: {e}")
+        return None
+
+def gerar_snapshot_diario(data_especifica=None):
+    """Gera snapshot de todas as métricas do dia e salva em HISTORICO_METRICAS"""
+    try:
+        timezone_brasilia = pytz.timezone('America/Sao_Paulo')
+        agora = datetime.now(timezone_brasilia)
+        
+        if data_especifica:
+            data_snapshot = data_especifica
+        else:
+            data_snapshot = agora.strftime('%d/%m/%Y')
+        
+        conn = get_gsheets_connection()
+        
+        # Carregar abas de clientes
+        df_novo = conn.read(worksheet="Novo", ttl=0)
+        df_promissor = conn.read(worksheet="Promissor", ttl=0)
+        df_leal = conn.read(worksheet="Leal", ttl=0)
+        df_campeao = conn.read(worksheet="Campeão", ttl=0)
+        df_emrisco = conn.read(worksheet="Em risco", ttl=0)
+        df_dormente = conn.read(worksheet="Dormente", ttl=0)
+        df_total = conn.read(worksheet="Total", ttl=0)
+        
+        # Outras abas operacionais
+        df_log_checkins = conn.read(worksheet="LOG_CHECKINS", ttl=0)
+        df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
+        df_historico = conn.read(worksheet="HISTORICO", ttl=0)
+        df_suporte = conn.read(worksheet="SUPORTE", ttl=0)
+        df_conversoes = conn.read(worksheet="LOG_CONVERSOES", ttl=0)
+        
+        # Totais de clientes por classificação
+        total_novo = len(df_novo)
+        total_promissor = len(df_promissor)
+        total_leal = len(df_leal)
+        total_campeao = len(df_campeao)
+        total_emrisco = len(df_emrisco)
+        total_dormente = len(df_dormente)
+        total_clientes = len(df_total)
+        
+        # Check-ins do dia
+        checkins_realizados = 0
+        if not df_log_checkins.empty and 'Data_Checkin' in df_log_checkins.columns:
+            checkins_realizados = len(df_log_checkins[df_log_checkins['Data_Checkin'] == data_snapshot])
+        
+        # Meta do dia (do session_state, se for o dia atual)
+        meta_dia = 0
+        if 'metas_checkin' in st.session_state and data_snapshot == agora.strftime('%d/%m/%Y'):
+            meta_dia = sum(st.session_state.metas_checkin.values())
+        
+        # Agendamentos criados no dia (baseado na data de contato)
+        agendamentos_criados = 0
+        if not df_agendamentos.empty and 'Data de contato' in df_agendamentos.columns:
+            agendamentos_criados = len(df_agendamentos[df_agendamentos['Data de contato'] == data_snapshot])
+        
+        # Agendamentos concluídos no dia (HISTORICO)
+        agendamentos_concluidos = 0
+        if not df_historico.empty and 'Data de conclusão' in df_historico.columns:
+            df_hist_temp = df_historico.copy()
+            df_hist_temp['Data_Simples'] = df_hist_temp['Data de conclusão'].astype(str).str[:10]
+            agendamentos_concluidos = len(df_hist_temp[df_hist_temp['Data_Simples'] == data_snapshot])
+        
+        # Tickets abertos no dia (SUPORTE)
+        tickets_abertos = 0
+        if not df_suporte.empty and 'Data de abertura' in df_suporte.columns:
+            tickets_abertos = len(df_suporte[df_suporte['Data de abertura'] == data_snapshot])
+        
+        # Tickets pendentes (total atual em SUPORTE)
+        tickets_pendentes = len(df_suporte)
+        
+        # Tickets resolvidos no dia – para funcionar bem, ideal ter uma coluna "Data_Resolucao" em SUPORTE no futuro
+        tickets_resolvidos = 0  # por enquanto fica 0 até definirmos a lógica
+        
+                # ========== DETECTAR CONVERSÕES AUTOMÁTICAS ==========
+        st.subheader("🤖 Detecção automática de conversões")
+        conversoes_automaticas = detectar_e_registrar_conversoes_automaticas()
+        
+        # Agora recarregar LOG_CONVERSOES para pegar as recém-criadas
+        df_conversoes = conn.read(worksheet="LOG_CONVERSOES", ttl=0)
+        
+        # Conversões do dia (LOG_CONVERSOES)
+        conversoes_dia = 0
+        if not df_conversoes.empty and 'Data_Conversao' in df_conversoes.columns:
+            conversoes_dia = len(df_conversoes[df_conversoes['Data_Conversao'] == data_snapshot])
+
+        
+        snapshot = {
+            'Data': data_snapshot,
+            'Total_Novo': total_novo,
+            'Total_Promissor': total_promissor,
+            'Total_Leal': total_leal,
+            'Total_Campeao': total_campeao,
+            'Total_EmRisco': total_emrisco,
+            'Total_Dormente': total_dormente,
+            'Total_Clientes': total_clientes,
+            'CheckIns_Realizados': checkins_realizados,
+            'Meta_Dia': meta_dia,
+            'Agendamentos_Criados': agendamentos_criados,
+            'Agendamentos_Concluidos': agendamentos_concluidos,
+            'Tickets_Abertos': tickets_abertos,
+            'Tickets_Resolvidos': tickets_resolvidos,
+            'Tickets_Pendentes': tickets_pendentes,
+            'Conversoes_Dia': conversoes_dia
+        }
+        
+        df_metricas = conn.read(worksheet="HISTORICO_METRICAS", ttl=0)
+        
+        # Remove snapshot antigo do mesmo dia, se existir
+        if not df_metricas.empty and 'Data' in df_metricas.columns:
+            df_metricas = df_metricas[df_metricas['Data'] != data_snapshot]
+        
+        df_metricas_novo = pd.concat([df_metricas, pd.DataFrame([snapshot])], ignore_index=True)
+        conn.update(worksheet="HISTORICO_METRICAS", data=df_metricas_novo)
+        
+        st.success(f"✅ Snapshot gerado para {data_snapshot}!")
+        return True
+        
+    except Exception as e:
+        st.error(f"Erro ao gerar snapshot: {e}")
+        import traceback
+        st.code(traceback.format_exc())
+        return False
+
+
+def detectar_e_registrar_conversoes_automaticas():
+    """Compara Total de hoje vs ontem e registra conversões automaticamente"""
+    try:
+        conn = get_gsheets_connection()
+        
+        # Ler Total de hoje
+        df_total_hoje_full = conn.read(worksheet="Total", ttl=0)
+        colunas_chave = ['Telefone', 'Nome', 'Valor', 'Compras', 'Classificação', 'Data de contato']
+        colunas_existentes = [c for c in colunas_chave if c in df_total_hoje_full.columns]
+        df_total_hoje = df_total_hoje_full[colunas_existentes].copy()
+        
+        # Ler Total do dia anterior (snapshot compacto)
+        df_total_ontem = conn.read(worksheet="TOTAL_DIA_ANTERIOR", ttl=0)
+        
+        if df_total_hoje.empty:
+            st.warning("⚠️ Aba Total está vazia")
+            return 0
+        
+        conversoes_detectadas = 0
+        
+        # Se não tem histórico do dia anterior, apenas salva hoje e sai
+        if df_total_ontem.empty:
+            st.info("📸 Primeira execução - salvando snapshot do Total")
+            conn.update(worksheet="TOTAL_DIA_ANTERIOR", data=df_total_hoje)
+            return 0
+        
+        st.info("🔍 Detectando conversões automáticas...")
+        
+        # Comparar por Telefone (chave única)
+        for idx, cliente_hoje in df_total_hoje.iterrows():
+            telefone = cliente_hoje.get('Telefone', '')
+            
+            if not telefone or telefone == '':
+                continue
+            
+            # Buscar cliente no snapshot de ontem
+            cliente_ontem = df_total_ontem[df_total_ontem['Telefone'] == telefone]
+            
+            if cliente_ontem.empty:
+                # Cliente novo - não é conversão, é primeira compra já registrada
+                continue
+            
+            # Pegar valores
+            valor_hoje = float(cliente_hoje.get('Valor', 0) or 0)
+            valor_ontem = float(cliente_ontem.iloc[0].get('Valor', 0) or 0)
+            
+            compras_hoje = int(cliente_hoje.get('Compras', 0) or 0)
+            compras_ontem = int(cliente_ontem.iloc[0].get('Compras', 0) or 0)
+            
+            # Verificar se houve nova compra
+            if compras_hoje > compras_ontem:
+                # Calcular valor da nova compra
+                valor_nova_compra = valor_hoje - valor_ontem
+                
+                if valor_nova_compra > 0:
+                    # Registrar conversão automaticamente
+                    id_conv = registrar_conversao(
+                        dados_cliente=cliente_hoje,
+                        valor_venda=valor_nova_compra,
+                        origem="TOTAL_AUTOMATICO"
+                    )
+                    
+                    if id_conv:
+                        conversoes_detectadas += 1
+                        st.success(f"✅ Conversão detectada: {cliente_hoje.get('Nome', 'N/D')} - R$ {valor_nova_compra:.2f}")
+        
+        # Atualizar snapshot para o próximo dia
+        conn.update(worksheet="TOTAL_DIA_ANTERIOR", data=df_total_hoje)
+        
+        if conversoes_detectadas > 0:
+            st.success(f"🎉 {conversoes_detectadas} conversão(ões) registrada(s) automaticamente!")
+        else:
+            st.info("✅ Nenhuma conversão nova detectada hoje")
+        
+        return conversoes_detectadas
+        
+    except Exception as e:
+        st.error(f"Erro ao detectar conversões: {e}")
+        import traceback
+        st.code(traceback.format_exc())
+        return 0
 
 
 # ============================================================================
@@ -384,6 +778,29 @@ def render_checkin():
         if clientes_removidos > 0:
             st.warning(f"⚠️ {clientes_removidos} cliente(s) já estão em atendimento ativo e foram removidos da lista")
     
+    # ========== NOVO: REMOVER CLIENTES QUE JÁ FIZERAM CHECK-IN HOJE ==========
+    df_log_checkins = carregar_dados("LOG_CHECKINS")
+    
+    if not df_log_checkins.empty and 'Nome_Cliente' in df_log_checkins.columns and 'Data_Checkin' in df_log_checkins.columns:
+        # Pegar data de hoje
+        timezone_brasilia = pytz.timezone('America/Sao_Paulo')
+        hoje_brasilia = datetime.now(timezone_brasilia)
+        hoje_str = hoje_brasilia.strftime('%d/%m/%Y')
+        
+        # Clientes que já tiveram check-in hoje
+        clientes_checkin_hoje = df_log_checkins[
+            df_log_checkins['Data_Checkin'] == hoje_str
+        ]['Nome_Cliente'].tolist()
+        
+        if clientes_checkin_hoje:
+            df_clientes_antes_filtro = df_clientes.copy()
+            df_clientes = df_clientes[~df_clientes['Nome'].isin(clientes_checkin_hoje)]
+            
+            checkins_removidos = len(df_clientes_antes_filtro) - len(df_clientes)
+            if checkins_removidos > 0:
+                st.success(f"✅ {checkins_removidos} cliente(s) já teve(m) check-in realizado hoje e foram removidos da lista")
+
+    
     if df_clientes.empty:
         st.info("✅ Todos os clientes desta classificação já estão em atendimento!")
         return
@@ -507,6 +924,53 @@ def render_checkin():
                             st.metric("📅 Dias", "0")
                     else:
                         st.metric("📅 Dias", "N/D")
+                                        # ========== BOTÃO DE CHECK-IN RÁPIDO SEM RESPOSTA ==========
+                st.markdown("### 📞 Status de Contato")
+                
+                col_btn_checkin = st.columns(1)
+                
+                if st.button(
+                    "❌ Cliente Não Respondeu (Check-in Rápido)", 
+                    key=f"nao_resp_{index}",
+                    use_container_width=True,
+                    type="secondary",
+                    help="Registra tentativa de contato sem resposta"
+                ):
+                    st.write("🔍 DEBUG: Botão foi clicado!")
+                    st.write(f"🔍 DEBUG: Nome do cliente: {cliente.get('Nome', 'N/D')}")
+                    st.write(f"🔍 DEBUG: Classificação: {classificacao_selecionada}")
+                    
+                    with st.spinner('Registrando tentativa sem resposta...'):
+                        try:
+                            st.write("🔍 DEBUG: Entrando no TRY...")
+                            
+                            id_checkin = registrar_log_checkin(
+                                dados_cliente=cliente,
+                                classificacao=classificacao_selecionada,
+                                respondeu="NÃO RESPONDEU",
+                                relato_resumo="Cliente não respondeu ao contato",
+                                criado_por="CRM"
+                            )
+                            
+                            st.write(f"🔍 DEBUG: ID gerado: {id_checkin}")
+                            
+                            if id_checkin:
+                                carregar_dados.clear()
+                                st.success(f"✅ Tentativa {id_checkin} registrada!")
+                                st.warning(f"⏳ Cliente não respondeu ao contato")
+                                st.info("💡 Este cliente permanece disponível para nova tentativa")
+                                time.sleep(3)
+                                st.rerun()
+                            else:
+                                st.error("❌ Erro: ID não foi gerado")
+                            
+                        except Exception as e:
+                            st.error(f"❌ ERRO CAPTURADO: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
+                
+                st.caption("💡 Use este botão para registrar rapidamente tentativas sem resposta")
+
             
             # ========== COLUNA DIREITA: FORMULÁRIO DE CHECK-IN ==========
             with col_form:
@@ -585,8 +1049,17 @@ def render_checkin():
                                     df_atualizado = pd.concat([df_agendamentos, df_nova_linha], ignore_index=True)
                                     conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_atualizado)
                                     
+                                    # REGISTRAR NO LOG
+                                    id_checkin = registrar_log_checkin(
+                                        dados_cliente=cliente,
+                                        classificacao=classificacao_selecionada,
+                                        respondeu="NÃO RESPONDEU",
+                                        relato_resumo=primeira_conversa,
+                                        criado_por="CRM"
+                                    )
+                                    
                                     carregar_dados.clear()
-                                    st.success(f"✅ Check-in realizado com sucesso para **{nome_cliente}**!")
+                                    st.success(f"✅ Check-in #{id_checkin} realizado com sucesso para **{nome_cliente}**!")
                                     st.balloons()
                                     time.sleep(2)
                                     st.rerun()
@@ -596,8 +1069,6 @@ def render_checkin():
         
         # Separador entre cards
         st.markdown("---")
-
-
 
 # ============================================================================
 # RENDER - PÁGINA EM ATENDIMENTO
@@ -1705,6 +2176,10 @@ def render_historico():
 # RENDER - PÁGINA DASHBOARD
 # ============================================================================
 
+# ============================================================================
+# RENDER - PÁGINA DASHBOARD
+# ============================================================================
+
 def render_dashboard():
     """Renderiza a página de Dashboard com análises e gráficos"""
     
@@ -1712,12 +2187,101 @@ def render_dashboard():
     st.markdown("Visão geral e análises do CRM")
     st.markdown("---")
     
-    # Aqui vamos adicionar os gráficos aos poucos
-    st.info("🚧 Dashboard em construção - Gráficos serão adicionados passo a passo")
+    # ========== SEÇÃO DE FILTROS ==========
+    st.subheader("🔍 Filtros de Análise")
     
-    # Espaço reservado para gráficos futuros
-    st.subheader("📈 Análises")
-    st.write("Aqui entrarão os gráficos e métricas")
+    # Criar 3 colunas para os filtros
+    col_filtro1, col_filtro2, col_filtro3 = st.columns(3)
+    
+    with col_filtro1:
+        # Filtro de Classificação
+        opcoes_classificacao = [
+            "Todas",
+            "Novo",
+            "Promissor", 
+            "Leal",
+            "Campeão",
+            "Em risco",
+            "Dormente"
+        ]
+        
+        filtro_classificacao = st.multiselect(
+            "🏷️ Classificações:",
+            options=opcoes_classificacao[1:],  # Todas exceto "Todas"
+            default=opcoes_classificacao[1:],  # Todas selecionadas por padrão
+            help="Selecione uma ou mais classificações para analisar"
+        )
+        
+        # Se nenhuma selecionada, usar todas
+        if not filtro_classificacao:
+            filtro_classificacao = opcoes_classificacao[1:]
+    
+    with col_filtro2:
+        # Filtro de Data Inicial
+        data_inicial = st.date_input(
+            "📅 Data Inicial:",
+            value=datetime.now().replace(day=1),  # Primeiro dia do mês atual
+            help="Data inicial para análise"
+        )
+    
+    with col_filtro3:
+        # Filtro de Data Final
+        data_final = st.date_input(
+            "📅 Data Final:",
+            value=datetime.now(),  # Hoje
+            help="Data final para análise"
+        )
+    
+    # Validação de datas
+    if data_inicial > data_final:
+        st.error("⚠️ A data inicial não pode ser maior que a data final!")
+        return
+    
+    # Mostrar período selecionado
+    dias_periodo = (data_final - data_inicial).days + 1
+    st.info(f"📊 **Período selecionado:** {data_inicial.strftime('%d/%m/%Y')} até {data_final.strftime('%d/%m/%Y')} ({dias_periodo} dias)")
+    
+    # Mostrar classificações selecionadas
+    st.info(f"🏷️ **Classificações:** {', '.join(filtro_classificacao)}")
+    
+    st.markdown("---")
+
+        # =====================================================================
+    # SNAPSHOT DIÁRIO - GERAR LINHA NA ABA HISTORICO_METRICAS
+    # =====================================================================
+    st.subheader("📸 Snapshot diário de métricas")
+    
+    col_snap1, col_snap2 = st.columns([2, 1])
+    
+    with col_snap1:
+        st.write(
+            "Gere o resumo completo do dia (check-ins, agendamentos, suporte, conversões) "
+            "e salve uma linha na aba HISTORICO_METRICAS."
+        )
+    
+    with col_snap2:
+        if st.button("📸 Gerar snapshot de hoje", use_container_width=True, type="primary"):
+            gerar_snapshot_diario()
+            carregar_dados.clear()
+            time.sleep(2)
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Abaixo disso, futuramente entrarão os gráficos do dashboard
+    st.subheader("📈 Análises (em construção)")
+    st.info("Os gráficos serão construídos usando os dados da aba HISTORICO_METRICAS.")
+
+    # ========== ÁREA DOS GRÁFICOS (virá depois) ==========
+    st.subheader("📈 Análises e Gráficos")
+    st.write("🚧 Gráficos serão adicionados aqui em seguida...")
+    
+    # Aqui vamos adicionar os gráficos nos próximos passos
+    # Os filtros já estarão disponíveis nas variáveis:
+    # - filtro_classificacao (lista de classificações selecionadas)
+    # - data_inicial (data inicial do período)
+    # - data_final (data final do período)
+
 
 
 # ============================================================================
@@ -1729,7 +2293,7 @@ with st.sidebar:
     st.markdown("---")
     pagina = st.radio(
         "Navegação:",
-        ["✅ Check-in", "📞 Em Atendimento", "🆘 Suporte", "📜 Histórico", "Dashboard 📈" ],
+        ["Dashboard 📊", "✅ Check-in", "📞 Em Atendimento", "🆘 Suporte", "📜 Histórico"],
         index=0
     )
     st.markdown("---")
@@ -1739,7 +2303,13 @@ with st.sidebar:
 # ROUTER - CHAMADA DAS PÁGINAS
 # ============================================================================
 
-if pagina == "✅ Check-in":
+# ============================================================================
+# ROTEAMENTO DE PÁGINAS
+# ============================================================================
+
+if pagina == "Dashboard 📊":
+    render_dashboard()
+elif pagina == "✅ Check-in":
     render_checkin()
 elif pagina == "📞 Em Atendimento":
     render_em_atendimento()
@@ -1747,5 +2317,3 @@ elif pagina == "🆘 Suporte":
     render_suporte()
 elif pagina == "📜 Histórico":
     render_historico()
-elif menu == "Dashboard 📈":
-    render_dashboard()    
