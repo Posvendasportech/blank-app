@@ -1947,7 +1947,7 @@ def render_suporte():
                 st.markdown("### 🎯 Ações")
                 
                 # Botão para ver detalhes completos
-                if st.button(f"📋 Ver Detalhes", key=f"ver_detalhes_{id_ticket}", use_container_width=True):
+                if st.button(f"📋 Ver Detalhes", key=f"ver_detalhes_{idx}_{id_ticket}", use_container_width=True):
                     st.session_state.ticket_encontrado = ticket.to_dict()
                     st.rerun()
                 
