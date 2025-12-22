@@ -1454,8 +1454,9 @@ def render_suporte():
                             # Descrição do problema
                             st.markdown("### 🔍 Descrição do Problema")
                             
-                            descricao_hist = hist_ticket.get('Descrição do problema', '')
-                            if descricao_hist and descricao_hist != '':
+                            descricao_hist_raw = hist_ticket.get('Descrição do problema', '')
+                            descricao_hist = str(descricao_hist_raw) if descricao_hist_raw else ''
+                            if descricao_hist and descricao_hist.strip():
                                 st.error(f"**Problema relatado:**\n\n{descricao_hist}")
                             else:
                                 st.caption("_Sem descrição registrada_")
@@ -1468,22 +1469,22 @@ def render_suporte():
                             data_abertura_hist = hist_ticket.get('Data de abertura', 'N/D')
                             st.write(f"**📅 Aberto em:** {data_abertura_hist}")
                             
-                            ultimo_contato_hist = hist_ticket.get('Último contato', '')
-                            if ultimo_contato_hist and ultimo_contato_hist != '':
+                            ultimo_contato_hist = str(hist_ticket.get('Último contato', '')) if hist_ticket.get('Último contato') else ''
+                            if ultimo_contato_hist and ultimo_contato_hist.strip():
                                 st.info(f"**Último acompanhamento:**\n\n{ultimo_contato_hist}")
                             else:
                                 st.caption("_Nenhum acompanhamento registrado ainda_")
                             
-                            proximo_contato_hist = hist_ticket.get('Próximo contato', '')
-                            if proximo_contato_hist and proximo_contato_hist != '':
+                            proximo_contato_hist = str(hist_ticket.get('Próximo contato', '')) if hist_ticket.get('Próximo contato') else ''
+                            if proximo_contato_hist and proximo_contato_hist.strip():
                                 hoje_str = datetime.now().strftime('%d/%m/%Y')
                                 if proximo_contato_hist == hoje_str:
                                     st.success(f"**📅 Próximo contato:** {proximo_contato_hist} ✅ HOJE")
                                 else:
                                     st.info(f"**📅 Próximo contato:** {proximo_contato_hist}")
                             
-                            obs_hist = hist_ticket.get('Observações', '')
-                            if obs_hist and obs_hist != '':
+                            obs_hist = str(hist_ticket.get('Observações', '')) if hist_ticket.get('Observações') else ''
+                            if obs_hist and obs_hist.strip():
                                 st.info(f"**💬 Observações:** {obs_hist}")
                         
                         # ========== COLUNA DIREITA: ATUALIZAR TICKET (APENAS SE FOR O ATUAL) ==========
@@ -1860,9 +1861,9 @@ def render_suporte():
     for idx, ticket in df_filt.iterrows():
         
         # Dados do ticket
-        id_ticket = ticket.get('ID_Ticket', 'N/D')
-        nome_cliente = ticket.get('Nome', 'N/D')
-        prioridade = ticket.get('Prioridade', 'Média')
+        id_ticket = str(ticket.get('ID_Ticket', 'N/D')) if ticket.get('ID_Ticket') else 'N/D'
+        nome_cliente = str(ticket.get('Nome', 'N/D')) if ticket.get('Nome') else 'N/D'
+        prioridade = str(ticket.get('Prioridade', 'Média')) if ticket.get('Prioridade') else 'Média'
         progresso = ticket.get('Progresso', 0)
         
         # Converter progresso corretamente - CORRIGIDO
@@ -1875,8 +1876,8 @@ def render_suporte():
         
         # Verificar se está vencido
         esta_vencido = False
-        proximo_contato_str = ticket.get('Próximo contato', '')
-        if proximo_contato_str and proximo_contato_str != '':
+        proximo_contato_str = str(ticket.get('Próximo contato', '')) if ticket.get('Próximo contato') else ''
+        if proximo_contato_str and proximo_contato_str.strip():
             try:
                 data_contato_dt = datetime.strptime(proximo_contato_str, '%d/%m/%Y')
                 if data_contato_dt.date() < hoje_dt.date():
@@ -1905,9 +1906,15 @@ def render_suporte():
             with col_info:
                 st.write(f"**🎫 ID do Ticket:** {id_ticket}")
                 st.write(f"**👤 Cliente:** {nome_cliente}")
-                st.write(f"**📱 Telefone:** {ticket.get('Telefone', 'N/D')}")
-                st.write(f"**🔧 Tipo:** {ticket.get('Tipo_Problema', 'N/D')}")
+                
+                telefone_ticket = str(ticket.get('Telefone', 'N/D')) if ticket.get('Telefone') else 'N/D'
+                st.write(f"**📱 Telefone:** {telefone_ticket}")
+                
+                tipo_problema_ticket = str(ticket.get('Tipo_Problema', 'N/D')) if ticket.get('Tipo_Problema') else 'N/D'
+                st.write(f"**🔧 Tipo:** {tipo_problema_ticket}")
+                
                 st.write(f"**{icone} Prioridade:** {prioridade}")
+
                 
                 # Progresso - CORRIGIDO
                 try:
@@ -1919,13 +1926,16 @@ def render_suporte():
                 st.caption(f"{progresso_valor}% concluído")
                 
                 # Descrição resumida
-                descricao = ticket.get('Descrição do problema', '')
-                if descricao:
+                descricao_raw = ticket.get('Descrição do problema', '')
+                descricao = str(descricao_raw) if descricao_raw else ''
+                if descricao and descricao.strip():
                     st.info(f"**Problema:** {descricao[:150]}{'...' if len(descricao) > 150 else ''}")
                 
                 # Datas
-                st.write(f"**📅 Aberto em:** {ticket.get('Data de abertura', 'N/D')}")
-                if proximo_contato_str:
+                data_abertura = str(ticket.get('Data de abertura', 'N/D')) if ticket.get('Data de abertura') else 'N/D'
+                st.write(f"**📅 Aberto em:** {data_abertura}")
+                
+                if proximo_contato_str and proximo_contato_str.strip():
                     if esta_vencido:
                         st.error(f"**⚠️ Próximo contato:** {proximo_contato_str} (VENCIDO)")
                     elif proximo_contato_str == hoje_str_br:
