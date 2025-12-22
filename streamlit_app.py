@@ -83,51 +83,34 @@ def adicionar_agendamento(dados_cliente, classificacao_origem):
 def registrar_log_checkin(dados_cliente, classificacao, respondeu, relato_resumo, criado_por="Sistema"):
     """Registra cada check-in realizado na aba LOG_CHECKINS com ID único - Horário de Brasília"""
     try:
-        st.write("🔍 DEBUG FUNÇÃO: Início da função")
-        
         conn = get_gsheets_connection()
         df_log = conn.read(worksheet="LOG_CHECKINS", ttl=0)
-        
-        st.write(f"🔍 DEBUG FUNÇÃO: LOG carregado. Linhas: {len(df_log)}")
-        st.write(f"🔍 DEBUG FUNÇÃO: Colunas: {df_log.columns.tolist()}")
-        
-        if not df_log.empty and 'ID_Checkin' in df_log.columns:
-            st.write(f"🔍 DEBUG FUNÇÃO: Primeiros IDs: {df_log['ID_Checkin'].head().tolist()}")
         
         # HORÁRIO DE BRASÍLIA para pegar o ano
         timezone_brasilia = pytz.timezone('America/Sao_Paulo')
         agora = datetime.now(timezone_brasilia)
         ano_atual = agora.strftime('%Y')
         
-        st.write(f"🔍 DEBUG FUNÇÃO: Ano atual: {ano_atual}")
-        
         # Gerar ID único no formato CHK-AAAA-NNNNN
         if df_log.empty or 'ID_Checkin' not in df_log.columns:
             numero_sequencial = 1
-            st.write("🔍 DEBUG FUNÇÃO: LOG vazio, usando número 1")
         else:
             # CONVERTER COLUNA PARA STRING
             df_log['ID_Checkin'] = df_log['ID_Checkin'].astype(str)
-            st.write(f"🔍 DEBUG FUNÇÃO: IDs convertidos para string")
             
             # Filtrar IDs do ano atual
             ids_ano_atual = df_log[df_log['ID_Checkin'].str.contains(f'CHK-{ano_atual}-', na=False)]
-            st.write(f"🔍 DEBUG FUNÇÃO: IDs do ano {ano_atual}: {len(ids_ano_atual)}")
             
             if len(ids_ano_atual) > 0:
-                st.write(f"🔍 DEBUG FUNÇÃO: Último ID: {ids_ano_atual['ID_Checkin'].iloc[-1]}")
                 # Extrair números dos IDs (CHK-2025-00001 -> 1)
                 ultimos_numeros = ids_ano_atual['ID_Checkin'].str.extract(r'CHK-\d{4}-(\d{5})')[0]
                 ultimo_numero = ultimos_numeros.astype(int).max()
                 numero_sequencial = ultimo_numero + 1
-                st.write(f"🔍 DEBUG FUNÇÃO: Próximo número: {numero_sequencial}")
             else:
                 numero_sequencial = 1
-                st.write("🔍 DEBUG FUNÇÃO: Nenhum ID do ano atual, usando 1")
         
         # Formatar ID: CHK-2025-00001
         proximo_id = f"CHK-{ano_atual}-{numero_sequencial:05d}"
-        st.write(f"🔍 DEBUG FUNÇÃO: ID gerado: {proximo_id}")
         
         # Resto do código continua igual
         data_checkin = agora.strftime('%d/%m/%Y')
@@ -162,13 +145,9 @@ def registrar_log_checkin(dados_cliente, classificacao, respondeu, relato_resumo
             'Hora_Checkin': hora_checkin
         }
         
-        st.write("🔍 DEBUG FUNÇÃO: Linha preparada, salvando...")
-        
         # Adicionar ao log
         df_log_novo = pd.concat([df_log, pd.DataFrame([nova_linha_log])], ignore_index=True)
         conn.update(worksheet="LOG_CHECKINS", data=df_log_novo)
-        
-        st.write("🔍 DEBUG FUNÇÃO: Salvo com sucesso!")
         
         return proximo_id
         
@@ -694,310 +673,296 @@ def registrar_ticket_resolvido(id_ticket, dados_cliente, data_abertura, tipo_pro
 # ============================================================================
 
 def render_checkin():
-    """Renderiza a página de Check-in de clientes - Versão otimizada"""
-# Primeira vez que a página carrega? Criar valores padrão
+    """Renderiza a página de Check-in - COMPLETA + OTIMIZADA"""
+
+    # ---------------- SESSION STATE ----------------
     if 'metas_checkin' not in st.session_state:
         st.session_state.metas_checkin = {
-            'novo': 5,
-            'promissor': 5,
-            'leal': 5,
-            'campeao': 3,
-            'risco': 5,
-            'dormente': 5
+            'novo': 0,
+            'promissor': 0,
+            'leal': 0,
+            'campeao': 0,
+            'risco': 0,
+            'dormente': 0,
         }
-
-    # Variável para rastrear se metas foram alteradas nesta sessão
     if 'metas_alteradas' not in st.session_state:
         st.session_state.metas_alteradas = False
+    if 'ultima_verificacao' not in st.session_state:
+        st.session_state.ultima_verificacao = 0
+    if 'clientes_excluir' not in st.session_state:
+        st.session_state.clientes_excluir = set()
 
-    
     st.title("✅ Check-in de Clientes")
     st.markdown("Selecione clientes para iniciar o fluxo de atendimento")
     st.markdown("---")
-    
-    # ========== PAINEL DE PLANEJAMENTO DIÁRIO ==========
+
+    # ---------------- PAINEL DE PLANEJAMENTO ----------------
     st.subheader("📊 Planejamento de Check-ins do Dia")
-    
-    # Carregar agendamentos para contar check-ins de hoje
-    df_agendamentos_hoje = carregar_dados("AGENDAMENTOS_ATIVOS")
-    hoje = datetime.now().strftime('%d/%m/%Y')
-    
-    # Contar check-ins de hoje
-    if not df_agendamentos_hoje.empty and 'Data de contato' in df_agendamentos_hoje.columns:
-        checkins_hoje = len(df_agendamentos_hoje[df_agendamentos_hoje['Data de contato'] == hoje])
-    else:
-        checkins_hoje = 0
-    
-    # Painel de metas diárias
+
     with st.expander("🎯 Definir Metas de Check-in por Classificação", expanded=True):
         st.write("**Defina quantos clientes de cada grupo você quer contatar hoje:**")
-        
+
         col_meta1, col_meta2, col_meta3 = st.columns(3)
-        
+
         with col_meta1:
             meta_novo = st.number_input(
-                "🆕 Novo", 
-                min_value=0, 
-                max_value=50, 
-                value=st.session_state.metas_checkin['novo'],
-                step=1,
-                key='input_meta_novo',
-                help="Meta de clientes novos para contatar hoje"
+                "🆕 Novo", 0, 50, st.session_state.metas_checkin['novo'],
+                1, key='input_meta_novo', help="Meta de clientes novos"
             )
             if meta_novo != st.session_state.metas_checkin['novo']:
                 st.session_state.metas_checkin['novo'] = meta_novo
                 st.session_state.metas_alteradas = True
-            
+
             meta_promissor = st.number_input(
-                "⭐ Promissor", 
-                min_value=0, 
-                max_value=50, 
-                value=st.session_state.metas_checkin['promissor'],
-                step=1,
-                key='input_meta_promissor',
-                help="Meta de clientes promissores para contatar hoje"
+                "⭐ Promissor", 0, 50, st.session_state.metas_checkin['promissor'],
+                1, key='input_meta_promissor', help="Meta de clientes promissores"
             )
             if meta_promissor != st.session_state.metas_checkin['promissor']:
                 st.session_state.metas_checkin['promissor'] = meta_promissor
                 st.session_state.metas_alteradas = True
-        
+
         with col_meta2:
             meta_leal = st.number_input(
-                "💙 Leal", 
-                min_value=0, 
-                max_value=50, 
-                value=st.session_state.metas_checkin['leal'],
-                step=1,
-                key='input_meta_leal',
-                help="Meta de clientes leais para contatar hoje"
+                "💙 Leal", 0, 50, st.session_state.metas_checkin['leal'],
+                1, key='input_meta_leal', help="Meta de clientes leais"
             )
             if meta_leal != st.session_state.metas_checkin['leal']:
                 st.session_state.metas_checkin['leal'] = meta_leal
                 st.session_state.metas_alteradas = True
-            
+
             meta_campeao = st.number_input(
-                "🏆 Campeão", 
-                min_value=0, 
-                max_value=50, 
-                value=st.session_state.metas_checkin['campeao'],
-                step=1,
-                key='input_meta_campeao',
-                help="Meta de clientes campeões para contatar hoje"
+                "🏆 Campeão", 0, 50, st.session_state.metas_checkin['campeao'],
+                1, key='input_meta_campeao', help="Meta de clientes campeões"
             )
             if meta_campeao != st.session_state.metas_checkin['campeao']:
                 st.session_state.metas_checkin['campeao'] = meta_campeao
                 st.session_state.metas_alteradas = True
-        
+
         with col_meta3:
             meta_risco = st.number_input(
-                "⚠️ Em risco", 
-                min_value=0, 
-                max_value=50, 
-                value=st.session_state.metas_checkin['risco'],
-                step=1,
-                key='input_meta_risco',
-                help="Meta de clientes em risco para contatar hoje"
+                "⚠️ Em risco", 0, 50, st.session_state.metas_checkin['risco'],
+                1, key='input_meta_risco', help="Meta de clientes em risco"
             )
             if meta_risco != st.session_state.metas_checkin['risco']:
                 st.session_state.metas_checkin['risco'] = meta_risco
                 st.session_state.metas_alteradas = True
-            
+
             meta_dormente = st.number_input(
-                "😴 Dormente", 
-                min_value=0, 
-                max_value=50, 
-                value=st.session_state.metas_checkin['dormente'],
-                step=1,
-                key='input_meta_dormente',
-                help="Meta de clientes dormentes para contatar hoje"
+                "😴 Dormente", 0, 50, st.session_state.metas_checkin['dormente'],
+                1, key='input_meta_dormente', help="Meta de clientes dormentes"
             )
             if meta_dormente != st.session_state.metas_checkin['dormente']:
                 st.session_state.metas_checkin['dormente'] = meta_dormente
                 st.session_state.metas_alteradas = True
-        
-        # Calcular meta total
-        meta_total = meta_novo + meta_promissor + meta_leal + meta_campeao + meta_risco + meta_dormente
 
-        st.markdown("---")
+        meta_total = (
+            meta_novo + meta_promissor + meta_leal +
+            meta_campeao + meta_risco + meta_dormente
+        )
 
         col_info1, col_info2 = st.columns([2, 1])
-
         with col_info1:
             st.info(f"🎯 **Meta Total do Dia:** {meta_total} check-ins")
-
         with col_info2:
             if st.session_state.metas_alteradas:
                 st.success("✅ Metas salvas!")
-            else:
-                st.caption("💾 Metas carregadas")
-    
+                st.session_state.metas_alteradas = False
+
     st.markdown("---")
 
-    
-    # ========== BARRA DE PROGRESSO E MOTIVAÇÃO ==========
+        # ========== BARRA DE PROGRESSO (COMPLETA) ==========
     st.subheader("📈 Progresso do Dia")
-    
-    # Calcular progresso
+
+    # 1) Meta total do dia (a partir das metas salvas)
+    meta_total = (
+        st.session_state.metas_checkin['novo']
+        + st.session_state.metas_checkin['promissor']
+        + st.session_state.metas_checkin['leal']
+        + st.session_state.metas_checkin['campeao']
+        + st.session_state.metas_checkin['risco']
+        + st.session_state.metas_checkin['dormente']
+    )
+
+    # 2) Check-ins realizados hoje (AGENDAMENTOS_ATIVOS → Data de contato)
+    df_agendamentos_hoje = carregar_dados("AGENDAMENTOS_ATIVOS")
+    hoje_str = datetime.now().strftime('%d/%m/%Y')
+
+    if (
+        not df_agendamentos_hoje.empty
+        and 'Data de contato' in df_agendamentos_hoje.columns
+    ):
+        datas_contato = df_agendamentos_hoje['Data de contato'].astype(str)
+        checkins_hoje = int((datas_contato == hoje_str).sum())
+    else:
+        checkins_hoje = 0
+
+    # 3) Cálculo de progresso
     if meta_total > 0:
         progresso = min(checkins_hoje / meta_total, 1.0)
         percentual = int(progresso * 100)
     else:
-        progresso = 0
+        progresso = 0.0
         percentual = 0
-    
-    # Frases motivacionais baseadas no progresso
+
+    # 4) Texto motivacional
     frases_motivacao = {
         0: "🚀 Vamos começar! Todo grande resultado começa com o primeiro passo!",
         25: "💪 Ótimo começo! Continue assim e você vai longe!",
         50: "🔥 Você está no meio do caminho! Não pare agora!",
         75: "⭐ Incrível! Você está quase lá, finalize com chave de ouro!",
-        100: "🎉 PARABÉNS! Meta do dia alcançada! Você é CAMPEÃO! 🏆"
+        100: "🎉 PARABÉNS! Meta do dia alcançada! Você é CAMPEÃO! 🏆",
     }
-    
-    # Selecionar frase baseada no percentual
-    if percentual >= 100:
-        frase = frases_motivacao[100]
-    elif percentual >= 75:
-        frase = frases_motivacao[75]
-    elif percentual >= 50:
-        frase = frases_motivacao[50]
-    elif percentual >= 25:
-        frase = frases_motivacao[25]
-    else:
-        frase = frases_motivacao[0]
-    
-    # Exibir métricas e progresso
+    chave_frase = min((percentual // 25) * 25, 100)
+    frase = frases_motivacao.get(chave_frase, frases_motivacao[0])
+
+    # 5) UI
     col_prog1, col_prog2, col_prog3 = st.columns([1, 2, 1])
-    
+
     with col_prog1:
         st.metric(
             label="✅ Check-ins Hoje",
             value=checkins_hoje,
-            delta=f"{checkins_hoje - meta_total} da meta" if meta_total > 0 else None
+            delta=f"{checkins_hoje}/{meta_total}" if meta_total > 0 else None,
         )
-    
+
     with col_prog2:
         st.progress(progresso)
         st.markdown(f"**{percentual}% da meta alcançada**")
-        
-        # Frase motivacional
         if percentual >= 100:
             st.success(frase)
         elif percentual >= 50:
             st.info(frase)
         else:
             st.warning(frase)
-    
+
     with col_prog3:
-        st.metric(
-            label="🎯 Meta do Dia",
-            value=meta_total,
-            delta=f"Faltam {max(0, meta_total - checkins_hoje)}"
-        )
-    
-    st.markdown("---")
-    
-    # Configurações de filtros
+        faltam = max(0, meta_total - checkins_hoje)
+        st.metric("🎯 Meta do Dia", meta_total, f"Faltam {faltam}")
+
+    # ---------------- CONFIGURAÇÕES DE FILTRO ----------------
     col_config1, col_config2 = st.columns([2, 1])
-    
     with col_config1:
-        # Seletor de classificação (SEM "Total")
         classificacoes = ["Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente"]
         classificacao_selecionada = st.selectbox(
             "📂 Escolha a classificação:",
             classificacoes,
-            index=0,
-            help="Selecione o grupo de clientes que deseja visualizar"
+            index=0
         )
-    
     with col_config2:
-        # Vincular com o planejamento de metas
         metas_por_classificacao = {
-    "Novo": st.session_state.metas_checkin['novo'],
-    "Promissor": st.session_state.metas_checkin['promissor'],
-    "Leal": st.session_state.metas_checkin['leal'],
-    "Campeão": st.session_state.metas_checkin['campeao'],
-    "Em risco": st.session_state.metas_checkin['risco'],
-    "Dormente": st.session_state.metas_checkin['dormente']
-}
-        
-        # Pegar limite baseado na meta definida
-        limite_clientes = metas_por_classificacao.get(classificacao_selecionada, 10)
-        
-        # Mostrar info de quantos serão carregados
-        st.info(f"📊 **{limite_clientes}** clientes da meta do dia")
-    
-    st.markdown("---")
-    
-    # Carregar dados
-    with st.spinner(f"Carregando clientes de '{classificacao_selecionada}'..."):
-        df_clientes = carregar_dados(classificacao_selecionada)
-        df_agendamentos_ativos = carregar_dados("AGENDAMENTOS_ATIVOS")
-    
-    if df_clientes.empty:
-        st.warning(f"⚠️ Nenhum cliente encontrado na classificação '{classificacao_selecionada}'")
-        return
-    
-    # Remover clientes que já estão em agendamentos ativos
-    if not df_agendamentos_ativos.empty and 'Nome' in df_agendamentos_ativos.columns:
-        clientes_em_atendimento = df_agendamentos_ativos['Nome'].tolist()
-        df_clientes_original = df_clientes.copy()
-        df_clientes = df_clientes[~df_clientes['Nome'].isin(clientes_em_atendimento)]
-        
-        clientes_removidos = len(df_clientes_original) - len(df_clientes)
-        if clientes_removidos > 0:
-            st.warning(f"⚠️ {clientes_removidos} cliente(s) já estão em atendimento ativo e foram removidos da lista")
-    
-    # ========== NOVO: REMOVER CLIENTES QUE JÁ FIZERAM CHECK-IN HOJE ==========
-    df_log_checkins = carregar_dados("LOG_CHECKINS")
-    
-    if not df_log_checkins.empty and 'Nome_Cliente' in df_log_checkins.columns and 'Data_Checkin' in df_log_checkins.columns:
-        # Pegar data de hoje
-        timezone_brasilia = pytz.timezone('America/Sao_Paulo')
-        hoje_brasilia = datetime.now(timezone_brasilia)
-        hoje_str = hoje_brasilia.strftime('%d/%m/%Y')
-        
-        # Clientes que já tiveram check-in hoje
-        clientes_checkin_hoje = df_log_checkins[
-            df_log_checkins['Data_Checkin'] == hoje_str
-        ]['Nome_Cliente'].tolist()
-        
-        if clientes_checkin_hoje:
-            df_clientes_antes_filtro = df_clientes.copy()
-            df_clientes = df_clientes[~df_clientes['Nome'].isin(clientes_checkin_hoje)]
-            
-            checkins_removidos = len(df_clientes_antes_filtro) - len(df_clientes)
-            if checkins_removidos > 0:
-                st.success(f"✅ {checkins_removidos} cliente(s) já teve(m) check-in realizado hoje e foram removidos da lista")
+            "Novo": st.session_state.metas_checkin['novo'],
+            "Promissor": st.session_state.metas_checkin['promissor'],
+            "Leal": st.session_state.metas_checkin['leal'],
+            "Campeão": st.session_state.metas_checkin['campeao'],
+            "Em risco": st.session_state.metas_checkin['risco'],
+            "Dormente": st.session_state.metas_checkin['dormente'],
+        }
+        meta_classificacao = metas_por_classificacao.get(classificacao_selecionada, 0)
+        st.info(
+            f"📊 Meta para '{classificacao_selecionada}': "
+            f"**{meta_classificacao}** check-ins hoje"
+        )
 
-    
+    st.markdown("---")
+
+    # ---------------- VERIFICAÇÃO 1x POR MINUTO ----------------
+    # ---------------- VERIFICAÇÃO 1x POR MINUTO ----------------
+    agora_ts = time.time()
+    if agora_ts - st.session_state.ultima_verificacao > 60:
+        with st.status("🔄 Atualizando filtros...", expanded=False):
+            df_agendamentos_ativos = carregar_dados("AGENDAMENTOS_ATIVOS")
+            df_log_checkins = carregar_dados("LOG_CHECKINS")
+
+            st.session_state.clientes_excluir = set()
+
+            # 1) Clientes que já estão em atendimento (AGENDAMENTOS_ATIVOS)
+            if (
+                not df_agendamentos_ativos.empty
+                and 'Telefone' in df_agendamentos_ativos.columns
+            ):
+                tels_agenda = (
+                    df_agendamentos_ativos['Telefone']
+                    .astype(str)
+                    .str.strip()
+                    .tolist()
+                )
+                st.session_state.clientes_excluir.update(tels_agenda)
+
+            # 2) Clientes que já tiveram check-in (LOG_CHECKINS) – qualquer dia
+            if (
+                not df_log_checkins.empty
+                and 'Telefone' in df_log_checkins.columns
+            ):
+                tels_log = (
+                    df_log_checkins['Telefone']
+                    .astype(str)
+                    .str.strip()
+                    .tolist()
+                )
+                st.session_state.clientes_excluir.update(tels_log)
+
+            st.session_state.ultima_verificacao = agora_ts
+            st.toast("✅ Filtros atualizados!", icon="🔄")
+
+    # ---------------- CARREGAR CLIENTES DA CLASSIFICAÇÃO ----------------
+    df_clientes = carregar_dados(classificacao_selecionada)
     if df_clientes.empty:
-        st.info("✅ Todos os clientes desta classificação já estão em atendimento!")
+        st.warning(f"⚠️ Nenhum cliente em '{classificacao_selecionada}'")
         return
-    
-    # Aplicar limite baseado na meta definida
-    df_clientes = df_clientes.head(limite_clientes)
-    
-    # Informações compactas + Filtros em uma linha
+
+    # limitar lista de trabalho pela meta da classificação
+    if meta_classificacao > 0:
+        df_clientes = df_clientes.head(meta_classificacao)
+
+    # remover já processados (em atendimento ou já fizeram check-in)
+    if 'Telefone' in df_clientes.columns:
+        df_clientes['Telefone'] = df_clientes['Telefone'].astype(str).str.strip()
+        df_filtrado = df_clientes[
+            ~df_clientes['Telefone'].isin(st.session_state.clientes_excluir)
+        ]
+    else:
+        df_filtrado = df_clientes[
+            ~df_clientes['Nome'].isin(st.session_state.clientes_excluir)
+        ]
+
+    if len(df_filtrado) == 0:
+        st.success(f"✅ Todos os clientes de '{classificacao_selecionada}' já foram check-in!")
+        st.info("👉 Vá para '📞 Em Atendimento'")
+        return
+
+    # ---------------- FILTROS RÁPIDOS ----------------
     col_info, col_busca, col_dias = st.columns([1, 2, 2])
-    
+
     with col_info:
-        st.metric("✅ Disponíveis", len(df_clientes), help="Clientes disponíveis para check-in")
-    
+        st.metric("✅ Disponíveis", len(df_filtrado))
+
     with col_busca:
         busca_nome = st.text_input(
-            "🔍 Buscar cliente:",
-            "",
-            placeholder="Digite o nome...",
+            "🔍 Buscar:",
+            placeholder="Nome...",
             label_visibility="collapsed"
         )
-    
+
     with col_dias:
-        if 'Dias desde a compra' in df_clientes.columns:
-            dias_min = 0
-            dias_max = int(df_clientes['Dias desde a compra'].max()) if df_clientes['Dias desde a compra'].max() > 0 else 365
+        if 'Dias desde a compra' in df_filtrado.columns:
+            max_bruto = pd.to_numeric(
+                df_filtrado['Dias desde a compra'],
+                errors='coerce'
+            ).max()
+            if pd.isna(max_bruto):
+                max_bruto = 0
+
+            if classificacao_selecionada in ["Em risco", "Dormente"]:
+                dias_min = 0
+                dias_max = max(730, int(max_bruto))
+            else:
+                dias_min = 0
+                dias_max = int(max_bruto)
+                if dias_max <= 0:
+                    dias_max = 365
+
             filtro_dias = st.slider(
-                "📅 Dias desde última compra:",
+                "📅 Dias:",
                 dias_min,
                 dias_max,
                 (dias_min, dias_max),
@@ -1005,240 +970,122 @@ def render_checkin():
             )
         else:
             filtro_dias = None
-    
-    # Aplicar filtros
-    df_filtrado = df_clientes.copy()
+
     if busca_nome and 'Nome' in df_filtrado.columns:
-        df_filtrado = df_filtrado[df_filtrado['Nome'].str.contains(busca_nome, case=False, na=False)]
-    if filtro_dias and 'Dias desde a compra' in df_filtrado.columns:
-        df_filtrado = df_filtrado[(df_filtrado['Dias desde a compra'] >= filtro_dias[0]) & (df_filtrado['Dias desde a compra'] <= filtro_dias[1])]
-    
+        df_filtrado = df_filtrado[
+            df_filtrado['Nome'].str.contains(busca_nome, case=False, na=False)
+        ]
+
+    if (
+        filtro_dias
+        and 'Dias desde a compra' in df_filtrado.columns
+        and classificacao_selecionada not in ["Em risco", "Dormente"]
+    ):
+        dias_num = pd.to_numeric(
+            df_filtrado['Dias desde a compra'],
+            errors='coerce'
+        )
+        df_filtrado = df_filtrado[
+            (dias_num >= filtro_dias[0]) &
+            (dias_num <= filtro_dias[1])
+        ]
+
     st.markdown("---")
     st.subheader(f"📋 Clientes para Check-in ({len(df_filtrado)})")
-    
-    if df_filtrado.empty:
-        st.info("Nenhum cliente encontrado com os filtros aplicados")
-        return
-    
-    # Cards de clientes - Estilo otimizado com expander
+
+    # ---------------- CARDS DE CLIENTES ----------------
     for index, cliente in df_filtrado.iterrows():
-        
-        # Título do card com informações principais
-        nome_cliente = cliente.get('Nome', 'Nome não disponível')
-        valor_cliente = cliente.get('Valor', 0)
-        
-        # Formatação do valor
-        if pd.notna(valor_cliente) and valor_cliente != '':
-            try:
-                valor_formatado = f"R$ {float(valor_cliente):,.2f}"
-            except:
-                valor_formatado = "R$ 0,00"
-        else:
+        nome_cliente = cliente.get('Nome', 'N/D')
+        try:
+            valor_formatado = f"R$ {float(cliente.get('Valor', 0)):.2f}"
+        except Exception:
             valor_formatado = "R$ 0,00"
-        
-        # Card expansível com tema azul
-        with st.expander(
-            f"👤 {nome_cliente} | 💰 {valor_formatado} | 🏷️ {classificacao_selecionada}",
-            expanded=False
-        ):
-            # Dividir em 2 colunas
+
+        with st.expander(f"👤 {nome_cliente} | 💰 {valor_formatado}", expanded=False):
             col_info_card, col_form = st.columns([1, 1])
-            
-            # ========== COLUNA ESQUERDA: INFORMAÇÕES DO CLIENTE ==========
+
             with col_info_card:
                 st.markdown("### 📊 Informações do Cliente")
-                
-                # Dados principais
-                st.write(f"**👤 Nome Completo:** {nome_cliente}")
-                st.write(f"**📧 E-mail:** {cliente.get('Email', 'N/D')}")
-                st.write(f"**📱 Telefone:** {cliente.get('Telefone', 'N/D')}")
-                st.write(f"**🏷️ Classificação:** {classificacao_selecionada}")
-                
-                st.markdown("---")
-                
-                # Métricas em mini cards
-                st.markdown("### 📈 Histórico de Compras")
-                
-                met1, met2, met3 = st.columns(3)
-                
-                with met1:
-                    st.metric(
-                        label="💰 Gasto Total",
-                        value=valor_formatado,
-                        help="Valor total gasto pelo cliente"
-                    )
-                
-                with met2:
-                    if 'Compras' in df_filtrado.columns:
-                        compras = cliente.get('Compras', 0)
-                        if pd.notna(compras) and compras != '':
-                            try:
-                                st.metric("🛒 Compras", int(float(compras)))
-                            except:
-                                st.metric("🛒 Compras", "0")
-                        else:
-                            st.metric("🛒 Compras", "0")
-                    else:
-                        st.metric("🛒 Compras", "N/D")
-                
-                with met3:
-                    if 'Dias desde a compra' in df_filtrado.columns:
-                        dias = cliente.get('Dias desde a compra', 0)
-                        if pd.notna(dias) and dias != '':
-                            try:
-                                dias_int = int(round(float(dias)))
-                                st.metric("📅 Dias", dias_int, help="Dias desde a última compra")
-                            except:
-                                st.metric("📅 Dias", "0")
-                        else:
-                            st.metric("📅 Dias", "0")
-                    else:
-                        st.metric("📅 Dias", "N/D")
-                                        # ========== BOTÃO DE CHECK-IN RÁPIDO SEM RESPOSTA ==========
-                st.markdown("### 📞 Status de Contato")
-                
-                col_btn_checkin = st.columns(1)
-                
-                if st.button(
-                    "❌ Cliente Não Respondeu (Check-in Rápido)", 
-                    key=f"nao_resp_{index}",
-                    use_container_width=True,
-                    type="secondary",
-                    help="Registra tentativa de contato sem resposta"
-                ):
-                    st.write("🔍 DEBUG: Botão foi clicado!")
-                    st.write(f"🔍 DEBUG: Nome do cliente: {cliente.get('Nome', 'N/D')}")
-                    st.write(f"🔍 DEBUG: Classificação: {classificacao_selecionada}")
-                    
-                    with st.spinner('Registrando tentativa sem resposta...'):
-                        try:
-                            st.write("🔍 DEBUG: Entrando no TRY...")
-                            
-                            id_checkin = registrar_log_checkin(
-                                dados_cliente=cliente,
-                                classificacao=classificacao_selecionada,
-                                respondeu="NÃO RESPONDEU",
-                                relato_resumo="Cliente não respondeu ao contato",
-                                criado_por="CRM"
-                            )
-                            
-                            st.write(f"🔍 DEBUG: ID gerado: {id_checkin}")
-                            
-                            if id_checkin:
-                                carregar_dados.clear()
-                                st.success(f"✅ Tentativa {id_checkin} registrada!")
-                                st.warning(f"⏳ Cliente não respondeu ao contato")
-                                st.info("💡 Este cliente permanece disponível para nova tentativa")
-                                time.sleep(3)
-                                st.rerun()
-                            else:
-                                st.error("❌ Erro: ID não foi gerado")
-                            
-                        except Exception as e:
-                            st.error(f"❌ ERRO CAPTURADO: {e}")
-                            import traceback
-                            st.code(traceback.format_exc())
-                
-                st.caption("💡 Use este botão para registrar rapidamente tentativas sem resposta")
+                st.write(f"**📱** {cliente.get('Telefone', 'N/D')}")
+                st.write(f"**📧** {cliente.get('Email', 'N/D')}")
+                st.write(f"**🏷️** {classificacao_selecionada}")
 
-            
-            # ========== COLUNA DIREITA: FORMULÁRIO DE CHECK-IN ==========
             with col_form:
-                st.markdown("### ✏️ Registrar Check-in")
-                
-                # Formulário de check-in
-                with st.form(key=f"form_checkin_{index}"):
-                    
-                    st.info("💡 Preencha as informações do primeiro contato com o cliente")
-                    
-                    # Campo: Primeira conversa
-                    primeira_conversa = st.text_area(
-                        "📝 Como foi a primeira conversa?",
-                        height=120,
-                        help="Registre os principais pontos da conversa inicial",
-                        placeholder="Ex: Cliente demonstrou interesse em produtos premium. Mencionou necessidade de entrega rápida..."
+                if st.button(
+                    "❌ Não Respondeu",
+                    key=f"nao_{index}",
+                    type="secondary",
+                    use_container_width=True
+                ):
+                    id_checkin = registrar_log_checkin(
+                        cliente,
+                        classificacao_selecionada,
+                        "NÃO RESPONDEU",
+                        "Cliente não respondeu",
+                        "CRM"
                     )
-                    
-                    # Campo: Motivo do próximo contato
-                    proximo_contato = st.text_input(
-                        "🎯 Qual o motivo do próximo contato?",
-                        help="Defina o objetivo do próximo follow-up",
-                        placeholder="Ex: Enviar catálogo de produtos, Confirmar orçamento..."
-                    )
-                    
-                    # Campo: Data do próximo contato
-                    data_proximo = st.date_input(
-                        "📅 Data do próximo contato:",
-                        value=None,
-                        help="Quando será o próximo follow-up?"
-                    )
-                    
-                    # Campo: Observações adicionais
-                    observacoes = st.text_area(
-                        "💬 Observações adicionais:",
-                        height=80,
-                        placeholder="Informações extras relevantes sobre o cliente..."
-                    )
-                    
-                    st.markdown("---")
-                    
-                    # Botão de check-in
-                    btn_checkin = st.form_submit_button(
-                        "✅ Realizar Check-in",
+                    st.session_state.clientes_excluir.add(nome_cliente)
+                    st.success(f"✅ {id_checkin} registrado!")
+                    st.toast("Card removido ➡️", icon="✅")
+                    st.rerun()
+
+                with st.form(key=f"checkin_{index}"):
+                    conversa = st.text_area("📝 Conversa:", height=100)
+                    proximo = st.text_input("🎯 Próximo:")
+                    data_prox = st.date_input("📅 Data:")
+
+                    if st.form_submit_button(
+                        "✅ Check-in",
                         type="primary",
                         use_container_width=True
-                    )
-                    
-                    # Ação do botão
-                    if btn_checkin:
-                        # Validação
-                        if not primeira_conversa:
-                            st.error("❌ Preencha como foi a primeira conversa antes de continuar!")
-                        elif not proximo_contato:
-                            st.error("❌ Defina o motivo do próximo contato!")
+                    ):
+                        if conversa and proximo:
+                            with st.status("💾 Salvando...", expanded=False):
+                                conn = get_gsheets_connection()
+                                df_agend = conn.read(
+                                    worksheet="AGENDAMENTOS_ATIVOS",
+                                    ttl=0
+                                )
+                                nova_linha = {
+                                    'Data de contato': datetime.now().strftime('%d/%m/%Y'),
+                                    'Nome': nome_cliente,
+                                    'Classificação': classificacao_selecionada,
+                                    'Valor': cliente.get('Valor', ''),
+                                    'Telefone': cliente.get('Telefone', ''),
+                                    'Relato da conversa': conversa,
+                                    'Follow up': proximo,
+                                    'Data de chamada': data_prox.strftime('%d/%m/%Y') if data_prox else '',
+                                    'Observação': 'Check-in via CRM'
+                                }
+                                df_novo = pd.concat(
+                                    [df_agend, pd.DataFrame([nova_linha])],
+                                    ignore_index=True
+                                )
+                                conn.update(
+                                    worksheet="AGENDAMENTOS_ATIVOS",
+                                    data=df_novo
+                                )
+
+                                id_checkin = registrar_log_checkin(
+                                    cliente,
+                                    classificacao_selecionada,
+                                    "SIM",
+                                    conversa[:200],
+                                    "CRM"
+                                )
+
+                                st.session_state.clientes_excluir.add(nome_cliente)
+                                st.success(
+                                    f"✅ Check-in #{id_checkin} ➡️ AGENDAMENTOS_ATIVOS"
+                                )
+                                st.toast(
+                                    "Cliente em '📞 Em Atendimento' ➡️",
+                                    icon="✅"
+                                )
+                                st.rerun()
                         else:
-                            with st.spinner('Processando check-in...'):
-                                # Preparar dados para agendamento
-                                try:
-                                    conn = get_gsheets_connection()
-                                    df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
-                                    
-                                    nova_linha = {
-                                        'Data de contato': datetime.now().strftime('%d/%m/%Y'),
-                                        'Nome': cliente.get('Nome', ''),
-                                        'Classificação': classificacao_selecionada,
-                                        'Valor': cliente.get('Valor', ''),
-                                        'Telefone': cliente.get('Telefone', ''),
-                                        'Relato da conversa': primeira_conversa,
-                                        'Follow up': proximo_contato,
-                                        'Data de chamada': data_proximo.strftime('%d/%m/%Y') if data_proximo else '',
-                                        'Observação': observacoes if observacoes else 'Check-in realizado via CRM'
-                                    }
-                                    
-                                    df_nova_linha = pd.DataFrame([nova_linha])
-                                    df_atualizado = pd.concat([df_agendamentos, df_nova_linha], ignore_index=True)
-                                    conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_atualizado)
-                                    
-                                    # REGISTRAR NO LOG
-                                    id_checkin = registrar_log_checkin(
-                                        dados_cliente=cliente,
-                                        classificacao=classificacao_selecionada,
-                                        respondeu="NÃO RESPONDEU",
-                                        relato_resumo=primeira_conversa,
-                                        criado_por="CRM"
-                                    )
-                                    
-                                    carregar_dados.clear()
-                                    st.success(f"✅ Check-in #{id_checkin} realizado com sucesso para **{nome_cliente}**!")
-                                    st.balloons()
-                                    time.sleep(2)
-                                    st.rerun()
-                                    
-                                except Exception as e:
-                                    st.error(f"❌ Erro ao realizar check-in: {e}")
-        
-        # Separador entre cards
-        st.markdown("---")
+                            st.error("❌ Preencha conversa + próximo contato!")
+
 
 # ============================================================================
 # RENDER - PÁGINA EM ATENDIMENTO
@@ -1332,30 +1179,34 @@ def render_em_atendimento():
         st.metric("⏳ Pendentes", pendentes_hoje, help="Atendimentos que faltam finalizar hoje")
     
     with col_m3:
-        st.metric("🔥 Vencidos", total_vencidos, 
-                  delta=f"-{total_vencidos}" if total_vencidos > 0 else "0",
-                  delta_color="inverse", 
-                  help="Atendimentos de dias anteriores não concluídos")
-    
+        st.metric(
+            "🔥 Vencidos",
+            total_vencidos,
+            delta=f"-{total_vencidos}" if total_vencidos > 0 else "0",
+            delta_color="inverse",
+            help="Atendimentos de dias anteriores não concluídos"
+        )
+
     # Alerta de vencidos
     if total_vencidos > 0:
-        st.error(f"⚠️ **ATENÇÃO:** Você tem {total_vencidos} atendimento(s) vencido(s) de dias anteriores! Priorize-os.")
-    
+        st.error(
+            f"⚠️ **ATENÇÃO:** Você tem {total_vencidos} atendimento(s) vencido(s) de dias anteriores! Priorize-os."
+        )
+
     st.markdown("---")
-    
+
     # ========== FILTROS ==========
     st.subheader("🔍 Filtros")
-    
+
     col_f1, col_f2, col_f3 = st.columns(3)
-    
+
     with col_f1:
-        # Escolher se quer ver hoje ou vencidos
         visualizar = st.selectbox(
             "Visualizar:",
             ["Hoje", "Vencidos", "Todos"],
             help="Escolha qual grupo de atendimentos deseja ver"
         )
-    
+
     with col_f2:
         busca = st.text_input(
             "Buscar cliente:",
@@ -1363,7 +1214,7 @@ def render_em_atendimento():
             placeholder="Digite o nome...",
             key="busca_atend"
         )
-    
+
     with col_f3:
         # Selecionar dataset baseado na visualização
         if visualizar == "Hoje":
@@ -1372,25 +1223,40 @@ def render_em_atendimento():
             df_trabalho = df_vencidos.copy()
         else:  # Todos
             df_trabalho = pd.concat([df_hoje, df_vencidos]).drop_duplicates()
-        
+
         if 'Classificação' in df_trabalho.columns and not df_trabalho.empty:
             class_opts = ['Todos'] + sorted(list(df_trabalho['Classificação'].dropna().unique()))
             filtro_class = st.selectbox("Classificação:", class_opts)
         else:
             filtro_class = 'Todos'
-    
-    # Aplicar filtros
+
+    # Aplicar filtros (fora do with col_f3)
     df_filt = df_trabalho.copy()
-    
+
     if busca and 'Nome' in df_filt.columns:
         df_filt = df_filt[df_filt['Nome'].str.contains(busca, case=False, na=False)]
-    
+
     if filtro_class != 'Todos' and 'Classificação' in df_filt.columns:
         df_filt = df_filt[df_filt['Classificação'] == filtro_class]
-    
+
+
     st.markdown("---")
-    
-    # ========== LISTA DE AGENDAMENTOS ==========
+
+
+
+    # ====== AGRUPAR POR CLIENTE (1 CARD POR PESSOA) ======
+    if not df_filt.empty:
+        # se existir coluna de data, ordenar para pegar a última atualização
+        if 'Data de atualização' in df_filt.columns:
+            df_filt = df_filt.sort_values('Data de atualização')
+        # agrupar por telefone (mais seguro)
+        if 'Telefone' in df_filt.columns:
+            df_filt = df_filt.drop_duplicates(subset=['Telefone'], keep='last')
+        # fallback: se por acaso não tiver telefone, agrupa por nome
+        elif 'Nome' in df_filt.columns:
+            df_filt = df_filt.drop_duplicates(subset=['Nome'], keep='last')
+
+       # ========== LISTA DE AGENDAMENTOS ==========
     st.subheader(f"📋 Atendamentos ({len(df_filt)})")
     
     if df_filt.empty:
@@ -1411,41 +1277,30 @@ def render_em_atendimento():
         
         if data_chamada_str and data_chamada_str != '':
             try:
-                # Tentar múltiplos formatos de data
                 data_chamada_dt = None
-                
-                # Formato brasileiro DD/MM/YYYY
                 try:
                     data_chamada_dt = datetime.strptime(data_chamada_str, '%d/%m/%Y')
                 except:
                     pass
-                
-                # Formato ISO YYYY/MM/DD
                 if not data_chamada_dt:
                     try:
                         data_chamada_dt = datetime.strptime(data_chamada_str, '%Y/%m/%d')
                     except:
                         pass
-                
-                # Formato ISO com hífen YYYY-MM-DD
                 if not data_chamada_dt:
                     try:
                         data_chamada_dt = datetime.strptime(data_chamada_str, '%Y-%m-%d')
                     except:
                         pass
                 
-                # Verificar se está vencido
                 if data_chamada_dt and data_chamada_dt.date() < hoje_dt.date():
                     esta_vencido = True
             except:
                 pass
         
-        # Badge de status
         nome_cliente = agend.get('Nome', 'N/D')
         classificacao = agend.get('Classificação', 'N/D')
         status_badge = "🔥 VENCIDO" if esta_vencido else "📅 HOJE"
-        
-        # Título do expander com status visual
         titulo_card = f"{status_badge} | 👤 {nome_cliente} | 🏷️ {classificacao}"
         
         with st.expander(titulo_card, expanded=False):
@@ -1455,12 +1310,10 @@ def render_em_atendimento():
             with col_esq:
                 st.markdown("### 📊 Dados do Cliente")
                 
-                # Informações básicas
                 st.write(f"**👤 Nome:** {nome_cliente}")
                 st.write(f"**📱 Telefone:** {agend.get('Telefone', 'N/D')}")
                 st.write(f"**🏷️ Classificação:** {classificacao}")
                 
-                # Valor com formatação
                 val = agend.get('Valor', 0)
                 if pd.notna(val) and val != '':
                     try:
@@ -1472,7 +1325,6 @@ def render_em_atendimento():
                 
                 st.markdown("---")
                 
-                # Histórico do último atendimento
                 st.markdown("### 📝 Último Atendimento")
                 
                 data_contato = agend.get('Data de contato', 'N/D')
@@ -1505,10 +1357,8 @@ def render_em_atendimento():
                 st.markdown("### ✏️ Registrar Novo Atendimento")
                 
                 with st.form(key=f"form_atend_{idx}"):
-                    
                     st.info("💡 Preencha como foi a conversa de hoje e agende o próximo contato")
                     
-                    # Campos do formulário
                     novo_relato = st.text_area(
                         "📝 Como foi a conversa de hoje?",
                         height=120,
@@ -1536,16 +1386,13 @@ def render_em_atendimento():
                     
                     st.markdown("---")
                     
-                    # Botão único: Realizar Novo Agendamento
                     btn_novo_agendamento = st.form_submit_button(
                         "✅ Realizar Novo Agendamento",
                         type="primary",
                         use_container_width=True
                     )
                     
-                    # ========== AÇÃO DO BOTÃO ==========
                     if btn_novo_agendamento:
-                        # Validação
                         if not novo_relato:
                             st.error("❌ Preencha como foi a conversa de hoje!")
                         elif not novo_follow:
@@ -1557,18 +1404,16 @@ def render_em_atendimento():
                                 try:
                                     conn = get_gsheets_connection()
                                     
-                                    # 1. Mover agendamento atual para HISTORICO
                                     df_historico = conn.read(worksheet="HISTORICO", ttl=0)
-                                    
-                                    # Preparar linha para histórico com data de conclusão
                                     linha_historico = agend.to_dict()
                                     linha_historico['Data de conclusão'] = datetime.now().strftime('%d/%m/%Y %H:%M')
                                     
-                                    # Adicionar ao histórico
-                                    df_historico_novo = pd.concat([df_historico, pd.DataFrame([linha_historico])], ignore_index=True)
+                                    df_historico_novo = pd.concat(
+                                        [df_historico, pd.DataFrame([linha_historico])],
+                                        ignore_index=True
+                                    )
                                     conn.update(worksheet="HISTORICO", data=df_historico_novo)
                                     
-                                    # 2. Criar NOVO agendamento em AGENDAMENTOS_ATIVOS
                                     df_agendamentos_atual = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
                                     
                                     novo_agendamento = {
@@ -1583,25 +1428,24 @@ def render_em_atendimento():
                                         'Observação': nova_obs
                                     }
                                     
-                                    # 3. Remover o agendamento antigo
                                     df_agendamentos_atualizado = df_agendamentos_atual.drop(idx).reset_index(drop=True)
+                                    df_agendamentos_final = pd.concat(
+                                        [df_agendamentos_atualizado, pd.DataFrame([novo_agendamento])],
+                                        ignore_index=True
+                                    )
                                     
-                                    # 4. Adicionar o novo agendamento
-                                    df_agendamentos_final = pd.concat([df_agendamentos_atualizado, pd.DataFrame([novo_agendamento])], ignore_index=True)
-                                    
-                                    # 5. Salvar em AGENDAMENTOS_ATIVOS
                                     conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_agendamentos_final)
                                     
-                                    # Limpar cache e recarregar
                                     carregar_dados.clear()
                                     st.toast("✅ Agendamento atualizado!", icon="✅")
                                     time.sleep(0.5)
                                     st.rerun()
-                                    
+                                
                                 except Exception as e:
                                     st.error(f"❌ Erro ao processar agendamento: {e}")
         
         st.markdown("---")
+
 
 
 # ============================================================================
@@ -1615,7 +1459,11 @@ def render_suporte():
     st.markdown("Gerencie tickets de suporte com acompanhamento personalizado")
     st.markdown("---")
     
-    # Carregar dados
+    # Inicializar session_state para controle de operações
+    if 'operacao_suporte_concluida' not in st.session_state:
+        st.session_state.operacao_suporte_concluida = False
+    
+    # Carregar dados uma única vez
     with st.spinner("Carregando tickets de suporte..."):
         df_suporte = carregar_dados("SUPORTE")
     
@@ -1693,6 +1541,8 @@ def render_suporte():
     df_filt = df_trabalho.copy()
     if busca and 'Nome' in df_filt.columns:
         df_filt = df_filt[df_filt['Nome'].str.contains(busca, case=False, na=False)]
+    filtro_prioridade = 'Todas'
+
     if filtro_prioridade != 'Todas' and 'Prioridade' in df_filt.columns:
         df_filt = df_filt[df_filt['Prioridade'] == filtro_prioridade]
     
@@ -1716,6 +1566,7 @@ def render_suporte():
     # Cards de tickets
     for idx, ticket in df_filt.iterrows():
         nome_cliente = ticket.get('Nome', 'N/D')
+        telefone_cliente = ticket.get('Telefone', '')
         prioridade = ticket.get('Prioridade', 'Média')
         progresso = ticket.get('Progresso', 0)
         
@@ -1735,7 +1586,7 @@ def render_suporte():
             with col_esq:
                 st.markdown("### 📋 Dados do Ticket")
                 st.write(f"**👤 Nome:** {nome_cliente}")
-                st.write(f"**📱 Telefone:** {ticket.get('Telefone', 'N/D')}")
+                st.write(f"**📱 Telefone:** {telefone_cliente}")
                 st.write(f"**🏷️ Classificação:** {ticket.get('Classificação', 'N/D')}")
                 st.write(f"**{icone} Prioridade:** {prioridade}")
                 st.markdown("---")
@@ -1789,9 +1640,8 @@ def render_suporte():
                 except Exception:
                     df_suporte_full = df_suporte.copy()
                 
-                tel_atual = ticket.get('Telefone', '')
-                if 'Telefone' in df_suporte_full.columns and tel_atual != '':
-                    df_cli = df_suporte_full[df_suporte_full['Telefone'] == tel_atual].copy()
+                if 'Telefone' in df_suporte_full.columns and telefone_cliente != '':
+                    df_cli = df_suporte_full[df_suporte_full['Telefone'] == telefone_cliente].copy()
                 else:
                     df_cli = pd.DataFrame()
                 
@@ -1827,27 +1677,32 @@ def render_suporte():
             with col_dir:
                 st.markdown("### ✏️ Registrar Acompanhamento")
                 
-                with st.form(key=f"form_suporte_{idx}"):
+                form_key = f"form_suporte_{telefone_cliente}_{idx}"
+                
+                with st.form(key=form_key):
                     st.info("💡 Registre o acompanhamento e atualize o status do ticket")
                     
                     novo_acompanhamento = st.text_area(
                         "📝 Como foi o contato de hoje?",
                         height=120,
                         placeholder="Descreva o que foi conversado e as ações tomadas...",
-                        help="Registre o acompanhamento realizado"
+                        help="Registre o acompanhamento realizado",
+                        key=f"acomp_{form_key}"
                     )
                     
                     nova_data_contato = st.date_input(
                         "📅 Próximo Contato:",
                         value=None,
-                        help="Quando será o próximo acompanhamento?"
+                        help="Quando será o próximo acompanhamento?",
+                        key=f"data_{form_key}"
                     )
                     
                     novo_progresso = st.selectbox(
                         "📊 Atualizar Progresso:",
                         [0, 25, 50, 75, 100],
                         index=[0, 25, 50, 75, 100].index(progresso) if progresso in [0, 25, 50, 75, 100] else 0,
-                        help="Atualize o percentual de conclusão do ticket"
+                        help="Atualize o percentual de conclusão do ticket",
+                        key=f"prog_{form_key}"
                     )
                     
                     st.caption("""
@@ -1862,7 +1717,8 @@ def render_suporte():
                     novas_obs = st.text_area(
                         "💬 Observações Adicionais:",
                         height=60,
-                        placeholder="Informações extras relevantes..."
+                        placeholder="Informações extras relevantes...",
+                        key=f"obs_{form_key}"
                     )
                     
                     st.markdown("---")
@@ -1879,7 +1735,7 @@ def render_suporte():
                             "🎉 Finalizar Suporte",
                             type="secondary",
                             use_container_width=True,
-                            help="Move para Agendamentos Ativos"
+                            help="Move para LOG_RESOLVIDOS + AGENDAMENTOS_ATIVOS + HISTORICO"
                         )
                     
                     # ========== ATUALIZAR: CRIA NOVA LINHA ==========
@@ -1897,11 +1753,11 @@ def render_suporte():
                                     novo_registro = ticket.to_dict().copy()
                                     novo_registro.update({
                                         'Nome': nome_cliente,
-                                        'Telefone': ticket.get('Telefone', ''),
+                                        'Telefone': telefone_cliente,
                                         'Assunto': ticket.get('Assunto', 'N/D'),
                                         'Prioridade': ticket.get('Prioridade', 'Média'),
                                         'Status': f'Aberto - Acompanhamento #{len(df_suporte_atual)+1}',
-                                        'Descrição': ticket.get('Descrição', ''),
+                                        'Descrição': ticket.get('Descrição do problema', ''),
                                         'Último contato': novo_acompanhamento,
                                         'Próximo contato': nova_data_contato.strftime('%d/%m/%Y'),
                                         'Progresso': novo_progresso,
@@ -1914,63 +1770,92 @@ def render_suporte():
                                     conn.update(worksheet="SUPORTE", data=df_novo)
                                     
                                     carregar_dados.clear()
+                                    st.session_state.operacao_suporte_concluida = True
                                     st.success(f"✅ Novo acompanhamento criado! Progresso: {novo_progresso}%")
-                                    time.sleep(1)
                                     st.rerun()
                                 
                                 except Exception as e:
-                                    st.error(f"❌ Erro ao criar acompanhamento: {e}")
+                                    st.error(f"❌ Erro ao criar acompanhamento: {str(e)}")
                     
-                    # ========== FINALIZAR SUPORTE ==========
+                    # ========== FINALIZAR SUPORTE - FLUXO COMPLETO ==========
                     if btn_finalizar:
                         if novo_progresso < 100:
                             st.warning("⚠️ Recomendamos marcar o progresso como 100% antes de finalizar")
-                        
-                        with st.spinner("Finalizando suporte..."):
-                            try:
-                                conn = get_gsheets_connection()
+                        else:
+                            with st.spinner("Finalizando suporte e movendo histórico completo..."):
+                                try:
+                                    conn = get_gsheets_connection()
+                                    
+                                    # 1. CRIAR LOG TICKET RESOLVIDO
+                                    registrar_ticket_resolvido(
+                                        dados_cliente={
+                                            'Nome': nome_cliente,
+                                            'Telefone': telefone_cliente,
+                                            'Classificação': ticket.get('Classificação', 'N/D')
+                                        },
+                                        tipo_problema=ticket.get('Assunto', 'N/D'),
+                                        data_abertura=ticket.get('Data de abertura', 'N/D'),
+                                        data_resolucao=datetime.now().strftime('%d/%m/%Y %H:%M'),
+                                        solucao=novo_acompanhamento if novo_acompanhamento else 'Suporte finalizado sem relato adicional',
+                                        resolvido_por="CRM - Suporte"
+                                    )
+                                    
+                                    # 2. CRIAR AGENDAMENTO ATIVO
+                                    df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
+                                    novo_agendamento = {
+                                        'Data de contato': datetime.now().strftime('%d/%m/%Y'),
+                                        'Nome': nome_cliente,
+                                        'Classificação': ticket.get('Classificação', ''),
+                                        'Valor': '',
+                                        'Telefone': telefone_cliente,
+                                        'Relato da conversa': f"[SUPORTE CONCLUÍDO] {novo_acompanhamento if novo_acompanhamento else 'Ticket finalizado'}",
+                                        'Follow up': 'Acompanhamento pós-suporte',
+                                        'Data de chamada': nova_data_contato.strftime('%d/%m/%Y') if nova_data_contato else '',
+                                        'Observação': f"Cliente retornando do suporte. Problema: {ticket.get('Descrição do problema', 'N/D')}"
+                                    }
+                                    
+                                    df_agendamentos_novo = pd.concat([df_agendamentos, pd.DataFrame([novo_agendamento])], ignore_index=True)
+                                    conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_agendamentos_novo)
+                                    
+                                    # 3. MOVER TODAS LINHAS DO CLIENTE PARA HISTORICO
+                                    df_suporte_full = conn.read(worksheet="SUPORTE", ttl=0)
+                                    
+                                    if telefone_cliente and 'Telefone' in df_suporte_full.columns:
+                                        # Pegar TODAS as linhas desse telefone
+                                        df_cliente_completo = df_suporte_full[df_suporte_full['Telefone'] == telefone_cliente].copy()
+                                        
+                                        # Carregar HISTORICO atual
+                                        df_historico = conn.read(worksheet="HISTORICO", ttl=0)
+                                        
+                                        # Adicionar prefixo para identificar origem do suporte
+                                        df_cliente_completo['Origem'] = 'SUPORTE - Histórico Completo'
+                                        df_cliente_completo['Data de migração'] = datetime.now().strftime('%d/%m/%Y %H:%M')
+                                        
+                                        # Concatenar com HISTORICO
+                                        df_historico_novo = pd.concat([df_historico, df_cliente_completo], ignore_index=True)
+                                        conn.update(worksheet="HISTORICO", data=df_historico_novo)
+                                        
+                                        # REMOVER APENAS as linhas desse cliente da aba SUPORTE
+                                        df_suporte_limpo = df_suporte_full[df_suporte_full['Telefone'] != telefone_cliente].reset_index(drop=True)
+                                        conn.update(worksheet="SUPORTE", data=df_suporte_limpo)
+                                        
+                                        qtd_linhas_movidas = len(df_cliente_completo)
+                                    else:
+                                        qtd_linhas_movidas = 0
+                                    
+                                    carregar_dados.clear()
+                                    st.session_state.operacao_suporte_concluida = True
+                                    st.success(f"🎉 **Suporte finalizado com sucesso!**\n\n"
+                                              f"✅ **{nome_cliente}** movido para:\n"
+                                              f"• 📚 **LOG_TICKETS_RESOLVIDOS**\n"
+                                              f"• 📅 **AGENDAMENTOS_ATIVOS**\n"
+                                              f"• 📖 **HISTORICO** ({qtd_linhas_movidas} linhas preservadas)")
+                                    st.balloons()
+                                    time.sleep(2)
+                                    st.rerun()
                                 
-                                registrar_ticket_resolvido(
-                                    dados_cliente={
-                                        'Nome': ticket.get('Nome', ''),
-                                        'Telefone': ticket.get('Telefone', ''),
-                                        'Classificação': ticket.get('Classificação', 'N/D')
-                                    },
-                                    tipo_problema=ticket.get('Assunto', 'N/D'),
-                                    data_abertura=ticket.get('Data de abertura', 'N/D'),
-                                    data_resolucao=datetime.now().strftime('%d/%m/%Y %H:%M'),
-                                    solucao=novo_acompanhamento if novo_acompanhamento else 'Suporte finalizado sem relato adicional',
-                                    resolvido_por="CRM - Suporte"
-                                )
-                                
-                                df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
-                                novo_agendamento = {
-                                    'Data de contato': datetime.now().strftime('%d/%m/%Y'),
-                                    'Nome': ticket.get('Nome', ''),
-                                    'Classificação': ticket.get('Classificação', ''),
-                                    'Valor': '',
-                                    'Telefone': ticket.get('Telefone', ''),
-                                    'Relato da conversa': f"[SUPORTE CONCLUÍDO] {novo_acompanhamento if novo_acompanhamento else 'Ticket finalizado'}",
-                                    'Follow up': 'Acompanhamento pós-suporte',
-                                    'Data de chamada': nova_data_contato.strftime('%d/%m/%Y') if nova_data_contato else '',
-                                    'Observação': f"Cliente retornando do suporte. Problema: {ticket.get('Descrição do problema', 'N/D')}"
-                                }
-                                
-                                df_agendamentos_novo = pd.concat([df_agendamentos, pd.DataFrame([novo_agendamento])], ignore_index=True)
-                                conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_agendamentos_novo)
-                                
-                                df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
-                                df_suporte_novo = df_suporte_atual.drop(idx).reset_index(drop=True)
-                                conn.update(worksheet="SUPORTE", data=df_suporte_novo)
-                                
-                                carregar_dados.clear()
-                                st.success(f"🎉 Suporte finalizado! Cliente {nome_cliente} movido para Agendamentos Ativos")
-                                st.balloons()
-                                time.sleep(2)
-                                st.rerun()
-                            
-                            except Exception as e:
-                                st.error(f"❌ Erro ao finalizar: {e}")
+                                except Exception as e:
+                                    st.error(f"❌ Erro ao finalizar suporte: {str(e)}")
         
         st.markdown("---")
 
