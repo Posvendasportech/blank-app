@@ -1081,10 +1081,6 @@ def render_em_atendimento():
 # RENDER - PÁGINA SUPORTE (VERSÃO COMPLETA COM BUSCA E LOGS)
 # ============================================================================
 
-# ============================================================================
-# RENDER - PÁGINA SUPORTE (VERSÃO COMPLETA CORRIGIDA)
-# ============================================================================
-
 def render_suporte():
     """Renderiza a página de Suporte - Gestão de Tickets com Busca Unificada"""
     
@@ -1369,11 +1365,11 @@ def render_suporte():
                 st.metric("🎫 Total de Tickets", len(historico_tickets), help="Tickets abertos por este cliente")
             
             with col_resumo2:
-                tickets_abertos = len([t for t in historico_tickets if t.get('Progresso', 0) < 100])
+                tickets_abertos = len([t for t in historico_tickets if float(t.get('Progresso', 0) or 0) < 100])
                 st.metric("⏳ Em Aberto", tickets_abertos)
             
             with col_resumo3:
-                tickets_resolvidos = len([t for t in historico_tickets if t.get('Progresso', 0) >= 100])
+                tickets_resolvidos = len([t for t in historico_tickets if float(t.get('Progresso', 0) or 0) >= 100])
                 st.metric("✅ Resolvidos", tickets_resolvidos)
             
             st.markdown("---")
@@ -1396,14 +1392,19 @@ def render_suporte():
                     icone_hist = icones_prioridade.get(prioridade_hist, '⚪')
                     
                     # Badge de status
-                    if progresso_hist >= 100:
+                    try:
+                        prog_valor = float(progresso_hist) if progresso_hist else 0
+                    except:
+                        prog_valor = 0
+                    
+                    if prog_valor >= 100:
                         badge_status = "✅ RESOLVIDO"
-                    elif progresso_hist >= 50:
+                    elif prog_valor >= 50:
                         badge_status = "🔄 EM ANDAMENTO"
                     else:
                         badge_status = "🆕 ABERTO"
                     
-                    titulo_card_hist = f"{badge_status} | {icone_hist} {id_hist} | {prioridade_hist} | {progresso_hist}%"
+                    titulo_card_hist = f"{badge_status} | {icone_hist} {id_hist} | {prioridade_hist} | {prog_valor}%"
                     
                     # Expandir automaticamente o ticket atual
                     expandir = (id_hist == id_ticket)
@@ -1424,27 +1425,28 @@ def render_suporte():
                             
                             st.markdown("---")
                             
-                            # Barra de progresso
+                            # Barra de progresso - CORRIGIDO
                             st.markdown("### 📊 Progresso")
                             
                             try:
-                                progresso_decimal = float(progresso_hist) / 100
+                                progresso_valor = float(progresso_hist) if progresso_hist else 0
+                                progresso_decimal = max(0.0, min(1.0, progresso_valor / 100))
                             except:
-                                progresso_decimal = 0
+                                progresso_decimal = 0.0
                             
                             st.progress(progresso_decimal)
-                            st.write(f"**{progresso_hist}% concluído**")
+                            st.write(f"**{prog_valor}% concluído**")
                             
                             # Labels de progresso
-                            if progresso_hist == 0:
+                            if prog_valor == 0:
                                 st.info("🆕 Ticket aberto - Aguardando primeiro contato")
-                            elif progresso_hist == 25:
+                            elif prog_valor == 25:
                                 st.info("📞 Primeiro contato realizado")
-                            elif progresso_hist == 50:
+                            elif prog_valor == 50:
                                 st.warning("🔄 Em andamento - Acompanhamento ativo")
-                            elif progresso_hist == 75:
+                            elif prog_valor == 75:
                                 st.success("✨ Quase concluído - Finalizando")
-                            elif progresso_hist >= 100:
+                            elif prog_valor >= 100:
                                 st.success("✅ Pronto para finalizar")
                             
                             st.markdown("---")
@@ -1513,7 +1515,7 @@ def render_suporte():
                                     novo_progresso = st.selectbox(
                                         "📊 Atualizar Progresso:",
                                         [0, 25, 50, 75, 100],
-                                        index=[0, 25, 50, 75, 100].index(progresso_hist) if progresso_hist in [0, 25, 50, 75, 100] else 0,
+                                        index=[0, 25, 50, 75, 100].index(int(prog_valor)) if int(prog_valor) in [0, 25, 50, 75, 100] else 0,
                                         help="Atualize o percentual de conclusão"
                                     )
                                     
@@ -1863,6 +1865,12 @@ def render_suporte():
         prioridade = ticket.get('Prioridade', 'Média')
         progresso = ticket.get('Progresso', 0)
         
+        # Converter progresso corretamente - CORRIGIDO
+        try:
+            progresso_valor = float(progresso) if progresso else 0
+        except:
+            progresso_valor = 0
+        
         icone = icones_prioridade.get(prioridade, '⚪')
         
         # Verificar se está vencido
@@ -1885,7 +1893,7 @@ def render_suporte():
             badge = "📋 ATIVO"
         
         # Título do card
-        titulo_card = f"{badge} | {icone} {prioridade.upper()} | 🎫 {id_ticket} | 👤 {nome_cliente} | 📊 {progresso}%"
+        titulo_card = f"{badge} | {icone} {prioridade.upper()} | 🎫 {id_ticket} | 👤 {nome_cliente} | 📊 {progresso_valor}%"
         
         # Expandir automaticamente tickets urgentes ou vencidos
         expandir = (prioridade == 'Urgente' or esta_vencido)
@@ -1901,14 +1909,14 @@ def render_suporte():
                 st.write(f"**🔧 Tipo:** {ticket.get('Tipo_Problema', 'N/D')}")
                 st.write(f"**{icone} Prioridade:** {prioridade}")
                 
-                # Progresso
+                # Progresso - CORRIGIDO
                 try:
-                    progresso_decimal = float(progresso) / 100
+                    progresso_decimal = max(0.0, min(1.0, progresso_valor / 100))
                 except:
-                    progresso_decimal = 0
+                    progresso_decimal = 0.0
                 
                 st.progress(progresso_decimal)
-                st.caption(f"{progresso}% concluído")
+                st.caption(f"{progresso_valor}% concluído")
                 
                 # Descrição resumida
                 descricao = ticket.get('Descrição do problema', '')
