@@ -967,370 +967,754 @@ def render_em_atendimento():
 # RENDER - PÁGINA SUPORTE
 # ============================================================================
 
+# ============================================================================
+# FUNÇÃO AUXILIAR - GERAR ID DE TICKET
+# ============================================================================
+
+def gerar_id_ticket():
+    """Gera ID único no formato TKT-2025-00014"""
+    try:
+        conn = get_gsheets_connection()
+        df_log = conn.read(worksheet="LOG_TICKETS_ABERTOS", ttl=0)
+        
+        ano_atual = datetime.now().year
+        
+        # Filtrar tickets do ano atual
+        if not df_log.empty and 'ID_Ticket' in df_log.columns:
+            tickets_ano = df_log[df_log['ID_Ticket'].str.contains(f'TKT-{ano_atual}', na=False)]
+            if not tickets_ano.empty:
+                # Pegar último número
+                ultimos_numeros = tickets_ano['ID_Ticket'].str.extract(r'TKT-\d{4}-(\d{5})')[0].astype(int)
+                proximo_numero = ultimos_numeros.max() + 1
+            else:
+                proximo_numero = 1
+        else:
+            proximo_numero = 1
+        
+        # Formatar com 5 dígitos
+        id_ticket = f"TKT-{ano_atual}-{proximo_numero:05d}"
+        return id_ticket
+        
+    except Exception as e:
+        st.error(f"Erro ao gerar ID: {e}")
+        return f"TKT-{datetime.now().year}-00001"
+
+
+def registrar_ticket_log_aberto(id_ticket, dados_ticket, aberto_por):
+    """Registra ticket na aba LOG_TICKETS_ABERTOS"""
+    try:
+        conn = get_gsheets_connection()
+        df_log = conn.read(worksheet="LOG_TICKETS_ABERTOS", ttl=0)
+        
+        agora = datetime.now()
+        dias_semana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+        
+        nova_linha = {
+            'ID_Ticket': id_ticket,
+            'Data_Abertura': agora.strftime('%d/%m/%Y'),
+            'Hora_Abertura': agora.strftime('%H:%M:%S'),
+            'Nome_Cliente': dados_ticket.get('Nome', ''),
+            'Telefone': dados_ticket.get('Telefone', ''),
+            'Classificacao_Cliente': dados_ticket.get('Classificacao', ''),
+            'Tipo_Problema': dados_ticket.get('Tipo_Problema', ''),
+            'Prioridade': dados_ticket.get('Prioridade', ''),
+            'Descricao_Resumida': dados_ticket.get('Descricao', ''),
+            'Aberto_Por': aberto_por,
+            'Dia_Semana': dias_semana[agora.weekday()]
+        }
+        
+        df_novo = pd.concat([df_log, pd.DataFrame([nova_linha])], ignore_index=True)
+        conn.update(worksheet="LOG_TICKETS_ABERTOS", data=df_novo)
+        return True
+        
+    except Exception as e:
+        st.error(f"Erro ao registrar no log de abertos: {e}")
+        return False
+
+
+def registrar_ticket_log_resolvido(id_ticket, dados_resolucao, resolvido_por):
+    """Registra ticket resolvido na aba LOG_TICKETS_RESOLVIDOS"""
+    try:
+        conn = get_gsheets_connection()
+        
+        # Buscar dados originais do ticket no LOG_ABERTOS
+        df_log_abertos = conn.read(worksheet="LOG_TICKETS_ABERTOS", ttl=0)
+        ticket_original = df_log_abertos[df_log_abertos['ID_Ticket'] == id_ticket]
+        
+        if ticket_original.empty:
+            st.warning(f"Ticket {id_ticket} não encontrado no log de abertos")
+            return False
+        
+        ticket_orig = ticket_original.iloc[0]
+        
+        # Calcular tempo de resolução
+        data_abertura_str = ticket_orig.get('Data_Abertura', '')
+        hora_abertura_str = ticket_orig.get('Hora_Abertura', '')
+        
+        try:
+            data_hora_abertura = datetime.strptime(f"{data_abertura_str} {hora_abertura_str}", '%d/%m/%Y %H:%M:%S')
+            data_hora_resolucao = datetime.now()
+            tempo_resolucao = (data_hora_resolucao - data_hora_abertura).total_seconds() / 3600  # em horas
+        except:
+            tempo_resolucao = 0
+        
+        # Registrar em LOG_TICKETS_RESOLVIDOS
+        df_log_resolvidos = conn.read(worksheet="LOG_TICKETS_RESOLVIDOS", ttl=0)
+        
+        nova_linha = {
+            'ID_Ticket': id_ticket,
+            'Data_Abertura': ticket_orig.get('Data_Abertura', ''),
+            'Data_Resolucao': datetime.now().strftime('%d/%m/%Y'),
+            'Tempo_Resolucao_Horas': round(tempo_resolucao, 2),
+            'Nome_Cliente': ticket_orig.get('Nome_Cliente', ''),
+            'Telefone': ticket_orig.get('Telefone', ''),
+            'Tipo_Problema': ticket_orig.get('Tipo_Problema', ''),
+            'Prioridade': ticket_orig.get('Prioridade', ''),
+            'Como_Foi_Resolvido': dados_resolucao.get('Solucao', ''),
+            'Resultado_Final': dados_resolucao.get('Resultado', ''),
+            'Gerou_Conversao': dados_resolucao.get('Conversao', 'Não'),
+            'Resolvido_Por': resolvido_por
+        }
+        
+        df_novo = pd.concat([df_log_resolvidos, pd.DataFrame([nova_linha])], ignore_index=True)
+        conn.update(worksheet="LOG_TICKETS_RESOLVIDOS", data=df_novo)
+        return True
+        
+    except Exception as e:
+        st.error(f"Erro ao registrar no log de resolvidos: {e}")
+        return False
+
+
+# ============================================================================
+# RENDER - PÁGINA SUPORTE (VERSÃO COMPLETA COM BUSCA E LOGS)
+# ============================================================================
+
 def render_suporte():
-    """Renderiza a página de Suporte - Gestão de Tickets"""
+    """Renderiza a página de Suporte - Gestão de Tickets com Busca Unificada"""
     
     st.title("🆘 Suporte ao Cliente")
     st.markdown("Gerencie tickets de suporte com acompanhamento personalizado")
     st.markdown("---")
     
-    # Carregar dados
-    with st.spinner("Carregando tickets de suporte..."):
-        df_suporte = carregar_dados("SUPORTE")
+    # ========== INICIALIZAR SESSION STATE ==========
+    if 'ticket_encontrado' not in st.session_state:
+        st.session_state.ticket_encontrado = None
     
-    if df_suporte.empty:
-        st.info("✅ Nenhum ticket de suporte ativo no momento")
-        st.write("👉 Tickets são criados automaticamente na página **Histórico** quando necessário")
-        return
+    # ========== BARRA DE BUSCA E CRIAÇÃO ==========
+    st.subheader("🔍 Buscar Ticket ou Criar Novo")
     
-    # ========== FILTRAR TICKETS DO DIA ==========
-    hoje_dt = datetime.now()
-    hoje_str_br = hoje_dt.strftime('%d/%m/%Y')
+    col_busca1, col_busca2, col_busca3 = st.columns([3, 1, 1])
     
-    df_hoje = pd.DataFrame()
-    if 'Próximo contato' in df_suporte.columns:
-        df_hoje = df_suporte[df_suporte['Próximo contato'] == hoje_str_br].copy()
+    with col_busca1:
+        termo_busca = st.text_input(
+            "Digite o ID do Ticket, Nome ou Telefone do cliente",
+            placeholder="Ex: TKT-2025-00014 ou João Silva ou 11 99999-9999",
+            help="Busca por ID, nome ou telefone em todos os tickets",
+            key="busca_ticket"
+        )
     
-    # ========== DASHBOARD DE MÉTRICAS ==========
-    st.subheader("📊 Resumo de Suporte")
+    with col_busca2:
+        btn_buscar = st.button("🔍 Buscar", type="primary", use_container_width=True)
     
-    # Contar por prioridade
-    prioridades = {
-        'Urgente': 0,
-        'Alta': 0,
-        'Média': 0,
-        'Baixa': 0
-    }
-    
-    if 'Prioridade' in df_suporte.columns:
-        for p in prioridades.keys():
-            prioridades[p] = len(df_suporte[df_suporte['Prioridade'] == p])
-    
-    # Métricas
-    col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
-    
-    with col_m1:
-        st.metric("📋 Total de Tickets", len(df_suporte))
-    
-    with col_m2:
-        st.metric("📅 Hoje", len(df_hoje), help="Tickets agendados para hoje")
-    
-    with col_m3:
-        st.metric("🔴 Urgente", prioridades['Urgente'], 
-                  delta=f"-{prioridades['Urgente']}" if prioridades['Urgente'] > 0 else "0",
-                  delta_color="inverse")
-    
-    with col_m4:
-        st.metric("🟠 Alta", prioridades['Alta'])
-    
-    with col_m5:
-        total_criticos = prioridades['Urgente'] + prioridades['Alta']
-        st.metric("⚠️ Críticos", total_criticos,
-                  delta=f"-{total_criticos}" if total_criticos > 0 else "0",
-                  delta_color="inverse")
-    
-    # Alerta de urgentes
-    if prioridades['Urgente'] > 0:
-        st.error(f"🚨 **ATENÇÃO:** Você tem {prioridades['Urgente']} ticket(s) URGENTE(S)! Priorize-os imediatamente.")
+    with col_busca3:
+        btn_novo_ticket = st.button("➕ Novo Ticket", type="secondary", use_container_width=True)
     
     st.markdown("---")
     
-    # ========== FILTROS ==========
-    st.subheader("🔍 Filtros")
-    
-    col_f1, col_f2, col_f3 = st.columns(3)
-    
-    with col_f1:
-        visualizar = st.selectbox(
-            "Visualizar:",
-            ["Hoje", "Todos"],
-            help="Escolha quais tickets deseja ver"
-        )
-    
-    with col_f2:
-        busca = st.text_input(
-            "Buscar cliente:",
-            "",
-            placeholder="Digite o nome...",
-            key="busca_suporte"
-        )
-    
-    with col_f3:
-        filtro_prioridade = st.selectbox(
-            "Prioridade:",
-            ["Todas", "Urgente", "Alta", "Média", "Baixa"]
-        )
-    
-    # Selecionar dataset
-    if visualizar == "Hoje":
-        df_trabalho = df_hoje.copy()
-    else:
-        df_trabalho = df_suporte.copy()
-    
-    # Aplicar filtros
-    df_filt = df_trabalho.copy()
-    
-    if busca and 'Nome' in df_filt.columns:
-        df_filt = df_filt[df_filt['Nome'].str.contains(busca, case=False, na=False)]
-    
-    if filtro_prioridade != 'Todas' and 'Prioridade' in df_filt.columns:
-        df_filt = df_filt[df_filt['Prioridade'] == filtro_prioridade]
-    
-    st.markdown("---")
-    
-    # ========== LISTA DE TICKETS ==========
-    st.subheader(f"🎫 Tickets de Suporte ({len(df_filt)})")
-    
-    if df_filt.empty:
-        if visualizar == "Hoje":
-            st.info("✅ Nenhum ticket agendado para hoje!")
-        else:
-            st.info("Nenhum ticket encontrado com os filtros aplicados")
-        return
-    
-    # Ordenar por prioridade (Urgente > Alta > Média > Baixa)
-    ordem_prioridade = {'Urgente': 0, 'Alta': 1, 'Média': 2, 'Baixa': 3}
-    if 'Prioridade' in df_filt.columns:
-        df_filt['_ordem'] = df_filt['Prioridade'].map(ordem_prioridade).fillna(4)
-        df_filt = df_filt.sort_values('_ordem')
-    
-    # Cards de tickets
-    for idx, ticket in df_filt.iterrows():
+    # ========== FORMULÁRIO: CRIAR NOVO TICKET ==========
+    if btn_novo_ticket or 'mostrar_form_novo' in st.session_state:
+        st.session_state.mostrar_form_novo = True
         
-        # Dados do ticket
+        st.subheader("🎫 Abrir Novo Ticket de Suporte")
+        
+        with st.form(key="form_novo_ticket_suporte"):
+            
+            col_form1, col_form2 = st.columns(2)
+            
+            with col_form1:
+                nome_cliente_novo = st.text_input(
+                    "👤 Nome do Cliente *",
+                    placeholder="Nome completo do cliente"
+                )
+                
+                telefone_cliente_novo = st.text_input(
+                    "📱 Telefone *",
+                    placeholder="Ex: 11 99999-9999"
+                )
+                
+                classificacao_novo = st.selectbox(
+                    "🏷️ Classificação do Cliente",
+                    ["Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente", "Não classificado"]
+                )
+            
+            with col_form2:
+                tipo_problema = st.selectbox(
+                    "🔧 Tipo de Problema *",
+                    ["Defeito no Produto", "Problema na Entrega", "Dúvida Técnica", 
+                     "Reclamação de Atendimento", "Pedido de Reembolso", 
+                     "Solicitação de Troca", "Outros"]
+                )
+                
+                prioridade_novo = st.selectbox(
+                    "⚠️ Prioridade *",
+                    ["Baixa", "Média", "Alta", "Urgente"]
+                )
+                
+                aberto_por = st.text_input(
+                    "👨‍💼 Aberto Por",
+                    placeholder="Seu nome",
+                    value="Sistema CRM"
+                )
+            
+            descricao_problema_novo = st.text_area(
+                "📝 Descrição Completa do Problema *",
+                height=150,
+                placeholder="Descreva detalhadamente o problema relatado pelo cliente..."
+            )
+            
+            st.markdown("---")
+            
+            btn_criar_ticket = st.form_submit_button(
+                "✅ Criar Ticket de Suporte",
+                type="primary",
+                use_container_width=True
+            )
+            
+            # ========== AÇÃO: CRIAR TICKET ==========
+            if btn_criar_ticket:
+                # Validações
+                if not nome_cliente_novo:
+                    st.error("❌ Preencha o nome do cliente!")
+                elif not telefone_cliente_novo:
+                    st.error("❌ Preencha o telefone do cliente!")
+                elif not descricao_problema_novo:
+                    st.error("❌ Descreva o problema!")
+                else:
+                    with st.spinner("Criando ticket..."):
+                        try:
+                            conn = get_gsheets_connection()
+                            
+                            # 1. Gerar ID único
+                            id_ticket = gerar_id_ticket()
+                            
+                            # 2. Adicionar na aba SUPORTE
+                            df_suporte = conn.read(worksheet="SUPORTE", ttl=0)
+                            
+                            novo_ticket_suporte = {
+                                'ID_Ticket': id_ticket,
+                                'Nome': nome_cliente_novo,
+                                'Telefone': telefone_cliente_novo,
+                                'Classificação': classificacao_novo,
+                                'Tipo_Problema': tipo_problema,
+                                'Prioridade': prioridade_novo,
+                                'Descrição do problema': descricao_problema_novo,
+                                'Data de abertura': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                                'Último contato': '',
+                                'Próximo contato': '',
+                                'Progresso': 0,
+                                'Observações': f'Ticket criado via CRM por {aberto_por}'
+                            }
+                            
+                            df_suporte_novo = pd.concat([df_suporte, pd.DataFrame([novo_ticket_suporte])], ignore_index=True)
+                            conn.update(worksheet="SUPORTE", data=df_suporte_novo)
+                            
+                            # 3. Registrar em LOG_TICKETS_ABERTOS
+                            dados_log = {
+                                'Nome': nome_cliente_novo,
+                                'Telefone': telefone_cliente_novo,
+                                'Classificacao': classificacao_novo,
+                                'Tipo_Problema': tipo_problema,
+                                'Prioridade': prioridade_novo,
+                                'Descricao': descricao_problema_novo
+                            }
+                            
+                            registrar_ticket_log_aberto(id_ticket, dados_log, aberto_por)
+                            
+                            # Limpar cache e recarregar
+                            carregar_dados.clear()
+                            st.success(f"✅ Ticket **{id_ticket}** criado com sucesso!")
+                            st.balloons()
+                            
+                            # Limpar formulário
+                            del st.session_state.mostrar_form_novo
+                            time.sleep(2)
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"❌ Erro ao criar ticket: {e}")
+        
+        # Botão para cancelar
+        if st.button("❌ Cancelar", key="cancelar_novo_ticket"):
+            del st.session_state.mostrar_form_novo
+            st.rerun()
+        
+        st.markdown("---")
+    
+    # ========== REALIZAR BUSCA ==========
+    if btn_buscar and termo_busca:
+        with st.spinner("Buscando ticket..."):
+            try:
+                conn = get_gsheets_connection()
+                df_suporte = conn.read(worksheet="SUPORTE", ttl=0)
+                
+                if df_suporte.empty:
+                    st.warning("⚠️ Nenhum ticket encontrado no sistema")
+                    st.session_state.ticket_encontrado = None
+                else:
+                    termo_limpo = termo_busca.strip()
+                    telefone_limpo = limpar_telefone(termo_limpo)
+                    
+                    # Buscar por ID do Ticket
+                    resultado = None
+                    if 'ID_Ticket' in df_suporte.columns:
+                        mask_id = df_suporte['ID_Ticket'].astype(str).str.contains(termo_limpo, case=False, na=False)
+                        resultado_id = df_suporte[mask_id]
+                        if not resultado_id.empty:
+                            resultado = resultado_id.iloc[0]
+                    
+                    # Se não encontrou por ID, buscar por telefone
+                    if resultado is None and 'Telefone' in df_suporte.columns:
+                        df_suporte['Telefone_Limpo'] = df_suporte['Telefone'].apply(limpar_telefone)
+                        mask_tel = df_suporte['Telefone_Limpo'].str.contains(telefone_limpo, case=False, na=False, regex=False)
+                        resultado_tel = df_suporte[mask_tel]
+                        if not resultado_tel.empty:
+                            resultado = resultado_tel.iloc[0]
+                    
+                    # Se não encontrou, buscar por nome
+                    if resultado is None and 'Nome' in df_suporte.columns:
+                        mask_nome = df_suporte['Nome'].astype(str).str.contains(termo_limpo, case=False, na=False)
+                        resultado_nome = df_suporte[mask_nome]
+                        if not resultado_nome.empty:
+                            resultado = resultado_nome.iloc[0]
+                    
+                    if resultado is not None:
+                        st.session_state.ticket_encontrado = resultado.to_dict()
+                    else:
+                        st.warning(f"⚠️ Nenhum ticket encontrado para: {termo_busca}")
+                        st.session_state.ticket_encontrado = None
+                        
+            except Exception as e:
+                st.error(f"❌ Erro na busca: {e}")
+                st.session_state.ticket_encontrado = None
+    
+    elif btn_buscar and not termo_busca:
+        st.warning("⚠️ Digite um ID, nome ou telefone para buscar")
+    
+    # ========== EXIBIR TICKET ENCONTRADO ==========
+    if st.session_state.ticket_encontrado is not None:
+        ticket = st.session_state.ticket_encontrado
+        
+        id_ticket = ticket.get('ID_Ticket', 'N/D')
         nome_cliente = ticket.get('Nome', 'N/D')
         prioridade = ticket.get('Prioridade', 'Média')
-        progresso = ticket.get('Progresso', 0)
         
-        # Ícones de prioridade
+        # Ícone de prioridade
         icones_prioridade = {
             'Urgente': '🔴',
             'Alta': '🟠',
             'Média': '🟡',
             'Baixa': '🟢'
         }
-        
         icone = icones_prioridade.get(prioridade, '⚪')
         
-        # Título do card
-        titulo_card = f"{icone} {prioridade.upper()} | 👤 {nome_cliente} | 📊 {progresso}% concluído"
-        
-        with st.expander(titulo_card, expanded=(prioridade in ['Urgente', 'Alta'])):
-            col_esq, col_dir = st.columns([1, 1])
-            
-            # ========== COLUNA ESQUERDA: INFORMAÇÕES ==========
-            with col_esq:
-                st.markdown("### 📋 Dados do Ticket")
-                
-                # Informações básicas
-                st.write(f"**👤 Nome:** {nome_cliente}")
-                st.write(f"**📱 Telefone:** {ticket.get('Telefone', 'N/D')}")
-                st.write(f"**🏷️ Classificação:** {ticket.get('Classificação', 'N/D')}")
-                st.write(f"**{icone} Prioridade:** {prioridade}")
-                
-                st.markdown("---")
-                
-                # Barra de progresso
-                st.markdown("### 📊 Progresso do Atendimento")
-                
-                # Converter progresso para decimal
-                try:
-                    progresso_decimal = float(progresso) / 100
-                except:
-                    progresso_decimal = 0
-                
-                st.progress(progresso_decimal)
-                st.write(f"**{progresso}% concluído**")
-                
-                # Labels de progresso
-                if progresso == 0:
-                    st.info("🆕 Ticket aberto - Aguardando primeiro contato")
-                elif progresso == 25:
-                    st.info("📞 Primeiro contato realizado")
-                elif progresso == 50:
-                    st.warning("🔄 Em andamento - Acompanhamento ativo")
-                elif progresso == 75:
-                    st.success("✨ Quase concluído - Finalizando")
-                elif progresso >= 100:
-                    st.success("✅ Pronto para finalizar")
-                
-                st.markdown("---")
-                
-                # Informações do problema
-                st.markdown("### 🔍 Descrição do Problema")
-                
-                descricao = ticket.get('Descrição do problema', '')
-                if descricao and descricao != '':
-                    st.error(f"**Problema relatado:**\n\n{descricao}")
-                else:
-                    st.caption("_Sem descrição registrada_")
-                
-                st.markdown("---")
-                
-                # Histórico
-                st.markdown("### 📝 Histórico de Acompanhamento")
-                
-                data_abertura = ticket.get('Data de abertura', 'N/D')
-                st.write(f"**📅 Aberto em:** {data_abertura}")
-                
-                ultimo_contato = ticket.get('Último contato', '')
-                if ultimo_contato and ultimo_contato != '':
-                    st.info(f"**Último acompanhamento:**\n\n{ultimo_contato}")
-                else:
-                    st.caption("_Nenhum acompanhamento registrado ainda_")
-                
-                proximo_contato_data = ticket.get('Próximo contato', '')
-                if proximo_contato_data and proximo_contato_data != '':
-                    # Verificar se é hoje
-                    if proximo_contato_data == hoje_str_br:
-                        st.success(f"**📅 Próximo contato:** {proximo_contato_data} ✅ HOJE")
-                    else:
-                        st.info(f"**📅 Próximo contato:** {proximo_contato_data}")
-                
-                obs = ticket.get('Observações', '')
-                if obs and obs != '':
-                    st.info(f"**💬 Observações:** {obs}")
-            
-            # ========== COLUNA DIREITA: NOVO ACOMPANHAMENTO ==========
-            with col_dir:
-                st.markdown("### ✏️ Registrar Acompanhamento")
-                
-                with st.form(key=f"form_suporte_{idx}"):
-                    
-                    st.info("💡 Registre o acompanhamento e atualize o status do ticket")
-                    
-                    # Campo: Relato do acompanhamento
-                    novo_acompanhamento = st.text_area(
-                        "📝 Como foi o contato de hoje?",
-                        height=120,
-                        placeholder="Descreva o que foi conversado e as ações tomadas...",
-                        help="Registre o acompanhamento realizado"
-                    )
-                    
-                    # Campo: Próxima data
-                    nova_data_contato = st.date_input(
-                        "📅 Próximo Contato:",
-                        value=None,
-                        help="Quando será o próximo acompanhamento?"
-                    )
-                    
-                    # Campo: Atualizar progresso
-                    novo_progresso = st.selectbox(
-                        "📊 Atualizar Progresso:",
-                        [0, 25, 50, 75, 100],
-                        index=[0, 25, 50, 75, 100].index(progresso) if progresso in [0, 25, 50, 75, 100] else 0,
-                        help="Atualize o percentual de conclusão do ticket"
-                    )
-                    
-                    # Explicação dos níveis
-                    st.caption("""
-                    **Níveis de progresso:**
-                    - 0% = Ticket aberto
-                    - 25% = Primeiro contato
-                    - 50% = Em andamento
-                    - 75% = Quase concluído
-                    - 100% = Pronto para finalizar
-                    """)
-                    
-                    # Campo: Observações
-                    novas_obs = st.text_area(
-                        "💬 Observações Adicionais:",
-                        height=60,
-                        placeholder="Informações extras relevantes..."
-                    )
-                    
-                    st.markdown("---")
-                    
-                    # Botões
-                    col_btn1, col_btn2 = st.columns(2)
-                    
-                    with col_btn1:
-                        btn_atualizar = st.form_submit_button(
-                            "✅ Atualizar Ticket",
-                            type="primary",
-                            use_container_width=True
-                        )
-                    
-                    with col_btn2:
-                        btn_finalizar = st.form_submit_button(
-                            "🎉 Finalizar Suporte",
-                            type="secondary",
-                            use_container_width=True,
-                            help="Move para Agendamentos Ativos"
-                        )
-                    
-                    # ========== AÇÃO: ATUALIZAR TICKET ==========
-                    if btn_atualizar:
-                        if not novo_acompanhamento:
-                            st.error("❌ Preencha como foi o contato de hoje!")
-                        elif not nova_data_contato:
-                            st.error("❌ Selecione a data do próximo contato!")
-                        else:
-                            with st.spinner("Atualizando ticket..."):
-                                try:
-                                    conn = get_gsheets_connection()
-                                    df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
-                                    
-                                    # Atualizar campos
-                                    df_suporte_atual.at[idx, 'Último contato'] = novo_acompanhamento
-                                    df_suporte_atual.at[idx, 'Próximo contato'] = nova_data_contato.strftime('%d/%m/%Y')
-                                    df_suporte_atual.at[idx, 'Progresso'] = novo_progresso
-                                    if novas_obs:
-                                        df_suporte_atual.at[idx, 'Observações'] = novas_obs
-                                    
-                                    # Salvar
-                                    conn.update(worksheet="SUPORTE", data=df_suporte_atual)
-                                    
-                                    carregar_dados.clear()
-                                    st.success(f"✅ Ticket atualizado! Progresso: {novo_progresso}%")
-                                    time.sleep(1)
-                                    st.rerun()
-                                    
-                                except Exception as e:
-                                    st.error(f"❌ Erro ao atualizar: {e}")
-                    
-                    # ========== AÇÃO: FINALIZAR SUPORTE ==========
-                    if btn_finalizar:
-                        if novo_progresso < 100:
-                            st.warning("⚠️ Recomendamos marcar o progresso como 100% antes de finalizar")
-                        
-                        with st.spinner("Finalizando suporte..."):
-                            try:
-                                conn = get_gsheets_connection()
-                                
-                                # 1. Mover para AGENDAMENTOS_ATIVOS
-                                df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
-                                
-                                novo_agendamento = {
-                                    'Data de contato': datetime.now().strftime('%d/%m/%Y'),
-                                    'Nome': ticket.get('Nome', ''),
-                                    'Classificação': ticket.get('Classificação', ''),
-                                    'Valor': '',  # Pode ser recuperado da base Total se necessário
-                                    'Telefone': ticket.get('Telefone', ''),
-                                    'Relato da conversa': f"[SUPORTE CONCLUÍDO] {novo_acompanhamento if novo_acompanhamento else 'Ticket finalizado'}",
-                                    'Follow up': 'Acompanhamento pós-suporte',
-                                    'Data de chamada': nova_data_contato.strftime('%d/%m/%Y') if nova_data_contato else '',
-                                    'Observação': f"Cliente retornando do suporte. Problema: {ticket.get('Descrição do problema', 'N/D')}"
-                                }
-                                
-                                df_agendamentos_novo = pd.concat([df_agendamentos, pd.DataFrame([novo_agendamento])], ignore_index=True)
-                                conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_agendamentos_novo)
-                                
-                                # 2. Remover de SUPORTE
-                                df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
-                                df_suporte_novo = df_suporte_atual.drop(idx).reset_index(drop=True)
-                                conn.update(worksheet="SUPORTE", data=df_suporte_novo)
-                                
-                                carregar_dados.clear()
-                                st.success(f"🎉 Suporte finalizado! Cliente {nome_cliente} movido para Agendamentos Ativos")
-                                st.balloons()
-                                time.sleep(2)
-                                st.rerun()
-                                
-                            except Exception as e:
-                                st.error(f"❌ Erro ao finalizar: {e}")
-        
+        st.success(f"✅ Ticket encontrado: **{id_ticket}** - {nome_cliente}")
         st.markdown("---")
+        
+        # ========== BUSCAR HISTÓRICO COMPLETO DO CLIENTE ==========
+        st.subheader(f"📋 Histórico Completo do Ticket {id_ticket}")
+        
+        try:
+            conn = get_gsheets_connection()
+            df_suporte_completo = conn.read(worksheet="SUPORTE", ttl=0)
+            
+            # Buscar TODOS os tickets deste cliente (por nome e telefone)
+            telefone_cliente = ticket.get('Telefone', '')
+            
+            historico_tickets = []
+            
+            if not df_suporte_completo.empty:
+                if 'Telefone' in df_suporte_completo.columns and telefone_cliente:
+                    df_suporte_completo['Telefone_Limpo'] = df_suporte_completo['Telefone'].apply(limpar_telefone)
+                    telefone_limpo_busca = limpar_telefone(telefone_cliente)
+                    
+                    historico_tickets = df_suporte_completo[
+                        df_suporte_completo['Telefone_Limpo'].str.contains(telefone_limpo_busca, case=False, na=False, regex=False)
+                    ].to_dict('records')
+                elif 'Nome' in df_suporte_completo.columns:
+                    historico_tickets = df_suporte_completo[
+                        df_suporte_completo['Nome'].str.contains(nome_cliente, case=False, na=False)
+                    ].to_dict('records')
+            
+            # Exibir resumo
+            col_resumo1, col_resumo2, col_resumo3 = st.columns(3)
+            
+            with col_resumo1:
+                st.metric("🎫 Total de Tickets", len(historico_tickets), help="Tickets abertos por este cliente")
+            
+            with col_resumo2:
+                tickets_abertos = len([t for t in historico_tickets if t.get('Progresso', 0) < 100])
+                st.metric("⏳ Em Aberto", tickets_abertos)
+            
+            with col_resumo3:
+                tickets_resolvidos = len([t for t in historico_tickets if t.get('Progresso', 0) >= 100])
+                st.metric("✅ Resolvidos", tickets_resolvidos)
+            
+            st.markdown("---")
+            
+            # ========== CARDS DE HISTÓRICO ==========
+            if historico_tickets:
+                st.subheader(f"📚 Histórico de Tickets ({len(historico_tickets)})")
+                
+                # Ordenar por data de abertura (mais recente primeiro)
+                historico_tickets_ordenado = sorted(
+                    historico_tickets, 
+                    key=lambda x: x.get('Data de abertura', ''), 
+                    reverse=True
+                )
+                
+                for hist_ticket in historico_tickets_ordenado:
+                    id_hist = hist_ticket.get('ID_Ticket', 'N/D')
+                    prioridade_hist = hist_ticket.get('Prioridade', 'Média')
+                    progresso_hist = hist_ticket.get('Progresso', 0)
+                    icone_hist = icones_prioridade.get(prioridade_hist, '⚪')
+                    
+                    # Badge de status
+                    if progresso_hist >= 100:
+                        badge_status = "✅ RESOLVIDO"
+                    elif progresso_hist >= 50:
+                        badge_status = "🔄 EM ANDAMENTO"
+                    else:
+                        badge_status = "🆕 ABERTO"
+                    
+                    titulo_card_hist = f"{badge_status} | {icone_hist} {id_hist} | {prioridade_hist} | {progresso_hist}%"
+                    
+                    # Expandir automaticamente o ticket atual
+                    expandir = (id_hist == id_ticket)
+                    
+                    with st.expander(titulo_card_hist, expanded=expandir):
+                        col_esq_hist, col_dir_hist = st.columns([1, 1])
+                        
+                        # ========== COLUNA ESQUERDA: INFORMAÇÕES DO TICKET ==========
+                        with col_esq_hist:
+                            st.markdown("### 📋 Dados do Ticket")
+                            
+                            st.write(f"**🎫 ID:** {id_hist}")
+                            st.write(f"**👤 Nome:** {hist_ticket.get('Nome', 'N/D')}")
+                            st.write(f"**📱 Telefone:** {hist_ticket.get('Telefone', 'N/D')}")
+                            st.write(f"**🏷️ Classificação:** {hist_ticket.get('Classificação', 'N/D')}")
+                            st.write(f"**🔧 Tipo:** {hist_ticket.get('Tipo_Problema', 'N/D')}")
+                            st.write(f"**{icone_hist} Prioridade:** {prioridade_hist}")
+                            
+                            st.markdown("---")
+                            
+                            # Barra de progresso
+                            st.markdown("### 📊 Progresso")
+                            
+                            try:
+                                progresso_decimal = float(progresso_hist) / 100
+                            except:
+                                progresso_decimal = 0
+                            
+                            st.progress(progresso_decimal)
+                            st.write(f"**{progresso_hist}% concluído**")
+                            
+                            # Labels de progresso
+                            if progresso_hist == 0:
+                                st.info("🆕 Ticket aberto - Aguardando primeiro contato")
+                            elif progresso_hist == 25:
+                                st.info("📞 Primeiro contato realizado")
+                            elif progresso_hist == 50:
+                                st.warning("🔄 Em andamento - Acompanhamento ativo")
+                            elif progresso_hist == 75:
+                                st.success("✨ Quase concluído - Finalizando")
+                            elif progresso_hist >= 100:
+                                st.success("✅ Pronto para finalizar")
+                            
+                            st.markdown("---")
+                            
+                            # Descrição do problema
+                            st.markdown("### 🔍 Descrição do Problema")
+                            
+                            descricao_hist = hist_ticket.get('Descrição do problema', '')
+                            if descricao_hist and descricao_hist != '':
+                                st.error(f"**Problema relatado:**\n\n{descricao_hist}")
+                            else:
+                                st.caption("_Sem descrição registrada_")
+                            
+                            st.markdown("---")
+                            
+                            # Histórico de acompanhamento
+                            st.markdown("### 📝 Histórico")
+                            
+                            data_abertura_hist = hist_ticket.get('Data de abertura', 'N/D')
+                            st.write(f"**📅 Aberto em:** {data_abertura_hist}")
+                            
+                            ultimo_contato_hist = hist_ticket.get('Último contato', '')
+                            if ultimo_contato_hist and ultimo_contato_hist != '':
+                                st.info(f"**Último acompanhamento:**\n\n{ultimo_contato_hist}")
+                            else:
+                                st.caption("_Nenhum acompanhamento registrado ainda_")
+                            
+                            proximo_contato_hist = hist_ticket.get('Próximo contato', '')
+                            if proximo_contato_hist and proximo_contato_hist != '':
+                                hoje_str = datetime.now().strftime('%d/%m/%Y')
+                                if proximo_contato_hist == hoje_str:
+                                    st.success(f"**📅 Próximo contato:** {proximo_contato_hist} ✅ HOJE")
+                                else:
+                                    st.info(f"**📅 Próximo contato:** {proximo_contato_hist}")
+                            
+                            obs_hist = hist_ticket.get('Observações', '')
+                            if obs_hist and obs_hist != '':
+                                st.info(f"**💬 Observações:** {obs_hist}")
+                        
+                        # ========== COLUNA DIREITA: ATUALIZAR TICKET (APENAS SE FOR O ATUAL) ==========
+                        with col_dir_hist:
+                            if id_hist == id_ticket:
+                                st.markdown("### ✏️ Registrar Acompanhamento")
+                                
+                                # Obter índice real do DataFrame
+                                df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
+                                idx_real = df_suporte_atual[df_suporte_atual['ID_Ticket'] == id_ticket].index[0]
+                                
+                                with st.form(key=f"form_atualizar_{id_ticket}"):
+                                    
+                                    st.info("💡 Registre o acompanhamento e atualize o status")
+                                    
+                                    novo_acompanhamento = st.text_area(
+                                        "📝 Como foi o contato de hoje?",
+                                        height=120,
+                                        placeholder="Descreva o que foi conversado...",
+                                        help="Registre o acompanhamento realizado"
+                                    )
+                                    
+                                    nova_data_contato = st.date_input(
+                                        "📅 Próximo Contato:",
+                                        value=None,
+                                        help="Quando será o próximo acompanhamento?"
+                                    )
+                                    
+                                    novo_progresso = st.selectbox(
+                                        "📊 Atualizar Progresso:",
+                                        [0, 25, 50, 75, 100],
+                                        index=[0, 25, 50, 75, 100].index(progresso_hist) if progresso_hist in [0, 25, 50, 75, 100] else 0,
+                                        help="Atualize o percentual de conclusão"
+                                    )
+                                    
+                                    st.caption("""
+                                    **Níveis de progresso:**
+                                    - 0% = Ticket aberto
+                                    - 25% = Primeiro contato
+                                    - 50% = Em andamento
+                                    - 75% = Quase concluído
+                                    - 100% = Pronto para finalizar
+                                    """)
+                                    
+                                    novas_obs = st.text_area(
+                                        "💬 Observações:",
+                                        height=60,
+                                        placeholder="Informações extras..."
+                                    )
+                                    
+                                    st.markdown("---")
+                                    
+                                    col_btn1, col_btn2 = st.columns(2)
+                                    
+                                    with col_btn1:
+                                        btn_atualizar = st.form_submit_button(
+                                            "✅ Atualizar",
+                                            type="primary",
+                                            use_container_width=True
+                                        )
+                                    
+                                    with col_btn2:
+                                        btn_finalizar = st.form_submit_button(
+                                            "🎉 Finalizar",
+                                            type="secondary",
+                                            use_container_width=True
+                                        )
+                                    
+                                    # ========== AÇÃO: ATUALIZAR ==========
+                                    if btn_atualizar:
+                                        if not novo_acompanhamento:
+                                            st.error("❌ Preencha como foi o contato!")
+                                        elif not nova_data_contato:
+                                            st.error("❌ Selecione a data do próximo contato!")
+                                        else:
+                                            with st.spinner("Atualizando..."):
+                                                try:
+                                                    df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
+                                                    
+                                                    df_suporte_atual.at[idx_real, 'Último contato'] = novo_acompanhamento
+                                                    df_suporte_atual.at[idx_real, 'Próximo contato'] = nova_data_contato.strftime('%d/%m/%Y')
+                                                    df_suporte_atual.at[idx_real, 'Progresso'] = novo_progresso
+                                                    if novas_obs:
+                                                        df_suporte_atual.at[idx_real, 'Observações'] = novas_obs
+                                                    
+                                                    conn.update(worksheet="SUPORTE", data=df_suporte_atual)
+                                                    carregar_dados.clear()
+                                                    
+                                                    st.success(f"✅ Ticket atualizado! Progresso: {novo_progresso}%")
+                                                    time.sleep(1)
+                                                    st.rerun()
+                                                    
+                                                except Exception as e:
+                                                    st.error(f"❌ Erro: {e}")
+                                    
+                                    # ========== AÇÃO: FINALIZAR ==========
+                                    if btn_finalizar:
+                                        if novo_progresso < 100:
+                                            st.warning("⚠️ Recomendamos marcar como 100% antes de finalizar")
+                                        
+                                        # Campos adicionais para finalização
+                                        st.markdown("---")
+                                        st.markdown("### 📝 Informações de Finalização")
+                                        
+                                        solucao_final = st.text_area(
+                                            "Como foi resolvido? *",
+                                            height=100,
+                                            placeholder="Descreva a solução aplicada...",
+                                            key=f"solucao_{id_ticket}"
+                                        )
+                                        
+                                        resultado_final = st.selectbox(
+                                            "Resultado Final *",
+                                            ["Problema Resolvido", "Cliente Satisfeito", 
+                                             "Reembolso Concedido", "Troca Realizada", 
+                                             "Não Resolvido", "Cliente Insatisfeito"],
+                                            key=f"resultado_{id_ticket}"
+                                        )
+                                        
+                                        gerou_conversao = st.radio(
+                                            "Gerou nova venda?",
+                                            ["Não", "Sim"],
+                                            horizontal=True,
+                                            key=f"conversao_{id_ticket}"
+                                        )
+                                        
+                                        resolvido_por = st.text_input(
+                                            "Resolvido por",
+                                            value="Sistema CRM",
+                                            key=f"resolvido_{id_ticket}"
+                                        )
+                                        
+                                        if st.button("✅ Confirmar Finalização", type="primary", key=f"confirmar_fin_{id_ticket}"):
+                                            if not solucao_final:
+                                                st.error("❌ Descreva como foi resolvido!")
+                                            else:
+                                                with st.spinner("Finalizando..."):
+                                                    try:
+                                                        # 1. Registrar em LOG_TICKETS_RESOLVIDOS
+                                                        dados_resolucao = {
+                                                            'Solucao': solucao_final,
+                                                            'Resultado': resultado_final,
+                                                            'Conversao': gerou_conversao
+                                                        }
+                                                        
+                                                        registrar_ticket_log_resolvido(id_ticket, dados_resolucao, resolvido_por)
+                                                        
+                                                        # 2. Mover para AGENDAMENTOS_ATIVOS
+                                                        df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
+                                                        
+                                                        novo_agendamento = {
+                                                            'Data de contato': datetime.now().strftime('%d/%m/%Y'),
+                                                            'Nome': ticket.get('Nome', ''),
+                                                            'Classificação': ticket.get('Classificação', ''),
+                                                            'Valor': '',
+                                                            'Telefone': ticket.get('Telefone', ''),
+                                                            'Relato da conversa': f"[SUPORTE {id_ticket} CONCLUÍDO] {solucao_final}",
+                                                            'Follow up': 'Acompanhamento pós-suporte',
+                                                            'Data de chamada': nova_data_contato.strftime('%d/%m/%Y') if nova_data_contato else '',
+                                                            'Observação': f"Ticket resolvido. Resultado: {resultado_final}"
+                                                        }
+                                                        
+                                                        df_agendamentos_novo = pd.concat([df_agendamentos, pd.DataFrame([novo_agendamento])], ignore_index=True)
+                                                        conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_agendamentos_novo)
+                                                        
+                                                        # 3. Remover de SUPORTE
+                                                        df_suporte_final = conn.read(worksheet="SUPORTE", ttl=0)
+                                                        df_suporte_novo = df_suporte_final.drop(idx_real).reset_index(drop=True)
+                                                        conn.update(worksheet="SUPORTE", data=df_suporte_novo)
+                                                        
+                                                        carregar_dados.clear()
+                                                        st.success(f"🎉 Ticket {id_ticket} finalizado! Cliente movido para Agendamentos Ativos")
+                                                        st.balloons()
+                                                        
+                                                        # Limpar busca
+                                                        st.session_state.ticket_encontrado = None
+                                                        time.sleep(2)
+                                                        st.rerun()
+                                                        
+                                                    except Exception as e:
+                                                        st.error(f"❌ Erro ao finalizar: {e}")
+                            else:
+                                st.info("ℹ️ Este é um ticket histórico. Selecione o ticket atual para atualizar.")
+                        
+                        st.markdown("---")
+            
+            else:
+                st.info("ℹ️ Nenhum histórico encontrado para este cliente")
+                
+        except Exception as e:
+            st.error(f"❌ Erro ao carregar histórico: {e}")
+        
+        # Botão para nova busca
+        if st.button("🔄 Nova Busca", key="nova_busca_ticket"):
+            st.session_state.ticket_encontrado = None
+            st.rerun()
+    
+    # ========== VISÃO GERAL (quando não há busca ativa) ==========
+    elif st.session_state.ticket_encontrado is None and not btn_novo_ticket:
+        st.subheader("📊 Visão Geral de Suporte")
+        
+        with st.spinner("Carregando tickets..."):
+            df_suporte = carregar_dados("SUPORTE")
+        
+        if df_suporte.empty:
+            st.info("✅ Nenhum ticket de suporte ativo no momento")
+            st.write("👉 Use o botão **➕ Novo Ticket** para abrir um chamado")
+        else:
+            # Dashboard de métricas
+            hoje_dt = datetime.now()
+            hoje_str_br = hoje_dt.strftime('%d/%m/%Y')
+            
+            df_hoje = pd.DataFrame()
+            if 'Próximo contato' in df_suporte.columns:
+                df_hoje = df_suporte[df_suporte['Próximo contato'] == hoje_str_br].copy()
+            
+            # Contar por prioridade
+            prioridades = {'Urgente': 0, 'Alta': 0, 'Média': 0, 'Baixa': 0}
+            
+            if 'Prioridade' in df_suporte.columns:
+                for p in prioridades.keys():
+                    prioridades[p] = len(df_suporte[df_suporte['Prioridade'] == p])
+            
+            # Métricas
+            col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
+            
+            with col_m1:
+                st.metric("📋 Total", len(df_suporte))
+            
+            with col_m2:
+                st.metric("📅 Hoje", len(df_hoje))
+            
+            with col_m3:
+                st.metric("🔴 Urgente", prioridades['Urgente'], 
+                          delta=f"-{prioridades['Urgente']}" if prioridades['Urgente'] > 0 else "0",
+                          delta_color="inverse")
+            
+            with col_m4:
+                st.metric("🟠 Alta", prioridades['Alta'])
+            
+            with col_m5:
+                total_criticos = prioridades['Urgente'] + prioridades['Alta']
+                st.metric("⚠️ Críticos", total_criticos)
+            
+            if prioridades['Urgente'] > 0:
+                st.error(f"🚨 **ATENÇÃO:** {prioridades['Urgente']} ticket(s) URGENTE(S)! Priorize-os.")
+            
+            st.markdown("---")
+            st.info("💡 **Dica:** Use a busca acima para localizar tickets específicos por ID, nome ou telefone do cliente")
+
 
 
 # ============================================================================
