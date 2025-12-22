@@ -9,6 +9,7 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
+import time
 import pytz
 
 # ============================================================================
@@ -2300,7 +2301,6 @@ def render_dashboard():
     # Validação de datas
     if data_inicial > data_final:
         st.error("⚠️ A data inicial não pode ser maior que a data final!")
-        st.stop()  # Para a execução imediatamente
         return
     
     # Mostrar período selecionado
@@ -2311,8 +2311,6 @@ def render_dashboard():
     st.info(f"🏷️ **Classificações:** {', '.join(filtro_classificacao)}")
     
     st.markdown("---")
-    
-    # ✅ SEM time.sleep(2) - Streamlit funciona perfeitamente!
 
         # =====================================================================
     # SNAPSHOT DIÁRIO - GERAR LINHA NA ABA HISTORICO_METRICAS
