@@ -1,0 +1,26 @@
+name: Snapshots Automáticos 3x/dia
+on:
+  schedule:
+    - cron: '0 10 * * *'    # 07:00 BRT = 10:00 UTC
+    - cron: '15 15 * * *'   # 12:00 BRT = 15:00 UTC
+    - cron: '2 3 * * *'     # 23:50 BRT = 02:50 UTC
+  workflow_dispatch:        # botão manual no GitHub
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+    
+    - name: Run snapshot
+      run: python gerar_snapshot.py
+      env:
+        GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
