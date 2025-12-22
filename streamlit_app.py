@@ -9,27 +9,8 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
-import time
-import schedule
-from datetime import datetime
 import pytz
 
-from seu_modulo import gerar_snapshot_diario  # ajuste o import para onde está a função
-
-timezone_brasilia = pytz.timezone('America/Sao_Paulo')
-
-def job_snapshot():
-    # aqui você só chama a função, ela mesma já resolve a data
-    gerar_snapshot_diario()
-
-# agenda para rodar todo dia nos horários desejados (horário de Brasília)
-schedule.every().day.at("07:00").do(job_snapshot)
-schedule.every().day.at("12:00").do(job_snapshot)
-schedule.every().day.at("23:50").do(job_snapshot)
-
-while True:
-    schedule.run_pending()
-    time.sleep(60)  # checa a cada 60s
 # ============================================================================
 # CONFIGURAÇÃO DA PÁGINA
 # ============================================================================
