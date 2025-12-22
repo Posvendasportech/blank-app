@@ -678,12 +678,12 @@ def render_checkin():
     # ---------------- SESSION STATE ----------------
     if 'metas_checkin' not in st.session_state:
         st.session_state.metas_checkin = {
-            'novo': 0,
-            'promissor': 0,
-            'leal': 0,
-            'campeao': 0,
-            'risco': 0,
-            'dormente': 0,
+            'novo': 5,
+            'promissor': 5,
+            'leal': 5,
+            'campeao': 3,
+            'risco': 5,
+            'dormente': 5,
         }
     if 'metas_alteradas' not in st.session_state:
         st.session_state.metas_alteradas = False
@@ -866,40 +866,29 @@ def render_checkin():
     st.markdown("---")
 
     # ---------------- VERIFICAÇÃO 1x POR MINUTO ----------------
-    # ---------------- VERIFICAÇÃO 1x POR MINUTO ----------------
     agora_ts = time.time()
     if agora_ts - st.session_state.ultima_verificacao > 60:
         with st.status("🔄 Atualizando filtros...", expanded=False):
             df_agendamentos_ativos = carregar_dados("AGENDAMENTOS_ATIVOS")
             df_log_checkins = carregar_dados("LOG_CHECKINS")
+            hoje_br = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%d/%m/%Y')
 
             st.session_state.clientes_excluir = set()
 
-            # 1) Clientes que já estão em atendimento (AGENDAMENTOS_ATIVOS)
-            if (
-                not df_agendamentos_ativos.empty
-                and 'Telefone' in df_agendamentos_ativos.columns
-            ):
-                tels_agenda = (
-                    df_agendamentos_ativos['Telefone']
-                    .astype(str)
-                    .str.strip()
-                    .tolist()
+            if not df_agendamentos_ativos.empty and 'Nome' in df_agendamentos_ativos.columns:
+                st.session_state.clientes_excluir.update(
+                    df_agendamentos_ativos['Nome'].tolist()
                 )
-                st.session_state.clientes_excluir.update(tels_agenda)
 
-            # 2) Clientes que já tiveram check-in (LOG_CHECKINS) – qualquer dia
             if (
                 not df_log_checkins.empty
-                and 'Telefone' in df_log_checkins.columns
+                and 'Nome_Cliente' in df_log_checkins.columns
+                and 'Data_Checkin' in df_log_checkins.columns
             ):
-                tels_log = (
-                    df_log_checkins['Telefone']
-                    .astype(str)
-                    .str.strip()
-                    .tolist()
-                )
-                st.session_state.clientes_excluir.update(tels_log)
+                hoje_checkins = df_log_checkins[
+                    df_log_checkins['Data_Checkin'] == hoje_br
+                ]['Nome_Cliente'].tolist()
+                st.session_state.clientes_excluir.update(hoje_checkins)
 
             st.session_state.ultima_verificacao = agora_ts
             st.toast("✅ Filtros atualizados!", icon="🔄")
@@ -914,16 +903,10 @@ def render_checkin():
     if meta_classificacao > 0:
         df_clientes = df_clientes.head(meta_classificacao)
 
-    # remover já processados (em atendimento ou já fizeram check-in)
-    if 'Telefone' in df_clientes.columns:
-        df_clientes['Telefone'] = df_clientes['Telefone'].astype(str).str.strip()
-        df_filtrado = df_clientes[
-            ~df_clientes['Telefone'].isin(st.session_state.clientes_excluir)
-        ]
-    else:
-        df_filtrado = df_clientes[
-            ~df_clientes['Nome'].isin(st.session_state.clientes_excluir)
-        ]
+    # remover já processados (em atendimento ou já fizeram check-in hoje)
+    df_filtrado = df_clientes[
+        ~df_clientes['Nome'].isin(st.session_state.clientes_excluir)
+    ]
 
     if len(df_filtrado) == 0:
         st.success(f"✅ Todos os clientes de '{classificacao_selecionada}' já foram check-in!")
@@ -1179,34 +1162,30 @@ def render_em_atendimento():
         st.metric("⏳ Pendentes", pendentes_hoje, help="Atendimentos que faltam finalizar hoje")
     
     with col_m3:
-        st.metric(
-            "🔥 Vencidos",
-            total_vencidos,
-            delta=f"-{total_vencidos}" if total_vencidos > 0 else "0",
-            delta_color="inverse",
-            help="Atendimentos de dias anteriores não concluídos"
-        )
-
+        st.metric("🔥 Vencidos", total_vencidos, 
+                  delta=f"-{total_vencidos}" if total_vencidos > 0 else "0",
+                  delta_color="inverse", 
+                  help="Atendimentos de dias anteriores não concluídos")
+    
     # Alerta de vencidos
     if total_vencidos > 0:
-        st.error(
-            f"⚠️ **ATENÇÃO:** Você tem {total_vencidos} atendimento(s) vencido(s) de dias anteriores! Priorize-os."
-        )
-
+        st.error(f"⚠️ **ATENÇÃO:** Você tem {total_vencidos} atendimento(s) vencido(s) de dias anteriores! Priorize-os.")
+    
     st.markdown("---")
-
+    
     # ========== FILTROS ==========
     st.subheader("🔍 Filtros")
-
+    
     col_f1, col_f2, col_f3 = st.columns(3)
-
+    
     with col_f1:
+        # Escolher se quer ver hoje ou vencidos
         visualizar = st.selectbox(
             "Visualizar:",
             ["Hoje", "Vencidos", "Todos"],
             help="Escolha qual grupo de atendimentos deseja ver"
         )
-
+    
     with col_f2:
         busca = st.text_input(
             "Buscar cliente:",
@@ -1214,7 +1193,7 @@ def render_em_atendimento():
             placeholder="Digite o nome...",
             key="busca_atend"
         )
-
+    
     with col_f3:
         # Selecionar dataset baseado na visualização
         if visualizar == "Hoje":
@@ -1223,26 +1202,21 @@ def render_em_atendimento():
             df_trabalho = df_vencidos.copy()
         else:  # Todos
             df_trabalho = pd.concat([df_hoje, df_vencidos]).drop_duplicates()
-
+        
         if 'Classificação' in df_trabalho.columns and not df_trabalho.empty:
             class_opts = ['Todos'] + sorted(list(df_trabalho['Classificação'].dropna().unique()))
             filtro_class = st.selectbox("Classificação:", class_opts)
         else:
             filtro_class = 'Todos'
-
-    # Aplicar filtros (fora do with col_f3)
+    
+        # Aplicar filtros
     df_filt = df_trabalho.copy()
-
     if busca and 'Nome' in df_filt.columns:
         df_filt = df_filt[df_filt['Nome'].str.contains(busca, case=False, na=False)]
-
-    if filtro_class != 'Todos' and 'Classificação' in df_filt.columns:
-        df_filt = df_filt[df_filt['Classificação'] == filtro_class]
-
-
+    if filtro_prioridade != 'Todas' and 'Prioridade' in df_filt.columns:
+        df_filt = df_filt[df_filt['Prioridade'] == filtro_prioridade]
+    
     st.markdown("---")
-
-
 
     # ====== AGRUPAR POR CLIENTE (1 CARD POR PESSOA) ======
     if not df_filt.empty:
@@ -1541,8 +1515,6 @@ def render_suporte():
     df_filt = df_trabalho.copy()
     if busca and 'Nome' in df_filt.columns:
         df_filt = df_filt[df_filt['Nome'].str.contains(busca, case=False, na=False)]
-    filtro_prioridade = 'Todas'
-
     if filtro_prioridade != 'Todas' and 'Prioridade' in df_filt.columns:
         df_filt = df_filt[df_filt['Prioridade'] == filtro_prioridade]
     
