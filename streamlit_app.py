@@ -122,6 +122,118 @@ def finalizar_atendimento(index, dados_completos):
     except Exception as e:
         st.error(f"Erro ao finalizar: {e}")
         return False
+def gerar_id_ticket():
+    """Gera ID único no formato TKT-2025-00014"""
+    try:
+        conn = get_gsheets_connection()
+        df_log = conn.read(worksheet="LOG_TICKETS_ABERTOS", ttl=0)
+        
+        ano_atual = datetime.now().year
+        
+        # Filtrar tickets do ano atual
+        if not df_log.empty and 'ID_Ticket' in df_log.columns:
+            tickets_ano = df_log[df_log['ID_Ticket'].str.contains(f'TKT-{ano_atual}', na=False)]
+            if not tickets_ano.empty:
+                # Pegar último número
+                ultimos_numeros = tickets_ano['ID_Ticket'].str.extract(r'TKT-\d{4}-(\d{5})')[0].astype(int)
+                proximo_numero = ultimos_numeros.max() + 1
+            else:
+                proximo_numero = 1
+        else:
+            proximo_numero = 1
+        
+        # Formatar com 5 dígitos
+        id_ticket = f"TKT-{ano_atual}-{proximo_numero:05d}"
+        return id_ticket
+        
+    except Exception as e:
+        st.error(f"Erro ao gerar ID: {e}")
+        return f"TKT-{datetime.now().year}-00001"
+
+
+def registrar_ticket_log_aberto(id_ticket, dados_ticket, aberto_por):
+    """Registra ticket na aba LOG_TICKETS_ABERTOS"""
+    try:
+        conn = get_gsheets_connection()
+        df_log = conn.read(worksheet="LOG_TICKETS_ABERTOS", ttl=0)
+        
+        agora = datetime.now()
+        dias_semana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+        
+        nova_linha = {
+            'ID_Ticket': id_ticket,
+            'Data_Abertura': agora.strftime('%d/%m/%Y'),
+            'Hora_Abertura': agora.strftime('%H:%M:%S'),
+            'Nome_Cliente': dados_ticket.get('Nome', ''),
+            'Telefone': dados_ticket.get('Telefone', ''),
+            'Classificacao_Cliente': dados_ticket.get('Classificacao', ''),
+            'Tipo_Problema': dados_ticket.get('Tipo_Problema', ''),
+            'Prioridade': dados_ticket.get('Prioridade', ''),
+            'Descricao_Resumida': dados_ticket.get('Descricao', ''),
+            'Aberto_Por': aberto_por,
+            'Dia_Semana': dias_semana[agora.weekday()]
+        }
+        
+        df_novo = pd.concat([df_log, pd.DataFrame([nova_linha])], ignore_index=True)
+        conn.update(worksheet="LOG_TICKETS_ABERTOS", data=df_novo)
+        return True
+        
+    except Exception as e:
+        st.error(f"Erro ao registrar no log de abertos: {e}")
+        return False
+
+
+def registrar_ticket_log_resolvido(id_ticket, dados_resolucao, resolvido_por):
+    """Registra ticket resolvido na aba LOG_TICKETS_RESOLVIDOS"""
+    try:
+        conn = get_gsheets_connection()
+        
+        # Buscar dados originais do ticket no LOG_ABERTOS
+        df_log_abertos = conn.read(worksheet="LOG_TICKETS_ABERTOS", ttl=0)
+        ticket_original = df_log_abertos[df_log_abertos['ID_Ticket'] == id_ticket]
+        
+        if ticket_original.empty:
+            st.warning(f"Ticket {id_ticket} não encontrado no log de abertos")
+            return False
+        
+        ticket_orig = ticket_original.iloc[0]
+        
+        # Calcular tempo de resolução
+        data_abertura_str = ticket_orig.get('Data_Abertura', '')
+        hora_abertura_str = ticket_orig.get('Hora_Abertura', '')
+        
+        try:
+            data_hora_abertura = datetime.strptime(f"{data_abertura_str} {hora_abertura_str}", '%d/%m/%Y %H:%M:%S')
+            data_hora_resolucao = datetime.now()
+            tempo_resolucao = (data_hora_resolucao - data_hora_abertura).total_seconds() / 3600  # em horas
+        except:
+            tempo_resolucao = 0
+        
+        # Registrar em LOG_TICKETS_RESOLVIDOS
+        df_log_resolvidos = conn.read(worksheet="LOG_TICKETS_RESOLVIDOS", ttl=0)
+        
+        nova_linha = {
+            'ID_Ticket': id_ticket,
+            'Data_Abertura': ticket_orig.get('Data_Abertura', ''),
+            'Data_Resolucao': datetime.now().strftime('%d/%m/%Y'),
+            'Tempo_Resolucao_Horas': round(tempo_resolucao, 2),
+            'Nome_Cliente': ticket_orig.get('Nome_Cliente', ''),
+            'Telefone': ticket_orig.get('Telefone', ''),
+            'Tipo_Problema': ticket_orig.get('Tipo_Problema', ''),
+            'Prioridade': ticket_orig.get('Prioridade', ''),
+            'Como_Foi_Resolvido': dados_resolucao.get('Solucao', ''),
+            'Resultado_Final': dados_resolucao.get('Resultado', ''),
+            'Gerou_Conversao': dados_resolucao.get('Conversao', 'Não'),
+            'Resolvido_Por': resolvido_por
+        }
+        
+        df_novo = pd.concat([df_log_resolvidos, pd.DataFrame([nova_linha])], ignore_index=True)
+        conn.update(worksheet="LOG_TICKETS_RESOLVIDOS", data=df_novo)
+        return True
+        
+    except Exception as e:
+        st.error(f"Erro ao registrar no log de resolvidos: {e}")
+        return False
 
 
 
@@ -963,126 +1075,6 @@ def render_em_atendimento():
         st.markdown("---")
 
 
-# ============================================================================
-# RENDER - PÁGINA SUPORTE
-# ============================================================================
-
-# ============================================================================
-# FUNÇÃO AUXILIAR - GERAR ID DE TICKET
-# ============================================================================
-
-def gerar_id_ticket():
-    """Gera ID único no formato TKT-2025-00014"""
-    try:
-        conn = get_gsheets_connection()
-        df_log = conn.read(worksheet="LOG_TICKETS_ABERTOS", ttl=0)
-        
-        ano_atual = datetime.now().year
-        
-        # Filtrar tickets do ano atual
-        if not df_log.empty and 'ID_Ticket' in df_log.columns:
-            tickets_ano = df_log[df_log['ID_Ticket'].str.contains(f'TKT-{ano_atual}', na=False)]
-            if not tickets_ano.empty:
-                # Pegar último número
-                ultimos_numeros = tickets_ano['ID_Ticket'].str.extract(r'TKT-\d{4}-(\d{5})')[0].astype(int)
-                proximo_numero = ultimos_numeros.max() + 1
-            else:
-                proximo_numero = 1
-        else:
-            proximo_numero = 1
-        
-        # Formatar com 5 dígitos
-        id_ticket = f"TKT-{ano_atual}-{proximo_numero:05d}"
-        return id_ticket
-        
-    except Exception as e:
-        st.error(f"Erro ao gerar ID: {e}")
-        return f"TKT-{datetime.now().year}-00001"
-
-
-def registrar_ticket_log_aberto(id_ticket, dados_ticket, aberto_por):
-    """Registra ticket na aba LOG_TICKETS_ABERTOS"""
-    try:
-        conn = get_gsheets_connection()
-        df_log = conn.read(worksheet="LOG_TICKETS_ABERTOS", ttl=0)
-        
-        agora = datetime.now()
-        dias_semana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
-        
-        nova_linha = {
-            'ID_Ticket': id_ticket,
-            'Data_Abertura': agora.strftime('%d/%m/%Y'),
-            'Hora_Abertura': agora.strftime('%H:%M:%S'),
-            'Nome_Cliente': dados_ticket.get('Nome', ''),
-            'Telefone': dados_ticket.get('Telefone', ''),
-            'Classificacao_Cliente': dados_ticket.get('Classificacao', ''),
-            'Tipo_Problema': dados_ticket.get('Tipo_Problema', ''),
-            'Prioridade': dados_ticket.get('Prioridade', ''),
-            'Descricao_Resumida': dados_ticket.get('Descricao', ''),
-            'Aberto_Por': aberto_por,
-            'Dia_Semana': dias_semana[agora.weekday()]
-        }
-        
-        df_novo = pd.concat([df_log, pd.DataFrame([nova_linha])], ignore_index=True)
-        conn.update(worksheet="LOG_TICKETS_ABERTOS", data=df_novo)
-        return True
-        
-    except Exception as e:
-        st.error(f"Erro ao registrar no log de abertos: {e}")
-        return False
-
-
-def registrar_ticket_log_resolvido(id_ticket, dados_resolucao, resolvido_por):
-    """Registra ticket resolvido na aba LOG_TICKETS_RESOLVIDOS"""
-    try:
-        conn = get_gsheets_connection()
-        
-        # Buscar dados originais do ticket no LOG_ABERTOS
-        df_log_abertos = conn.read(worksheet="LOG_TICKETS_ABERTOS", ttl=0)
-        ticket_original = df_log_abertos[df_log_abertos['ID_Ticket'] == id_ticket]
-        
-        if ticket_original.empty:
-            st.warning(f"Ticket {id_ticket} não encontrado no log de abertos")
-            return False
-        
-        ticket_orig = ticket_original.iloc[0]
-        
-        # Calcular tempo de resolução
-        data_abertura_str = ticket_orig.get('Data_Abertura', '')
-        hora_abertura_str = ticket_orig.get('Hora_Abertura', '')
-        
-        try:
-            data_hora_abertura = datetime.strptime(f"{data_abertura_str} {hora_abertura_str}", '%d/%m/%Y %H:%M:%S')
-            data_hora_resolucao = datetime.now()
-            tempo_resolucao = (data_hora_resolucao - data_hora_abertura).total_seconds() / 3600  # em horas
-        except:
-            tempo_resolucao = 0
-        
-        # Registrar em LOG_TICKETS_RESOLVIDOS
-        df_log_resolvidos = conn.read(worksheet="LOG_TICKETS_RESOLVIDOS", ttl=0)
-        
-        nova_linha = {
-            'ID_Ticket': id_ticket,
-            'Data_Abertura': ticket_orig.get('Data_Abertura', ''),
-            'Data_Resolucao': datetime.now().strftime('%d/%m/%Y'),
-            'Tempo_Resolucao_Horas': round(tempo_resolucao, 2),
-            'Nome_Cliente': ticket_orig.get('Nome_Cliente', ''),
-            'Telefone': ticket_orig.get('Telefone', ''),
-            'Tipo_Problema': ticket_orig.get('Tipo_Problema', ''),
-            'Prioridade': ticket_orig.get('Prioridade', ''),
-            'Como_Foi_Resolvido': dados_resolucao.get('Solucao', ''),
-            'Resultado_Final': dados_resolucao.get('Resultado', ''),
-            'Gerou_Conversao': dados_resolucao.get('Conversao', 'Não'),
-            'Resolvido_Por': resolvido_por
-        }
-        
-        df_novo = pd.concat([df_log_resolvidos, pd.DataFrame([nova_linha])], ignore_index=True)
-        conn.update(worksheet="LOG_TICKETS_RESOLVIDOS", data=df_novo)
-        return True
-        
-    except Exception as e:
-        st.error(f"Erro ao registrar no log de resolvidos: {e}")
-        return False
 
 
 # ============================================================================
