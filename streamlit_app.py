@@ -1082,9 +1082,9 @@ def render_em_atendimento():
 # ============================================================================
 
 def render_suporte():
-    """Renderiza a página de Suporte - Gestão de Tickets com Busca Unificada"""
+    """Renderiza a pÃ¡gina de Suporte - GestÃ£o de Tickets com Busca Unificada"""
     
-    st.title("🆘 Suporte ao Cliente")
+    st.title("ðŸ†˜ Suporte ao Cliente")
     st.markdown("Gerencie tickets de suporte com acompanhamento personalizado")
     st.markdown("---")
     
@@ -1095,34 +1095,34 @@ def render_suporte():
     if 'mostrar_form_novo' not in st.session_state:
         st.session_state.mostrar_form_novo = False
     
-    # ========== BARRA DE BUSCA E CRIAÇÃO ==========
-    st.subheader("🔍 Buscar Ticket ou Criar Novo")
+    # ========== BARRA DE BUSCA E CRIAÃ‡ÃƒO ==========
+    st.subheader("ðŸ” Buscar Ticket ou Criar Novo")
     
     col_busca1, col_busca2, col_busca3 = st.columns([3, 1, 1])
     
     with col_busca1:
         termo_busca = st.text_input(
             "Digite o ID do Ticket, Nome ou Telefone do cliente",
-            placeholder="Ex: TKT-2025-00014 ou João Silva ou 11 99999-9999",
+            placeholder="Ex: TKT-2025-00014 ou JoÃ£o Silva ou 11 99999-9999",
             help="Busca por ID, nome ou telefone em todos os tickets",
             key="busca_ticket"
         )
     
     with col_busca2:
-        btn_buscar = st.button("🔍 Buscar", type="primary", use_container_width=True)
+        btn_buscar = st.button("ðŸ” Buscar", type="primary", use_container_width=True)
     
     with col_busca3:
-        btn_novo_ticket = st.button("➕ Novo Ticket", type="secondary", use_container_width=True)
+        btn_novo_ticket = st.button("âž• Novo Ticket", type="secondary", use_container_width=True)
     
     st.markdown("---")
     
-    # ========== FORMULÁRIO: CRIAR NOVO TICKET ==========
+    # ========== FORMULÃRIO: CRIAR NOVO TICKET ==========
     if btn_novo_ticket:
         st.session_state.mostrar_form_novo = True
         st.session_state.ticket_encontrado = None
     
     if st.session_state.mostrar_form_novo:
-        st.subheader("🎫 Abrir Novo Ticket de Suporte")
+        st.subheader("ðŸŽ« Abrir Novo Ticket de Suporte")
         
         with st.form(key="form_novo_ticket_suporte"):
             
@@ -1130,41 +1130,41 @@ def render_suporte():
             
             with col_form1:
                 nome_cliente_novo = st.text_input(
-                    "👤 Nome do Cliente *",
+                    "ðŸ‘¤ Nome do Cliente *",
                     placeholder="Nome completo do cliente"
                 )
                 
                 telefone_cliente_novo = st.text_input(
-                    "📱 Telefone *",
+                    "ðŸ“± Telefone *",
                     placeholder="Ex: 11 99999-9999"
                 )
                 
                 classificacao_novo = st.selectbox(
-                    "🏷️ Classificação do Cliente",
-                    ["Novo", "Promissor", "Leal", "Campeão", "Em risco", "Dormente", "Não classificado"]
+                    "ðŸ·ï¸ ClassificaÃ§Ã£o do Cliente",
+                    ["Novo", "Promissor", "Leal", "CampeÃ£o", "Em risco", "Dormente", "NÃ£o classificado"]
                 )
             
             with col_form2:
                 tipo_problema = st.selectbox(
-                    "🔧 Tipo de Problema *",
-                    ["Defeito no Produto", "Problema na Entrega", "Dúvida Técnica", 
-                     "Reclamação de Atendimento", "Pedido de Reembolso", 
-                     "Solicitação de Troca", "Outros"]
+                    "ðŸ”§ Tipo de Problema *",
+                    ["Defeito no Produto", "Problema na Entrega", "DÃºvida TÃ©cnica", 
+                     "ReclamaÃ§Ã£o de Atendimento", "Pedido de Reembolso", 
+                     "SolicitaÃ§Ã£o de Troca", "Outros"]
                 )
                 
                 prioridade_novo = st.selectbox(
-                    "⚠️ Prioridade *",
-                    ["Baixa", "Média", "Alta", "Urgente"]
+                    "âš ï¸ Prioridade *",
+                    ["Baixa", "MÃ©dia", "Alta", "Urgente"]
                 )
                 
                 aberto_por = st.text_input(
-                    "👨‍💼 Aberto Por",
+                    "ðŸ‘¨â€ðŸ’¼ Aberto Por",
                     placeholder="Seu nome",
                     value="Sistema CRM"
                 )
             
             descricao_problema_novo = st.text_area(
-                "📝 Descrição Completa do Problema *",
+                "ðŸ“ DescriÃ§Ã£o Completa do Problema *",
                 height=150,
                 placeholder="Descreva detalhadamente o problema relatado pelo cliente..."
             )
@@ -1175,37 +1175,37 @@ def render_suporte():
             
             with col_btn_form1:
                 btn_criar_ticket = st.form_submit_button(
-                    "✅ Criar Ticket de Suporte",
+                    "âœ… Criar Ticket de Suporte",
                     type="primary",
                     use_container_width=True
                 )
             
             with col_btn_form2:
                 btn_cancelar_form = st.form_submit_button(
-                    "❌ Cancelar",
+                    "âŒ Cancelar",
                     use_container_width=True
                 )
             
-            # ========== AÇÃO: CANCELAR ==========
+            # ========== AÃ‡ÃƒO: CANCELAR ==========
             if btn_cancelar_form:
                 st.session_state.mostrar_form_novo = False
                 st.rerun()
             
-            # ========== AÇÃO: CRIAR TICKET ==========
+            # ========== AÃ‡ÃƒO: CRIAR TICKET ==========
             if btn_criar_ticket:
-                # Validações
+                # ValidaÃ§Ãµes
                 if not nome_cliente_novo:
-                    st.error("❌ Preencha o nome do cliente!")
+                    st.error("âŒ Preencha o nome do cliente!")
                 elif not telefone_cliente_novo:
-                    st.error("❌ Preencha o telefone do cliente!")
+                    st.error("âŒ Preencha o telefone do cliente!")
                 elif not descricao_problema_novo:
-                    st.error("❌ Descreva o problema!")
+                    st.error("âŒ Descreva o problema!")
                 else:
                     with st.spinner("Criando ticket..."):
                         try:
                             conn = get_gsheets_connection()
                             
-                            # 1. Gerar ID único
+                            # 1. Gerar ID Ãºnico
                             id_ticket = gerar_id_ticket()
                             
                             # 2. Adicionar na aba SUPORTE
@@ -1215,15 +1215,15 @@ def render_suporte():
                                 'ID_Ticket': id_ticket,
                                 'Nome': nome_cliente_novo,
                                 'Telefone': telefone_cliente_novo,
-                                'Classificação': classificacao_novo,
+                                'ClassificaÃ§Ã£o': classificacao_novo,
                                 'Tipo_Problema': tipo_problema,
                                 'Prioridade': prioridade_novo,
-                                'Descrição do problema': descricao_problema_novo,
+                                'DescriÃ§Ã£o do problema': descricao_problema_novo,
                                 'Data de abertura': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                                'Último contato': '',
-                                'Próximo contato': '',
+                                'Ãšltimo contato': '',
+                                'PrÃ³ximo contato': '',
                                 'Progresso': 0,
-                                'Observações': f'Ticket criado via CRM por {aberto_por}'
+                                'ObservaÃ§Ãµes': f'Ticket criado via CRM por {aberto_por}'
                             }
                             
                             df_suporte_novo = pd.concat([df_suporte, pd.DataFrame([novo_ticket_suporte])], ignore_index=True)
@@ -1243,19 +1243,19 @@ def render_suporte():
                             
                             # Limpar cache e recarregar
                             carregar_dados.clear()
-                            st.success(f"✅ Ticket **{id_ticket}** criado com sucesso!")
+                            st.success(f"âœ… Ticket **{id_ticket}** criado com sucesso!")
                             st.balloons()
                             
-                            # Limpar formulário
+                            # Limpar formulÃ¡rio
                             st.session_state.mostrar_form_novo = False
                             time.sleep(2)
                             st.rerun()
                             
                         except Exception as e:
-                            st.error(f"❌ Erro ao criar ticket: {e}")
+                            st.error(f"âŒ Erro ao criar ticket: {e}")
         
         st.markdown("---")
-        return  # Retorna para não mostrar a lista enquanto está criando
+        return  # Retorna para nÃ£o mostrar a lista enquanto estÃ¡ criando
     
     # ========== REALIZAR BUSCA ==========
     if btn_buscar and termo_busca:
@@ -1265,7 +1265,7 @@ def render_suporte():
                 df_suporte = conn.read(worksheet="SUPORTE", ttl=0)
                 
                 if df_suporte.empty:
-                    st.warning("⚠️ Nenhum ticket encontrado no sistema")
+                    st.warning("âš ï¸ Nenhum ticket encontrado no sistema")
                     st.session_state.ticket_encontrado = None
                 else:
                     termo_limpo = termo_busca.strip()
@@ -1279,7 +1279,7 @@ def render_suporte():
                         if not resultado_id.empty:
                             resultado = resultado_id.iloc[0]
                     
-                    # Se não encontrou por ID, buscar por telefone
+                    # Se nÃ£o encontrou por ID, buscar por telefone
                     if resultado is None and 'Telefone' in df_suporte.columns:
                         df_suporte['Telefone_Limpo'] = df_suporte['Telefone'].apply(limpar_telefone)
                         mask_tel = df_suporte['Telefone_Limpo'].str.contains(telefone_limpo, case=False, na=False, regex=False)
@@ -1287,7 +1287,7 @@ def render_suporte():
                         if not resultado_tel.empty:
                             resultado = resultado_tel.iloc[0]
                     
-                    # Se não encontrou, buscar por nome
+                    # Se nÃ£o encontrou, buscar por nome
                     if resultado is None and 'Nome' in df_suporte.columns:
                         mask_nome = df_suporte['Nome'].astype(str).str.contains(termo_limpo, case=False, na=False)
                         resultado_nome = df_suporte[mask_nome]
@@ -1297,44 +1297,44 @@ def render_suporte():
                     if resultado is not None:
                         st.session_state.ticket_encontrado = resultado.to_dict()
                     else:
-                        st.warning(f"⚠️ Nenhum ticket encontrado para: {termo_busca}")
+                        st.warning(f"âš ï¸ Nenhum ticket encontrado para: {termo_busca}")
                         st.session_state.ticket_encontrado = None
                         
             except Exception as e:
-                st.error(f"❌ Erro na busca: {e}")
+                st.error(f"âŒ Erro na busca: {e}")
                 st.session_state.ticket_encontrado = None
     
     elif btn_buscar and not termo_busca:
-        st.warning("⚠️ Digite um ID, nome ou telefone para buscar")
+        st.warning("âš ï¸ Digite um ID, nome ou telefone para buscar")
     
-    # ========== EXIBIR TICKET ENCONTRADO (VISÃO DETALHADA) ==========
+    # ========== EXIBIR TICKET ENCONTRADO (VISÃƒO DETALHADA) ==========
     if st.session_state.ticket_encontrado is not None:
         ticket = st.session_state.ticket_encontrado
         
         id_ticket = ticket.get('ID_Ticket', 'N/D')
         nome_cliente = ticket.get('Nome', 'N/D')
-        prioridade = ticket.get('Prioridade', 'Média')
+        prioridade = ticket.get('Prioridade', 'MÃ©dia')
         
-        # Ícone de prioridade
+        # Ãcone de prioridade
         icones_prioridade = {
-            'Urgente': '🔴',
-            'Alta': '🟠',
-            'Média': '🟡',
-            'Baixa': '🟢'
+            'Urgente': 'ðŸ”´',
+            'Alta': 'ðŸŸ ',
+            'MÃ©dia': 'ðŸŸ¡',
+            'Baixa': 'ðŸŸ¢'
         }
-        icone = icones_prioridade.get(prioridade, '⚪')
+        icone = icones_prioridade.get(prioridade, 'âšª')
         
-        st.success(f"✅ Ticket encontrado: **{id_ticket}** - {nome_cliente}")
+        st.success(f"âœ… Ticket encontrado: **{id_ticket}** - {nome_cliente}")
         
-        # Botão para voltar à lista
-        if st.button("⬅️ Voltar para Lista de Tickets", key="voltar_lista"):
+        # BotÃ£o para voltar Ã  lista
+        if st.button("â¬…ï¸ Voltar para Lista de Tickets", key="voltar_lista"):
             st.session_state.ticket_encontrado = None
             st.rerun()
         
         st.markdown("---")
         
-        # ========== BUSCAR HISTÓRICO COMPLETO DO CLIENTE ==========
-        st.subheader(f"📋 Histórico Completo do Ticket {id_ticket}")
+        # ========== BUSCAR HISTÃ“RICO COMPLETO DO CLIENTE ==========
+        st.subheader(f"ðŸ“‹ HistÃ³rico Completo do Ticket {id_ticket}")
         
         try:
             conn = get_gsheets_connection()
@@ -1362,21 +1362,21 @@ def render_suporte():
             col_resumo1, col_resumo2, col_resumo3 = st.columns(3)
             
             with col_resumo1:
-                st.metric("🎫 Total de Tickets", len(historico_tickets), help="Tickets abertos por este cliente")
+                st.metric("ðŸŽ« Total de Tickets", len(historico_tickets), help="Tickets abertos por este cliente")
             
             with col_resumo2:
                 tickets_abertos = len([t for t in historico_tickets if float(t.get('Progresso', 0) or 0) < 100])
-                st.metric("⏳ Em Aberto", tickets_abertos)
+                st.metric("â³ Em Aberto", tickets_abertos)
             
             with col_resumo3:
                 tickets_resolvidos = len([t for t in historico_tickets if float(t.get('Progresso', 0) or 0) >= 100])
-                st.metric("✅ Resolvidos", tickets_resolvidos)
+                st.metric("âœ… Resolvidos", tickets_resolvidos)
             
             st.markdown("---")
             
-            # ========== CARDS DE HISTÓRICO ==========
+            # ========== CARDS DE HISTÃ“RICO ==========
             if historico_tickets:
-                st.subheader(f"📚 Histórico de Tickets ({len(historico_tickets)})")
+                st.subheader(f"ðŸ“š HistÃ³rico de Tickets ({len(historico_tickets)})")
                 
                 # Ordenar por data de abertura (mais recente primeiro)
                 historico_tickets_ordenado = sorted(
@@ -1387,9 +1387,9 @@ def render_suporte():
                 
                 for hist_ticket in historico_tickets_ordenado:
                     id_hist = hist_ticket.get('ID_Ticket', 'N/D')
-                    prioridade_hist = hist_ticket.get('Prioridade', 'Média')
+                    prioridade_hist = hist_ticket.get('Prioridade', 'MÃ©dia')
                     progresso_hist = hist_ticket.get('Progresso', 0)
-                    icone_hist = icones_prioridade.get(prioridade_hist, '⚪')
+                    icone_hist = icones_prioridade.get(prioridade_hist, 'âšª')
                     
                     # Badge de status
                     try:
@@ -1398,11 +1398,11 @@ def render_suporte():
                         prog_valor = 0
                     
                     if prog_valor >= 100:
-                        badge_status = "✅ RESOLVIDO"
+                        badge_status = "âœ… RESOLVIDO"
                     elif prog_valor >= 50:
-                        badge_status = "🔄 EM ANDAMENTO"
+                        badge_status = "ðŸ”„ EM ANDAMENTO"
                     else:
-                        badge_status = "🆕 ABERTO"
+                        badge_status = "ðŸ†• ABERTO"
                     
                     titulo_card_hist = f"{badge_status} | {icone_hist} {id_hist} | {prioridade_hist} | {prog_valor}%"
                     
@@ -1412,21 +1412,21 @@ def render_suporte():
                     with st.expander(titulo_card_hist, expanded=expandir):
                         col_esq_hist, col_dir_hist = st.columns([1, 1])
                         
-                        # ========== COLUNA ESQUERDA: INFORMAÇÕES DO TICKET ==========
+                        # ========== COLUNA ESQUERDA: INFORMAÃ‡Ã•ES DO TICKET ==========
                         with col_esq_hist:
-                            st.markdown("### 📋 Dados do Ticket")
+                            st.markdown("### ðŸ“‹ Dados do Ticket")
                             
-                            st.write(f"**🎫 ID:** {id_hist}")
-                            st.write(f"**👤 Nome:** {hist_ticket.get('Nome', 'N/D')}")
-                            st.write(f"**📱 Telefone:** {hist_ticket.get('Telefone', 'N/D')}")
-                            st.write(f"**🏷️ Classificação:** {hist_ticket.get('Classificação', 'N/D')}")
-                            st.write(f"**🔧 Tipo:** {hist_ticket.get('Tipo_Problema', 'N/D')}")
+                            st.write(f"**ðŸŽ« ID:** {id_hist}")
+                            st.write(f"**ðŸ‘¤ Nome:** {hist_ticket.get('Nome', 'N/D')}")
+                            st.write(f"**ðŸ“± Telefone:** {hist_ticket.get('Telefone', 'N/D')}")
+                            st.write(f"**ðŸ·ï¸ ClassificaÃ§Ã£o:** {hist_ticket.get('ClassificaÃ§Ã£o', 'N/D')}")
+                            st.write(f"**ðŸ”§ Tipo:** {hist_ticket.get('Tipo_Problema', 'N/D')}")
                             st.write(f"**{icone_hist} Prioridade:** {prioridade_hist}")
                             
                             st.markdown("---")
                             
                             # Barra de progresso - CORRIGIDO
-                            st.markdown("### 📊 Progresso")
+                            st.markdown("### ðŸ“Š Progresso")
                             
                             try:
                                 progresso_valor = float(progresso_hist) if progresso_hist else 0
@@ -1435,104 +1435,104 @@ def render_suporte():
                                 progresso_decimal = 0.0
                             
                             st.progress(progresso_decimal)
-                            st.write(f"**{prog_valor}% concluído**")
+                            st.write(f"**{prog_valor}% concluÃ­do**")
                             
                             # Labels de progresso
                             if prog_valor == 0:
-                                st.info("🆕 Ticket aberto - Aguardando primeiro contato")
+                                st.info("ðŸ†• Ticket aberto - Aguardando primeiro contato")
                             elif prog_valor == 25:
-                                st.info("📞 Primeiro contato realizado")
+                                st.info("ðŸ“ž Primeiro contato realizado")
                             elif prog_valor == 50:
-                                st.warning("🔄 Em andamento - Acompanhamento ativo")
+                                st.warning("ðŸ”„ Em andamento - Acompanhamento ativo")
                             elif prog_valor == 75:
-                                st.success("✨ Quase concluído - Finalizando")
+                                st.success("âœ¨ Quase concluÃ­do - Finalizando")
                             elif prog_valor >= 100:
-                                st.success("✅ Pronto para finalizar")
+                                st.success("âœ… Pronto para finalizar")
                             
                             st.markdown("---")
                             
-                            # Descrição do problema
-                            st.markdown("### 🔍 Descrição do Problema")
+                            # DescriÃ§Ã£o do problema
+                            st.markdown("### ðŸ” DescriÃ§Ã£o do Problema")
                             
-                            descricao_hist_raw = hist_ticket.get('Descrição do problema', '')
+                            descricao_hist_raw = hist_ticket.get('DescriÃ§Ã£o do problema', '')
                             descricao_hist = str(descricao_hist_raw) if descricao_hist_raw else ''
                             if descricao_hist and descricao_hist.strip():
                                 st.error(f"**Problema relatado:**\n\n{descricao_hist}")
                             else:
-                                st.caption("_Sem descrição registrada_")
+                                st.caption("_Sem descriÃ§Ã£o registrada_")
                             
                             st.markdown("---")
                             
-                            # Histórico de acompanhamento
-                            st.markdown("### 📝 Histórico")
+                            # HistÃ³rico de acompanhamento
+                            st.markdown("### ðŸ“ HistÃ³rico")
                             
                             data_abertura_hist = hist_ticket.get('Data de abertura', 'N/D')
-                            st.write(f"**📅 Aberto em:** {data_abertura_hist}")
+                            st.write(f"**ðŸ“… Aberto em:** {data_abertura_hist}")
                             
-                            ultimo_contato_hist = str(hist_ticket.get('Último contato', '')) if hist_ticket.get('Último contato') else ''
+                            ultimo_contato_hist = str(hist_ticket.get('Ãšltimo contato', '')) if hist_ticket.get('Ãšltimo contato') else ''
                             if ultimo_contato_hist and ultimo_contato_hist.strip():
-                                st.info(f"**Último acompanhamento:**\n\n{ultimo_contato_hist}")
+                                st.info(f"**Ãšltimo acompanhamento:**\n\n{ultimo_contato_hist}")
                             else:
                                 st.caption("_Nenhum acompanhamento registrado ainda_")
                             
-                            proximo_contato_hist = str(hist_ticket.get('Próximo contato', '')) if hist_ticket.get('Próximo contato') else ''
+                            proximo_contato_hist = str(hist_ticket.get('PrÃ³ximo contato', '')) if hist_ticket.get('PrÃ³ximo contato') else ''
                             if proximo_contato_hist and proximo_contato_hist.strip():
                                 hoje_str = datetime.now().strftime('%d/%m/%Y')
                                 if proximo_contato_hist == hoje_str:
-                                    st.success(f"**📅 Próximo contato:** {proximo_contato_hist} ✅ HOJE")
+                                    st.success(f"**ðŸ“… PrÃ³ximo contato:** {proximo_contato_hist} âœ… HOJE")
                                 else:
-                                    st.info(f"**📅 Próximo contato:** {proximo_contato_hist}")
+                                    st.info(f"**ðŸ“… PrÃ³ximo contato:** {proximo_contato_hist}")
                             
-                            obs_hist = str(hist_ticket.get('Observações', '')) if hist_ticket.get('Observações') else ''
+                            obs_hist = str(hist_ticket.get('ObservaÃ§Ãµes', '')) if hist_ticket.get('ObservaÃ§Ãµes') else ''
                             if obs_hist and obs_hist.strip():
-                                st.info(f"**💬 Observações:** {obs_hist}")
+                                st.info(f"**ðŸ’¬ ObservaÃ§Ãµes:** {obs_hist}")
                         
                         # ========== COLUNA DIREITA: ATUALIZAR TICKET (APENAS SE FOR O ATUAL) ==========
                         with col_dir_hist:
                             if id_hist == id_ticket:
-                                st.markdown("### ✏️ Registrar Acompanhamento")
+                                st.markdown("### âœï¸ Registrar Acompanhamento")
                                 
-                                # Obter índice real do DataFrame
+                                # Obter Ã­ndice real do DataFrame
                                 df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
                                 idx_real = df_suporte_atual[df_suporte_atual['ID_Ticket'] == id_ticket].index[0]
                                 
                                 with st.form(key=f"form_atualizar_{id_ticket}"):
                                     
-                                    st.info("💡 Registre o acompanhamento e atualize o status")
+                                    st.info("ðŸ’¡ Registre o acompanhamento e atualize o status")
                                     
                                     novo_acompanhamento = st.text_area(
-                                        "📝 Como foi o contato de hoje?",
+                                        "ðŸ“ Como foi o contato de hoje?",
                                         height=120,
                                         placeholder="Descreva o que foi conversado...",
                                         help="Registre o acompanhamento realizado"
                                     )
                                     
                                     nova_data_contato = st.date_input(
-                                        "📅 Próximo Contato:",
+                                        "ðŸ“… PrÃ³ximo Contato:",
                                         value=None,
-                                        help="Quando será o próximo acompanhamento?"
+                                        help="Quando serÃ¡ o prÃ³ximo acompanhamento?"
                                     )
                                     
                                     novo_progresso = st.selectbox(
-                                        "📊 Atualizar Progresso:",
+                                        "ðŸ“Š Atualizar Progresso:",
                                         [0, 25, 50, 75, 100],
                                         index=[0, 25, 50, 75, 100].index(int(prog_valor)) if int(prog_valor) in [0, 25, 50, 75, 100] else 0,
-                                        help="Atualize o percentual de conclusão"
+                                        help="Atualize o percentual de conclusÃ£o"
                                     )
                                     
                                     st.caption("""
-                                    **Níveis de progresso:**
+                                    **NÃ­veis de progresso:**
                                     - 0% = Ticket aberto
                                     - 25% = Primeiro contato
                                     - 50% = Em andamento
-                                    - 75% = Quase concluído
+                                    - 75% = Quase concluÃ­do
                                     - 100% = Pronto para finalizar
                                     """)
                                     
                                     novas_obs = st.text_area(
-                                        "💬 Observações:",
+                                        "ðŸ’¬ ObservaÃ§Ãµes:",
                                         height=60,
-                                        placeholder="Informações extras..."
+                                        placeholder="InformaÃ§Ãµes extras..."
                                     )
                                     
                                     st.markdown("---")
@@ -1541,74 +1541,74 @@ def render_suporte():
                                     
                                     with col_btn1:
                                         btn_atualizar = st.form_submit_button(
-                                            "✅ Atualizar",
+                                            "âœ… Atualizar",
                                             type="primary",
                                             use_container_width=True
                                         )
                                     
                                     with col_btn2:
                                         btn_finalizar = st.form_submit_button(
-                                            "🎉 Finalizar",
+                                            "ðŸŽ‰ Finalizar",
                                             type="secondary",
                                             use_container_width=True
                                         )
                                     
-                                    # ========== AÇÃO: ATUALIZAR ==========
+                                    # ========== AÃ‡ÃƒO: ATUALIZAR ==========
                                     if btn_atualizar:
                                         if not novo_acompanhamento:
-                                            st.error("❌ Preencha como foi o contato!")
+                                            st.error("âŒ Preencha como foi o contato!")
                                         elif not nova_data_contato:
-                                            st.error("❌ Selecione a data do próximo contato!")
+                                            st.error("âŒ Selecione a data do prÃ³ximo contato!")
                                         else:
                                             with st.spinner("Atualizando..."):
                                                 try:
                                                     df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
                                                     
-                                                    df_suporte_atual.at[idx_real, 'Último contato'] = novo_acompanhamento
-                                                    df_suporte_atual.at[idx_real, 'Próximo contato'] = nova_data_contato.strftime('%d/%m/%Y')
+                                                    df_suporte_atual.at[idx_real, 'Ãšltimo contato'] = novo_acompanhamento
+                                                    df_suporte_atual.at[idx_real, 'PrÃ³ximo contato'] = nova_data_contato.strftime('%d/%m/%Y')
                                                     df_suporte_atual.at[idx_real, 'Progresso'] = novo_progresso
                                                     if novas_obs:
-                                                        df_suporte_atual.at[idx_real, 'Observações'] = novas_obs
+                                                        df_suporte_atual.at[idx_real, 'ObservaÃ§Ãµes'] = novas_obs
                                                     
                                                     conn.update(worksheet="SUPORTE", data=df_suporte_atual)
                                                     carregar_dados.clear()
                                                     
-                                                    st.success(f"✅ Ticket atualizado! Progresso: {novo_progresso}%")
+                                                    st.success(f"âœ… Ticket atualizado! Progresso: {novo_progresso}%")
                                                     time.sleep(1)
                                                     st.rerun()
                                                     
                                                 except Exception as e:
-                                                    st.error(f"❌ Erro: {e}")
+                                                    st.error(f"âŒ Erro: {e}")
                                     
-                                    # ========== AÇÃO: FINALIZAR ==========
+                                    # ========== AÃ‡ÃƒO: FINALIZAR ==========
                                     if btn_finalizar:
                                         if novo_progresso < 100:
-                                            st.warning("⚠️ Recomendamos marcar como 100% antes de finalizar")
+                                            st.warning("âš ï¸ Recomendamos marcar como 100% antes de finalizar")
                                         
                                         st.session_state[f'finalizar_{id_ticket}'] = True
                                 
-                                # Campos de finalização fora do form
+                                # Campos de finalizaÃ§Ã£o fora do form
                                 if st.session_state.get(f'finalizar_{id_ticket}', False):
                                     st.markdown("---")
-                                    st.markdown("### 📝 Informações de Finalização")
+                                    st.markdown("### ðŸ“ InformaÃ§Ãµes de FinalizaÃ§Ã£o")
                                     
                                     with st.form(key=f"form_finalizar_{id_ticket}"):
                                         solucao_final = st.text_area(
                                             "Como foi resolvido? *",
                                             height=100,
-                                            placeholder="Descreva a solução aplicada..."
+                                            placeholder="Descreva a soluÃ§Ã£o aplicada..."
                                         )
                                         
                                         resultado_final = st.selectbox(
                                             "Resultado Final *",
                                             ["Problema Resolvido", "Cliente Satisfeito", 
                                              "Reembolso Concedido", "Troca Realizada", 
-                                             "Não Resolvido", "Cliente Insatisfeito"]
+                                             "NÃ£o Resolvido", "Cliente Insatisfeito"]
                                         )
                                         
                                         gerou_conversao = st.radio(
                                             "Gerou nova venda?",
-                                            ["Não", "Sim"],
+                                            ["NÃ£o", "Sim"],
                                             horizontal=True
                                         )
                                         
@@ -1621,14 +1621,14 @@ def render_suporte():
                                         
                                         with col_fin1:
                                             btn_confirmar_fin = st.form_submit_button(
-                                                "✅ Confirmar",
+                                                "âœ… Confirmar",
                                                 type="primary",
                                                 use_container_width=True
                                             )
                                         
                                         with col_fin2:
                                             btn_cancelar_fin = st.form_submit_button(
-                                                "❌ Cancelar",
+                                                "âŒ Cancelar",
                                                 use_container_width=True
                                             )
                                         
@@ -1638,7 +1638,7 @@ def render_suporte():
                                         
                                         if btn_confirmar_fin:
                                             if not solucao_final:
-                                                st.error("❌ Descreva como foi resolvido!")
+                                                st.error("âŒ Descreva como foi resolvido!")
                                             else:
                                                 with st.spinner("Finalizando..."):
                                                     try:
@@ -1654,19 +1654,19 @@ def render_suporte():
                                                         # 2. Mover para AGENDAMENTOS_ATIVOS
                                                         df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
                                                         
-                                                        # Buscar próximo contato do form de atualização
+                                                        # Buscar prÃ³ximo contato do form de atualizaÃ§Ã£o
                                                         prox_contato = nova_data_contato.strftime('%d/%m/%Y') if nova_data_contato else ''
                                                         
                                                         novo_agendamento = {
                                                             'Data de contato': datetime.now().strftime('%d/%m/%Y'),
                                                             'Nome': ticket.get('Nome', ''),
-                                                            'Classificação': ticket.get('Classificação', ''),
+                                                            'ClassificaÃ§Ã£o': ticket.get('ClassificaÃ§Ã£o', ''),
                                                             'Valor': '',
                                                             'Telefone': ticket.get('Telefone', ''),
-                                                            'Relato da conversa': f"[SUPORTE {id_ticket} CONCLUÍDO] {solucao_final}",
-                                                            'Follow up': 'Acompanhamento pós-suporte',
+                                                            'Relato da conversa': f"[SUPORTE {id_ticket} CONCLUÃDO] {solucao_final}",
+                                                            'Follow up': 'Acompanhamento pÃ³s-suporte',
                                                             'Data de chamada': prox_contato,
-                                                            'Observação': f"Ticket resolvido. Resultado: {resultado_final}"
+                                                            'ObservaÃ§Ã£o': f"Ticket resolvido. Resultado: {resultado_final}"
                                                         }
                                                         
                                                         df_agendamentos_novo = pd.concat([df_agendamentos, pd.DataFrame([novo_agendamento])], ignore_index=True)
@@ -1678,7 +1678,7 @@ def render_suporte():
                                                         conn.update(worksheet="SUPORTE", data=df_suporte_novo)
                                                         
                                                         carregar_dados.clear()
-                                                        st.success(f"🎉 Ticket {id_ticket} finalizado! Cliente movido para Agendamentos Ativos")
+                                                        st.success(f"ðŸŽ‰ Ticket {id_ticket} finalizado! Cliente movido para Agendamentos Ativos")
                                                         st.balloons()
                                                         
                                                         # Limpar busca
@@ -1688,30 +1688,30 @@ def render_suporte():
                                                         st.rerun()
                                                         
                                                     except Exception as e:
-                                                        st.error(f"❌ Erro ao finalizar: {e}")
+                                                        st.error(f"âŒ Erro ao finalizar: {e}")
                             else:
-                                st.info("ℹ️ Este é um ticket histórico. Selecione o ticket atual para atualizar.")
+                                st.info("â„¹ï¸ Este Ã© um ticket histÃ³rico. Selecione o ticket atual para atualizar.")
                         
                         st.markdown("---")
             
             else:
-                st.info("ℹ️ Nenhum histórico encontrado para este cliente")
+                st.info("â„¹ï¸ Nenhum histÃ³rico encontrado para este cliente")
                 
         except Exception as e:
-            st.error(f"❌ Erro ao carregar histórico: {e}")
+            st.error(f"âŒ Erro ao carregar histÃ³rico: {e}")
         
-        return  # Retorna para não mostrar a lista quando está em modo busca
+        return  # Retorna para nÃ£o mostrar a lista quando estÃ¡ em modo busca
     
-    # ========== VISÃO GERAL - LISTA DE TICKETS ==========
-    st.subheader("📊 Gestão de Tickets de Suporte")
+    # ========== VISÃƒO GERAL - LISTA DE TICKETS ==========
+    st.subheader("ðŸ“Š GestÃ£o de Tickets de Suporte")
     
     # Carregar dados
     with st.spinner("Carregando tickets de suporte..."):
         df_suporte = carregar_dados("SUPORTE")
     
     if df_suporte.empty:
-        st.info("✅ Nenhum ticket de suporte ativo no momento")
-        st.write("👉 Use o botão **➕ Novo Ticket** acima para abrir um chamado")
+        st.info("âœ… Nenhum ticket de suporte ativo no momento")
+        st.write("ðŸ‘‰ Use o botÃ£o **âž• Novo Ticket** acima para abrir um chamado")
         return
     
     # ========== FILTRAR TICKETS DO DIA E VENCIDOS ==========
@@ -1721,14 +1721,14 @@ def render_suporte():
     df_hoje = pd.DataFrame()
     df_vencidos = pd.DataFrame()
     
-    if 'Próximo contato' in df_suporte.columns:
+    if 'PrÃ³ximo contato' in df_suporte.columns:
         # Tickets de hoje
-        df_hoje = df_suporte[df_suporte['Próximo contato'] == hoje_str_br].copy()
+        df_hoje = df_suporte[df_suporte['PrÃ³ximo contato'] == hoje_str_br].copy()
         
         # Tickets vencidos
         vencidos_lista = []
         for idx, row in df_suporte.iterrows():
-            data_contato_str = row.get('Próximo contato', '')
+            data_contato_str = row.get('PrÃ³ximo contato', '')
             if data_contato_str and data_contato_str != '':
                 try:
                     # Tentar formato brasileiro DD/MM/YYYY
@@ -1741,53 +1741,53 @@ def render_suporte():
         if vencidos_lista:
             df_vencidos = df_suporte.loc[vencidos_lista].copy()
     
-    # ========== DASHBOARD DE MÉTRICAS ==========
-    st.subheader("📊 Resumo de Suporte")
+    # ========== DASHBOARD DE MÃ‰TRICAS ==========
+    st.subheader("ðŸ“Š Resumo de Suporte")
     
     # Contar por prioridade
-    prioridades = {'Urgente': 0, 'Alta': 0, 'Média': 0, 'Baixa': 0}
+    prioridades = {'Urgente': 0, 'Alta': 0, 'MÃ©dia': 0, 'Baixa': 0}
     
     if 'Prioridade' in df_suporte.columns:
         for p in prioridades.keys():
             prioridades[p] = len(df_suporte[df_suporte['Prioridade'] == p])
     
-    # Métricas
+    # MÃ©tricas
     col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
     
     with col_m1:
-        st.metric("📋 Total de Tickets", len(df_suporte))
+        st.metric("ðŸ“‹ Total de Tickets", len(df_suporte))
     
     with col_m2:
-        st.metric("📅 Hoje", len(df_hoje), help="Tickets agendados para hoje")
+        st.metric("ðŸ“… Hoje", len(df_hoje), help="Tickets agendados para hoje")
     
     with col_m3:
-        st.metric("🔥 Vencidos", len(df_vencidos),
+        st.metric("ðŸ”¥ Vencidos", len(df_vencidos),
                   delta=f"-{len(df_vencidos)}" if len(df_vencidos) > 0 else "0",
                   delta_color="inverse",
                   help="Tickets com data de contato vencida")
     
     with col_m4:
-        st.metric("🔴 Urgente", prioridades['Urgente'], 
+        st.metric("ðŸ”´ Urgente", prioridades['Urgente'], 
                   delta=f"-{prioridades['Urgente']}" if prioridades['Urgente'] > 0 else "0",
                   delta_color="inverse")
     
     with col_m5:
         total_criticos = prioridades['Urgente'] + prioridades['Alta']
-        st.metric("⚠️ Críticos", total_criticos,
+        st.metric("âš ï¸ CrÃ­ticos", total_criticos,
                   delta=f"-{total_criticos}" if total_criticos > 0 else "0",
                   delta_color="inverse")
     
     # Alertas
     if prioridades['Urgente'] > 0:
-        st.error(f"🚨 **ATENÇÃO:** Você tem {prioridades['Urgente']} ticket(s) URGENTE(S)! Priorize-os imediatamente.")
+        st.error(f"ðŸš¨ **ATENÃ‡ÃƒO:** VocÃª tem {prioridades['Urgente']} ticket(s) URGENTE(S)! Priorize-os imediatamente.")
     
     if len(df_vencidos) > 0:
-        st.warning(f"⚠️ **ATENÇÃO:** Você tem {len(df_vencidos)} ticket(s) VENCIDO(S) de dias anteriores!")
+        st.warning(f"âš ï¸ **ATENÃ‡ÃƒO:** VocÃª tem {len(df_vencidos)} ticket(s) VENCIDO(S) de dias anteriores!")
     
     st.markdown("---")
     
     # ========== FILTROS ==========
-    st.subheader("🔍 Filtros")
+    st.subheader("ðŸ” Filtros")
     
     col_f1, col_f2, col_f3 = st.columns(3)
     
@@ -1809,7 +1809,7 @@ def render_suporte():
     with col_f3:
         filtro_prioridade = st.selectbox(
             "Prioridade:",
-            ["Todas", "Urgente", "Alta", "Média", "Baixa"]
+            ["Todas", "Urgente", "Alta", "MÃ©dia", "Baixa"]
         )
     
     # Selecionar dataset
@@ -1832,38 +1832,38 @@ def render_suporte():
     st.markdown("---")
     
     # ========== LISTA DE TICKETS ==========
-    st.subheader(f"🎫 Tickets de Suporte ({len(df_filt)})")
+    st.subheader(f"ðŸŽ« Tickets de Suporte ({len(df_filt)})")
     
     if df_filt.empty:
         if visualizar == "Hoje":
-            st.info("✅ Nenhum ticket agendado para hoje!")
+            st.info("âœ… Nenhum ticket agendado para hoje!")
         elif visualizar == "Vencidos":
-            st.success("✅ Você não tem tickets vencidos! Parabéns!")
+            st.success("âœ… VocÃª nÃ£o tem tickets vencidos! ParabÃ©ns!")
         else:
             st.info("Nenhum ticket encontrado com os filtros aplicados")
         return
     
-    # Ordenar por prioridade (Urgente > Alta > Média > Baixa)
-    ordem_prioridade = {'Urgente': 0, 'Alta': 1, 'Média': 2, 'Baixa': 3}
+    # Ordenar por prioridade (Urgente > Alta > MÃ©dia > Baixa)
+    ordem_prioridade = {'Urgente': 0, 'Alta': 1, 'MÃ©dia': 2, 'Baixa': 3}
     if 'Prioridade' in df_filt.columns:
         df_filt['_ordem'] = df_filt['Prioridade'].map(ordem_prioridade).fillna(4)
         df_filt = df_filt.sort_values('_ordem')
     
-    # Ícones de prioridade
+    # Ãcones de prioridade
     icones_prioridade = {
-        'Urgente': '🔴',
-        'Alta': '🟠',
-        'Média': '🟡',
-        'Baixa': '🟢'
+        'Urgente': 'ðŸ”´',
+        'Alta': 'ðŸŸ ',
+        'MÃ©dia': 'ðŸŸ¡',
+        'Baixa': 'ðŸŸ¢'
     }
     
-    # Cards de tickets (versão resumida para lista)
+    # Cards de tickets (versÃ£o resumida para lista)
     for idx, ticket in df_filt.iterrows():
         
         # Dados do ticket
         id_ticket = str(ticket.get('ID_Ticket', 'N/D')) if ticket.get('ID_Ticket') else 'N/D'
         nome_cliente = str(ticket.get('Nome', 'N/D')) if ticket.get('Nome') else 'N/D'
-        prioridade = str(ticket.get('Prioridade', 'Média')) if ticket.get('Prioridade') else 'Média'
+        prioridade = str(ticket.get('Prioridade', 'MÃ©dia')) if ticket.get('Prioridade') else 'MÃ©dia'
         progresso = ticket.get('Progresso', 0)
         
         # Converter progresso corretamente - CORRIGIDO
@@ -1872,11 +1872,11 @@ def render_suporte():
         except:
             progresso_valor = 0
         
-        icone = icones_prioridade.get(prioridade, '⚪')
+        icone = icones_prioridade.get(prioridade, 'âšª')
         
-        # Verificar se está vencido
+        # Verificar se estÃ¡ vencido
         esta_vencido = False
-        proximo_contato_str = str(ticket.get('Próximo contato', '')) if ticket.get('Próximo contato') else ''
+        proximo_contato_str = str(ticket.get('PrÃ³ximo contato', '')) if ticket.get('PrÃ³ximo contato') else ''
         if proximo_contato_str and proximo_contato_str.strip():
             try:
                 data_contato_dt = datetime.strptime(proximo_contato_str, '%d/%m/%Y')
@@ -1887,14 +1887,14 @@ def render_suporte():
         
         # Badge de status
         if esta_vencido:
-            badge = "🔥 VENCIDO"
+            badge = "ðŸ”¥ VENCIDO"
         elif proximo_contato_str == hoje_str_br:
-            badge = "📅 HOJE"
+            badge = "ðŸ“… HOJE"
         else:
-            badge = "📋 ATIVO"
+            badge = "ðŸ“‹ ATIVO"
         
-        # Título do card
-        titulo_card = f"{badge} | {icone} {prioridade.upper()} | 🎫 {id_ticket} | 👤 {nome_cliente} | 📊 {progresso_valor}%"
+        # TÃ­tulo do card
+        titulo_card = f"{badge} | {icone} {prioridade.upper()} | ðŸŽ« {id_ticket} | ðŸ‘¤ {nome_cliente} | ðŸ“Š {progresso_valor}%"
         
         # Expandir automaticamente tickets urgentes ou vencidos
         expandir = (prioridade == 'Urgente' or esta_vencido)
@@ -1904,14 +1904,14 @@ def render_suporte():
             col_info, col_acoes = st.columns([2, 1])
             
             with col_info:
-                st.write(f"**🎫 ID do Ticket:** {id_ticket}")
-                st.write(f"**👤 Cliente:** {nome_cliente}")
+                st.write(f"**ðŸŽ« ID do Ticket:** {id_ticket}")
+                st.write(f"**ðŸ‘¤ Cliente:** {nome_cliente}")
                 
                 telefone_ticket = str(ticket.get('Telefone', 'N/D')) if ticket.get('Telefone') else 'N/D'
-                st.write(f"**📱 Telefone:** {telefone_ticket}")
+                st.write(f"**ðŸ“± Telefone:** {telefone_ticket}")
                 
                 tipo_problema_ticket = str(ticket.get('Tipo_Problema', 'N/D')) if ticket.get('Tipo_Problema') else 'N/D'
-                st.write(f"**🔧 Tipo:** {tipo_problema_ticket}")
+                st.write(f"**ðŸ”§ Tipo:** {tipo_problema_ticket}")
                 
                 st.write(f"**{icone} Prioridade:** {prioridade}")
 
@@ -1923,35 +1923,35 @@ def render_suporte():
                     progresso_decimal = 0.0
                 
                 st.progress(progresso_decimal)
-                st.caption(f"{progresso_valor}% concluído")
+                st.caption(f"{progresso_valor}% concluÃ­do")
                 
-                # Descrição resumida
-                descricao_raw = ticket.get('Descrição do problema', '')
+                # DescriÃ§Ã£o resumida
+                descricao_raw = ticket.get('DescriÃ§Ã£o do problema', '')
                 descricao = str(descricao_raw) if descricao_raw else ''
                 if descricao and descricao.strip():
                     st.info(f"**Problema:** {descricao[:150]}{'...' if len(descricao) > 150 else ''}")
                 
                 # Datas
                 data_abertura = str(ticket.get('Data de abertura', 'N/D')) if ticket.get('Data de abertura') else 'N/D'
-                st.write(f"**📅 Aberto em:** {data_abertura}")
+                st.write(f"**ðŸ“… Aberto em:** {data_abertura}")
                 
                 if proximo_contato_str and proximo_contato_str.strip():
                     if esta_vencido:
-                        st.error(f"**⚠️ Próximo contato:** {proximo_contato_str} (VENCIDO)")
+                        st.error(f"**âš ï¸ PrÃ³ximo contato:** {proximo_contato_str} (VENCIDO)")
                     elif proximo_contato_str == hoje_str_br:
-                        st.success(f"**📅 Próximo contato:** {proximo_contato_str} (HOJE)")
+                        st.success(f"**ðŸ“… PrÃ³ximo contato:** {proximo_contato_str} (HOJE)")
                     else:
-                        st.info(f"**📅 Próximo contato:** {proximo_contato_str}")
+                        st.info(f"**ðŸ“… PrÃ³ximo contato:** {proximo_contato_str}")
             
             with col_acoes:
-                st.markdown("### 🎯 Ações")
+                st.markdown("### ðŸŽ¯ AÃ§Ãµes")
                 
-                # Botão para ver detalhes completos
-                if st.button(f"📋 Ver Detalhes", key=f"ver_detalhes_{idx}_{id_ticket}", use_container_width=True):
+                # BotÃ£o para ver detalhes completos
+                if st.button(f"ðŸ“‹ Ver Detalhes", key=f"ver_detalhes_{idx}_{id_ticket}", use_container_width=True):
                     st.session_state.ticket_encontrado = ticket.to_dict()
                     st.rerun()
                 
-                st.caption(f"Clique para ver o histórico completo e atualizar o ticket")
+                st.caption(f"Clique para ver o histÃ³rico completo e atualizar o ticket")
         
         st.markdown("---")
 
