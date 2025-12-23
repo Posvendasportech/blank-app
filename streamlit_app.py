@@ -1159,7 +1159,7 @@ def render_suporte():
                 with st.spinner("Buscando cliente..."):
                     try:
                         conn = get_gsheets_connection()
-                        df_total = conn.read(worksheet="TOTAL", ttl=0)
+                        df_total = conn.read(worksheet="Total", ttl=0)
                         
                         if df_total.empty:
                             st.warning("⚠️ Nenhum cliente encontrado na base de dados")
