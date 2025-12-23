@@ -1123,7 +1123,6 @@ def render_suporte():
     
     st.markdown("---")
     
-    # ========== FORMULÁRIO: CRIAR NOVO TICKET ==========
 # ========== FORMULÁRIO: CRIAR NOVO TICKET ==========
 if btn_novo_ticket:
     st.session_state.mostrar_form_novo = True
@@ -1401,6 +1400,7 @@ if st.session_state.mostrar_form_novo:
         
         st.markdown("---")
         return  # Retorna para não mostrar a lista enquanto está criando
+
 
     
     # ========== REALIZAR BUSCA ==========
