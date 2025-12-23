@@ -1123,286 +1123,274 @@ def render_suporte():
     
     st.markdown("---")
     
-# ========== FORMULÁRIO: CRIAR NOVO TICKET ==========
-if btn_novo_ticket:
-    st.session_state.mostrar_form_novo = True
-    st.session_state.ticket_encontrado = None
-    if 'cliente_selecionado_ticket' not in st.session_state:
-        st.session_state.cliente_selecionado_ticket = None
-
-if st.session_state.mostrar_form_novo:
-    st.subheader("🎫 Abrir Novo Ticket de Suporte")
+    # ========== FORMULÁRIO: CRIAR NOVO TICKET ==========
+    if btn_novo_ticket:
+        st.session_state.mostrar_form_novo = True
+        st.session_state.ticket_encontrado = None
+        if 'cliente_selecionado_ticket' not in st.session_state:
+            st.session_state.cliente_selecionado_ticket = None
     
-    # ========== ETAPA 1: BUSCAR CLIENTE NA ABA TOTAL ==========
-    if st.session_state.cliente_selecionado_ticket is None:
-        st.info("📋 **Passo 1:** Busque o cliente na base de dados")
+    if st.session_state.mostrar_form_novo:
+        st.subheader("🎫 Abrir Novo Ticket de Suporte")
         
-        col_busca_cliente1, col_busca_cliente2 = st.columns([3, 1])
-        
-        with col_busca_cliente1:
-            termo_busca_cliente = st.text_input(
-                "🔍 Buscar Cliente (Nome ou Telefone)",
-                placeholder="Digite o nome ou telefone do cliente",
-                key="busca_cliente_novo_ticket"
-            )
-        
-        with col_busca_cliente2:
-            btn_buscar_cliente = st.button(
-                "🔍 Buscar Cliente", 
-                type="primary", 
-                use_container_width=True,
-                key="btn_buscar_cliente_ticket"
-            )
-        
-        # Realizar busca na aba Total
-        if btn_buscar_cliente and termo_busca_cliente:
-            with st.spinner("Buscando cliente..."):
-                try:
-                    conn = get_gsheets_connection()
-                    df_total = conn.read(worksheet="Total", ttl=0)
-                    
-                    if df_total.empty:
-                        st.warning("⚠️ Nenhum cliente encontrado na base de dados")
-                    else:
-                        termo_limpo = termo_busca_cliente.strip()
-                        telefone_limpo = limpar_telefone(termo_limpo)
+        # ========== ETAPA 1: BUSCAR CLIENTE NA ABA TOTAL ==========
+        if st.session_state.cliente_selecionado_ticket is None:
+            st.info("📋 **Passo 1:** Busque o cliente na base de dados")
+            
+            col_busca_cliente1, col_busca_cliente2 = st.columns([3, 1])
+            
+            with col_busca_cliente1:
+                termo_busca_cliente = st.text_input(
+                    "🔍 Buscar Cliente (Nome ou Telefone)",
+                    placeholder="Digite o nome ou telefone do cliente",
+                    key="busca_cliente_novo_ticket"
+                )
+            
+            with col_busca_cliente2:
+                btn_buscar_cliente = st.button(
+                    "🔍 Buscar Cliente", 
+                    type="primary", 
+                    use_container_width=True,
+                    key="btn_buscar_cliente_ticket"
+                )
+            
+            # Realizar busca na aba Total
+            if btn_buscar_cliente and termo_busca_cliente:
+                with st.spinner("Buscando cliente..."):
+                    try:
+                        conn = get_gsheets_connection()
+                        df_total = conn.read(worksheet="Total", ttl=0)
                         
-                        resultados = []
-                        
-                        # Buscar por telefone primeiro
-                        if 'Telefone' in df_total.columns and telefone_limpo:
-                            df_total['Telefone_Limpo'] = df_total['Telefone'].astype(str).apply(limpar_telefone)
-                            # Filtrar apenas registros que contenham o telefone buscado
-                            mask_tel = df_total['Telefone_Limpo'].str.contains(telefone_limpo, case=False, na=False, regex=False)
-                            resultados_tel = df_total[mask_tel]
-                            
-                            if not resultados_tel.empty:
-                                resultados = resultados_tel.to_dict('records')
-                        
-                        # Se não encontrou por telefone OU se o termo não parece telefone, buscar por nome
-                        if not resultados and 'Nome' in df_total.columns:
-                            # Filtrar apenas registros que contenham o nome buscado
-                            mask_nome = df_total['Nome'].astype(str).str.contains(termo_limpo, case=False, na=False, regex=False)
-                            resultados_nome = df_total[mask_nome]
-                            
-                            if not resultados_nome.empty:
-                                resultados = resultados_nome.to_dict('records')
-                        
-                        if resultados:
-                            st.success(f"✅ {len(resultados)} cliente(s) encontrado(s)!")
-                            
-                            # Mostrar resultados para seleção
-                            st.markdown("---")
-                            st.markdown("**Selecione o cliente:**")
-                            
-                            for i, cliente in enumerate(resultados[:10]):  # Limitar a 10 resultados
-                                nome_cliente = cliente.get('Nome', 'N/D')
-                                tel_cliente = cliente.get('Telefone', 'N/D')
-                                class_cliente = cliente.get('Classificação', 'Não classificado')
-                                
-                                # Criar um card para cada resultado
-                                with st.container():
-                                    col1, col2 = st.columns([4, 1])
-                                    
-                                    with col1:
-                                        st.write(f"**{nome_cliente}**")
-                                        st.caption(f"📱 {tel_cliente} | 🏷️ {class_cliente}")
-                                    
-                                    with col2:
-                                        if st.button(
-                                            "✅ Selecionar", 
-                                            key=f"selecionar_cliente_{i}_{nome_cliente}",
-                                            use_container_width=True
-                                        ):
-                                            st.session_state.cliente_selecionado_ticket = cliente
-                                            st.rerun()
-                                    
-                                    st.markdown("---")
+                        if df_total.empty:
+                            st.warning("⚠️ Nenhum cliente encontrado na base de dados")
                         else:
-                            st.warning(f"⚠️ Nenhum cliente encontrado para: {termo_busca_cliente}")
-                            st.info("💡 **Dica:** Se o cliente não existe na base, cadastre-o primeiro na aba Total")
-                
-                except Exception as e:
-                    st.error(f"❌ Erro ao buscar cliente: {e}")
-                    st.write("**Detalhes do erro:**", str(e))
-        
-        elif btn_buscar_cliente and not termo_busca_cliente:
-            st.warning("⚠️ Digite um nome ou telefone para buscar")
-        
-        # Opção para cancelar
-        st.markdown("---")
-        if st.button("❌ Cancelar", key="cancelar_busca_cliente"):
-            st.session_state.mostrar_form_novo = False
-            st.session_state.cliente_selecionado_ticket = None
-            st.rerun()
-        
-        return  # Retorna até o cliente ser selecionado
-    
-    # ========== ETAPA 2: FORMULÁRIO COM DADOS PRÉ-PREENCHIDOS ==========
-    else:
-        cliente = st.session_state.cliente_selecionado_ticket
-        
-        # Exibir cliente selecionado
-        st.success(f"✅ Cliente selecionado: **{cliente.get('Nome', 'N/D')}** | {cliente.get('Telefone', 'N/D')}")
-        
-        if st.button("🔄 Trocar Cliente", key="trocar_cliente_ticket"):
-            st.session_state.cliente_selecionado_ticket = None
-            st.rerun()
-        
-        st.markdown("---")
-        st.info("📋 **Passo 2:** Preencha os detalhes do ticket")
-        
-        with st.form(key="form_novo_ticket_suporte"):
+                            termo_limpo = termo_busca_cliente.strip()
+                            telefone_limpo = limpar_telefone(termo_limpo)
+                            
+                            resultados = []
+                            
+                            # Buscar por telefone primeiro
+                            if 'Telefone' in df_total.columns and telefone_limpo:
+                                df_total['Telefone_Limpo'] = df_total['Telefone'].astype(str).apply(limpar_telefone)
+                                mask_tel = df_total['Telefone_Limpo'].str.contains(telefone_limpo, case=False, na=False, regex=False)
+                                resultados_tel = df_total[mask_tel]
+                                
+                                if not resultados_tel.empty:
+                                    resultados = resultados_tel.to_dict('records')
+                            
+                            # Se não encontrou por telefone, buscar por nome
+                            if not resultados and 'Nome' in df_total.columns:
+                                mask_nome = df_total['Nome'].astype(str).str.contains(termo_limpo, case=False, na=False, regex=False)
+                                resultados_nome = df_total[mask_nome]
+                                
+                                if not resultados_nome.empty:
+                                    resultados = resultados_nome.to_dict('records')
+                            
+                            if resultados:
+                                st.success(f"✅ {len(resultados)} cliente(s) encontrado(s)!")
+                                
+                                # Mostrar resultados para seleção
+                                st.markdown("---")
+                                st.markdown("**Selecione o cliente:**")
+                                
+                                for i, cliente in enumerate(resultados[:10]):
+                                    nome_cliente = cliente.get('Nome', 'N/D')
+                                    tel_cliente = cliente.get('Telefone', 'N/D')
+                                    class_cliente = cliente.get('Classificação', 'Não classificado')
+                                    
+                                    with st.container():
+                                        col1, col2 = st.columns([4, 1])
+                                        
+                                        with col1:
+                                            st.write(f"**{nome_cliente}**")
+                                            st.caption(f"📱 {tel_cliente} | 🏷️ {class_cliente}")
+                                        
+                                        with col2:
+                                            if st.button(
+                                                "✅ Selecionar", 
+                                                key=f"selecionar_cliente_{i}_{nome_cliente}",
+                                                use_container_width=True
+                                            ):
+                                                st.session_state.cliente_selecionado_ticket = cliente
+                                                st.rerun()
+                                        
+                                        st.markdown("---")
+                            else:
+                                st.warning(f"⚠️ Nenhum cliente encontrado para: {termo_busca_cliente}")
+                                st.info("💡 **Dica:** Se o cliente não existe na base, cadastre-o primeiro na aba Total")
+                    
+                    except Exception as e:
+                        st.error(f"❌ Erro ao buscar cliente: {e}")
+                        st.write("**Detalhes do erro:**", str(e))
             
-            # Dados do cliente (somente leitura via st.info)
-            st.markdown("### 👤 Dados do Cliente")
+            elif btn_buscar_cliente and not termo_busca_cliente:
+                st.warning("⚠️ Digite um nome ou telefone para buscar")
             
-            col_info1, col_info2, col_info3 = st.columns(3)
-            
-            with col_info1:
-                st.info(f"**Nome:**  \n{cliente.get('Nome', 'N/D')}")
-            
-            with col_info2:
-                st.info(f"**Telefone:**  \n{cliente.get('Telefone', 'N/D')}")
-            
-            with col_info3:
-                st.info(f"**Classificação:**  \n{cliente.get('Classificação', 'Não classificado')}")
-            
+            # Opção para cancelar
             st.markdown("---")
-            st.markdown("### 🎫 Detalhes do Ticket")
-            
-            col_form1, col_form2 = st.columns(2)
-            
-            with col_form1:
-                tipo_problema = st.selectbox(
-                    "🔧 Tipo de Problema *",
-                    ["Defeito no Produto", "Problema na Entrega", "Dúvida Técnica", 
-                     "Reclamação de Atendimento", "Pedido de Reembolso", 
-                     "Solicitação de Troca", "Outros"]
-                )
-                
-                prioridade_novo = st.selectbox(
-                    "⚠️ Prioridade *",
-                    ["Baixa", "Média", "Alta", "Urgente"]
-                )
-            
-            with col_form2:
-                aberto_por = st.text_input(
-                    "👨‍💼 Aberto Por",
-                    placeholder="Seu nome",
-                    value="Sistema CRM"
-                )
-            
-            descricao_problema_novo = st.text_area(
-                "📝 Descrição Completa do Problema *",
-                height=150,
-                placeholder="Descreva detalhadamente o problema relatado pelo cliente..."
-            )
-            
-            st.markdown("---")
-            
-            col_btn_form1, col_btn_form2, col_btn_form3 = st.columns(3)
-            
-            with col_btn_form1:
-                btn_criar_ticket = st.form_submit_button(
-                    "✅ Criar Ticket",
-                    type="primary",
-                    use_container_width=True
-                )
-            
-            with col_btn_form2:
-                btn_voltar_busca = st.form_submit_button(
-                    "🔄 Trocar Cliente",
-                    use_container_width=True
-                )
-            
-            with col_btn_form3:
-                btn_cancelar_form = st.form_submit_button(
-                    "❌ Cancelar",
-                    use_container_width=True
-                )
-            
-            # ========== AÇÃO: VOLTAR À BUSCA ==========
-            if btn_voltar_busca:
-                st.session_state.cliente_selecionado_ticket = None
-                st.rerun()
-            
-            # ========== AÇÃO: CANCELAR ==========
-            if btn_cancelar_form:
+            if st.button("❌ Cancelar", key="cancelar_busca_cliente"):
                 st.session_state.mostrar_form_novo = False
                 st.session_state.cliente_selecionado_ticket = None
                 st.rerun()
             
-            # ========== AÇÃO: CRIAR TICKET ==========
-            if btn_criar_ticket:
-                # Validações
-                if not descricao_problema_novo:
-                    st.error("❌ Descreva o problema!")
-                else:
-                    with st.spinner("Criando ticket..."):
-                        try:
-                            conn = get_gsheets_connection()
-                            
-                            # Extrair dados do cliente selecionado
-                            nome_cliente_novo = cliente.get('Nome', 'N/D')
-                            telefone_cliente_novo = cliente.get('Telefone', 'N/D')
-                            classificacao_novo = cliente.get('Classificação', 'Não classificado')
-                            
-                            # 1. Gerar ID único
-                            id_ticket = gerar_id_ticket()
-                            
-                            # 2. Adicionar na aba SUPORTE
-                            df_suporte = conn.read(worksheet="SUPORTE", ttl=0)
-                            
-                            novo_ticket_suporte = {
-                                'ID_Ticket': id_ticket,
-                                'Nome': nome_cliente_novo,
-                                'Telefone': telefone_cliente_novo,
-                                'Classificação': classificacao_novo,
-                                'Tipo_Problema': tipo_problema,
-                                'Prioridade': prioridade_novo,
-                                'Descrição do problema': descricao_problema_novo,
-                                'Data de abertura': datetime.now().strftime('%d/%m/%Y %H:%M'),
-                                'Último contato': '',
-                                'Próximo contato': '',
-                                'Progresso': 0,
-                                'Observações': f'Ticket criado via CRM por {aberto_por}'
-                            }
-                            
-                            df_suporte_novo = pd.concat([df_suporte, pd.DataFrame([novo_ticket_suporte])], ignore_index=True)
-                            conn.update(worksheet="SUPORTE", data=df_suporte_novo)
-                            
-                            # 3. Registrar em LOG_TICKETS_ABERTOS
-                            dados_log = {
-                                'Nome': nome_cliente_novo,
-                                'Telefone': telefone_cliente_novo,
-                                'Classificacao': classificacao_novo,
-                                'Tipo_Problema': tipo_problema,
-                                'Prioridade': prioridade_novo,
-                                'Descricao': descricao_problema_novo
-                            }
-                            
-                            registrar_ticket_log_aberto(id_ticket, dados_log, aberto_por)
-                            
-                            # Limpar cache e recarregar
-                            carregar_dados.clear()
-                            st.success(f"✅ Ticket **{id_ticket}** criado com sucesso!")
-                            st.balloons()
-                            
-                            # Limpar formulário
-                            st.session_state.mostrar_form_novo = False
-                            st.session_state.cliente_selecionado_ticket = None
-                            time.sleep(2)
-                            st.rerun()
-                            
-                        except Exception as e:
-                            st.error(f"❌ Erro ao criar ticket: {e}")
+            return  # Retorna até o cliente ser selecionado
         
-        st.markdown("---")
-        return  # Retorna para não mostrar a lista enquanto está criando
+        # ========== ETAPA 2: FORMULÁRIO COM DADOS PRÉ-PREENCHIDOS ==========
+        else:
+            cliente = st.session_state.cliente_selecionado_ticket
+            
+            # Exibir cliente selecionado
+            st.success(f"✅ Cliente selecionado: **{cliente.get('Nome', 'N/D')}** | {cliente.get('Telefone', 'N/D')}")
+            
+            if st.button("🔄 Trocar Cliente", key="trocar_cliente_ticket"):
+                st.session_state.cliente_selecionado_ticket = None
+                st.rerun()
+            
+            st.markdown("---")
+            st.info("📋 **Passo 2:** Preencha os detalhes do ticket")
+            
+            with st.form(key="form_novo_ticket_suporte"):
+                
+                # Dados do cliente (somente leitura via st.info)
+                st.markdown("### 👤 Dados do Cliente")
+                
+                col_info1, col_info2, col_info3 = st.columns(3)
+                
+                with col_info1:
+                    st.info(f"**Nome:**  \n{cliente.get('Nome', 'N/D')}")
+                
+                with col_info2:
+                    st.info(f"**Telefone:**  \n{cliente.get('Telefone', 'N/D')}")
+                
+                with col_info3:
+                    st.info(f"**Classificação:**  \n{cliente.get('Classificação', 'Não classificado')}")
+                
+                st.markdown("---")
+                st.markdown("### 🎫 Detalhes do Ticket")
+                
+                col_form1, col_form2 = st.columns(2)
+                
+                with col_form1:
+                    tipo_problema = st.selectbox(
+                        "🔧 Tipo de Problema *",
+                        ["Defeito no Produto", "Problema na Entrega", "Dúvida Técnica", 
+                         "Reclamação de Atendimento", "Pedido de Reembolso", 
+                         "Solicitação de Troca", "Outros"]
+                    )
+                    
+                    prioridade_novo = st.selectbox(
+                        "⚠️ Prioridade *",
+                        ["Baixa", "Média", "Alta", "Urgente"]
+                    )
+                
+                with col_form2:
+                    aberto_por = st.text_input(
+                        "👨‍💼 Aberto Por",
+                        placeholder="Seu nome",
+                        value="Sistema CRM"
+                    )
+                
+                descricao_problema_novo = st.text_area(
+                    "📝 Descrição Completa do Problema *",
+                    height=150,
+                    placeholder="Descreva detalhadamente o problema relatado pelo cliente..."
+                )
+                
+                st.markdown("---")
+                
+                col_btn_form1, col_btn_form2, col_btn_form3 = st.columns(3)
+                
+                with col_btn_form1:
+                    btn_criar_ticket = st.form_submit_button(
+                        "✅ Criar Ticket",
+                        type="primary",
+                        use_container_width=True
+                    )
+                
+                with col_btn_form2:
+                    btn_voltar_busca = st.form_submit_button(
+                        "🔄 Trocar Cliente",
+                        use_container_width=True
+                    )
+                
+                with col_btn_form3:
+                    btn_cancelar_form = st.form_submit_button(
+                        "❌ Cancelar",
+                        use_container_width=True
+                    )
+                
+                # ========== AÇÃO: VOLTAR À BUSCA ==========
+                if btn_voltar_busca:
+                    st.session_state.cliente_selecionado_ticket = None
+                    st.rerun()
+                
+                # ========== AÇÃO: CANCELAR ==========
+                if btn_cancelar_form:
+                    st.session_state.mostrar_form_novo = False
+                    st.session_state.cliente_selecionado_ticket = None
+                    st.rerun()
+                
+                # ========== AÇÃO: CRIAR TICKET ==========
+                if btn_criar_ticket:
+                    if not descricao_problema_novo:
+                        st.error("❌ Descreva o problema!")
+                    else:
+                        with st.spinner("Criando ticket..."):
+                            try:
+                                conn = get_gsheets_connection()
+                                
+                                nome_cliente_novo = cliente.get('Nome', 'N/D')
+                                telefone_cliente_novo = cliente.get('Telefone', 'N/D')
+                                classificacao_novo = cliente.get('Classificação', 'Não classificado')
+                                
+                                id_ticket = gerar_id_ticket()
+                                
+                                df_suporte = conn.read(worksheet="SUPORTE", ttl=0)
+                                
+                                novo_ticket_suporte = {
+                                    'ID_Ticket': id_ticket,
+                                    'Nome': nome_cliente_novo,
+                                    'Telefone': telefone_cliente_novo,
+                                    'Classificação': classificacao_novo,
+                                    'Tipo_Problema': tipo_problema,
+                                    'Prioridade': prioridade_novo,
+                                    'Descrição do problema': descricao_problema_novo,
+                                    'Data de abertura': datetime.now().strftime('%d/%m/%Y %H:%M'),
+                                    'Último contato': '',
+                                    'Próximo contato': '',
+                                    'Progresso': 0,
+                                    'Observações': f'Ticket criado via CRM por {aberto_por}'
+                                }
+                                
+                                df_suporte_novo = pd.concat([df_suporte, pd.DataFrame([novo_ticket_suporte])], ignore_index=True)
+                                conn.update(worksheet="SUPORTE", data=df_suporte_novo)
+                                
+                                dados_log = {
+                                    'Nome': nome_cliente_novo,
+                                    'Telefone': telefone_cliente_novo,
+                                    'Classificacao': classificacao_novo,
+                                    'Tipo_Problema': tipo_problema,
+                                    'Prioridade': prioridade_novo,
+                                    'Descricao': descricao_problema_novo
+                                }
+                                
+                                registrar_ticket_log_aberto(id_ticket, dados_log, aberto_por)
+                                
+                                carregar_dados.clear()
+                                st.success(f"✅ Ticket **{id_ticket}** criado com sucesso!")
+                                st.balloons()
+                                
+                                st.session_state.mostrar_form_novo = False
+                                st.session_state.cliente_selecionado_ticket = None
+                                time.sleep(2)
+                                st.rerun()
+                                
+                            except Exception as e:
+                                st.error(f"❌ Erro ao criar ticket: {e}")
+            
+            st.markdown("---")
+            return  # Retorna para não mostrar a lista enquanto está criando
 
-
-    
     # ========== REALIZAR BUSCA ==========
     if btn_buscar and termo_busca:
         with st.spinner("Buscando ticket..."):
@@ -1571,7 +1559,7 @@ if st.session_state.mostrar_form_novo:
                             
                             st.markdown("---")
                             
-                            # Barra de progresso - CORRIGIDO
+                            # Barra de progresso
                             st.markdown("### 📊 Progresso")
                             
                             try:
@@ -1632,8 +1620,9 @@ if st.session_state.mostrar_form_novo:
                             obs_hist = str(hist_ticket.get('Observações', '')) if hist_ticket.get('Observações') else ''
                             if obs_hist and obs_hist.strip():
                                 st.info(f"**💬 Observações:** {obs_hist}")
-                        
-                        # ========== COLUNA DIREITA: ATUALIZAR TICKET (APENAS SE FOR O ATUAL) ==========
+
+
+                        # ========== COLUNA DIREITA: ATUALIZAR TICKET ==========
                         with col_dir_hist:
                             if id_hist == id_ticket:
                                 st.markdown("### ✏️ Registrar Acompanhamento")
@@ -1800,7 +1789,6 @@ if st.session_state.mostrar_form_novo:
                                                         # 2. Mover para AGENDAMENTOS_ATIVOS
                                                         df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
                                                         
-                                                        # Buscar próximo contato do form de atualização
                                                         prox_contato = nova_data_contato.strftime('%d/%m/%Y') if nova_data_contato else ''
                                                         
                                                         novo_agendamento = {
@@ -1827,7 +1815,6 @@ if st.session_state.mostrar_form_novo:
                                                         st.success(f"🎉 Ticket {id_ticket} finalizado! Cliente movido para Agendamentos Ativos")
                                                         st.balloons()
                                                         
-                                                        # Limpar busca
                                                         st.session_state.ticket_encontrado = None
                                                         del st.session_state[f'finalizar_{id_ticket}']
                                                         time.sleep(2)
@@ -1847,7 +1834,7 @@ if st.session_state.mostrar_form_novo:
             st.error(f"❌ Erro ao carregar histórico: {e}")
         
         return  # Retorna para não mostrar a lista quando está em modo busca
-    
+
     # ========== VISÃO GERAL - LISTA DE TICKETS ==========
     st.subheader("📊 Gestão de Tickets de Suporte")
     
@@ -1877,7 +1864,6 @@ if st.session_state.mostrar_form_novo:
             data_contato_str = row.get('Próximo contato', '')
             if data_contato_str and data_contato_str != '':
                 try:
-                    # Tentar formato brasileiro DD/MM/YYYY
                     data_contato_dt = datetime.strptime(data_contato_str, '%d/%m/%Y')
                     if data_contato_dt.date() < hoje_dt.date():
                         vencidos_lista.append(idx)
@@ -2012,7 +1998,7 @@ if st.session_state.mostrar_form_novo:
         prioridade = str(ticket.get('Prioridade', 'Média')) if ticket.get('Prioridade') else 'Média'
         progresso = ticket.get('Progresso', 0)
         
-        # Converter progresso corretamente - CORRIGIDO
+        # Converter progresso corretamente
         try:
             progresso_valor = float(progresso) if progresso else 0
         except:
@@ -2061,7 +2047,7 @@ if st.session_state.mostrar_form_novo:
                 
                 st.write(f"**{icone} Prioridade:** {prioridade}")
                 
-                # Progresso - CORRIGIDO
+                # Progresso
                 try:
                     progresso_decimal = max(0.0, min(1.0, progresso_valor / 100))
                 except:
@@ -2099,8 +2085,6 @@ if st.session_state.mostrar_form_novo:
                 st.caption(f"Clique para ver o histórico completo e atualizar o ticket")
         
         st.markdown("---")
-
-
 
 
 # ============================================================================
