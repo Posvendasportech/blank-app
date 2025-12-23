@@ -1124,7 +1124,8 @@ def render_suporte():
     st.markdown("---")
     
     # ========== FORMULÁRIO: CRIAR NOVO TICKET ==========
-    if btn_novo_ticket:
+# ========== FORMULÁRIO: CRIAR NOVO TICKET ==========
+if btn_novo_ticket:
     st.session_state.mostrar_form_novo = True
     st.session_state.ticket_encontrado = None
     if 'cliente_selecionado_ticket' not in st.session_state:
@@ -1400,6 +1401,7 @@ if st.session_state.mostrar_form_novo:
         
         st.markdown("---")
         return  # Retorna para não mostrar a lista enquanto está criando
+
     
     # ========== REALIZAR BUSCA ==========
     if btn_buscar and termo_busca:
