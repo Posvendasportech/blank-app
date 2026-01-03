@@ -1082,10 +1082,10 @@ def render_suporte():
         )
     
     with col_busca2:
-        btn_buscar = st.button("🔍 Buscar", type="primary", use_container_width=True)
+        btn_buscar = st.button("🔍 Buscar", type="primary", use_container_width=True, key="btn_buscar_ticket")
     
     with col_busca3:
-        btn_novo_ticket = st.button("➕ Novo Ticket", type="secondary", use_container_width=True)
+        btn_novo_ticket = st.button("➕ Novo Ticket", type="secondary", use_container_width=True, key="btn_novo_ticket_sup")
     
     st.markdown("---")
     
@@ -1109,7 +1109,7 @@ def render_suporte():
                 termo_busca_cliente = st.text_input(
                     "🔍 Buscar Cliente (Nome ou Telefone)",
                     placeholder="Digite o nome ou telefone",
-                    key="busca_cliente_novo"
+                    key="busca_cliente_novo_sup"
                 )
             
             with col_bc2:
@@ -1117,13 +1117,13 @@ def render_suporte():
                     "🔍 Buscar",
                     type="primary",
                     use_container_width=True,
-                    key="btn_buscar_cli"
+                    key="btn_buscar_cli_sup"
                 )
             
             if btn_buscar_cliente and termo_busca_cliente:
                 with st.spinner("Buscando cliente..."):
                     try:
-                        conn = st.connection("gsheets", type="GSheetsConnection")
+                        conn = get_gsheets_connection()
                         df_total = conn.read(worksheet="Total", ttl=0)
                         
                         if df_total.empty:
@@ -1132,16 +1132,21 @@ def render_suporte():
                             termo_limpo = termo_busca_cliente.strip()
                             resultados = []
                             
-                            # Buscar por telefone
+                            # Buscar por telefone (com validação)
                             if 'Telefone' in df_total.columns:
                                 telefone_busca = limpar_telefone(termo_limpo)
-                                df_total['Tel_Limpo'] = df_total['Telefone'].apply(limpar_telefone)
-                                mask_tel = df_total['Tel_Limpo'].str.contains(telefone_busca, case=False, na=False, regex=False)
-                                resultados = df_total[mask_tel].head(10).to_dict('records')
+                                if telefone_busca:  # ✅ CORREÇÃO: Verificar se tem números
+                                    df_total['Tel_Limpo'] = df_total['Telefone'].apply(limpar_telefone)
+                                    mask_tel = df_total['Tel_Limpo'].str.contains(
+                                        telefone_busca, case=False, na=False, regex=False
+                                    )
+                                    resultados = df_total[mask_tel].head(10).to_dict('records')
                             
                             # Se não encontrou, buscar por nome
                             if not resultados and 'Nome' in df_total.columns:
-                                mask_nome = df_total['Nome'].astype(str).str.contains(termo_limpo, case=False, na=False, regex=False)
+                                mask_nome = df_total['Nome'].astype(str).str.contains(
+                                    termo_limpo, case=False, na=False, regex=False
+                                )
                                 resultados = df_total[mask_nome].head(10).to_dict('records')
                             
                             if resultados:
@@ -1154,26 +1159,35 @@ def render_suporte():
                                         
                                         with col1:
                                             st.write(f"**{cliente.get('Nome', 'N/D')}**")
-                                            st.caption(f"📱 {cliente.get('Telefone', 'N/D')} | 🏷️ {cliente.get('Classificação', 'N/D')}")
+                                            st.caption(
+                                                f"📱 {cliente.get('Telefone', 'N/D')} | "
+                                                f"🏷️ {cliente.get('Classificação', 'N/D')}"
+                                            )
                                         
                                         with col2:
-                                            if st.button("✅ Selecionar", key=f"sel_cli_{i}", use_container_width=True):
+                                            if st.button(
+                                                "✅ Selecionar",
+                                                key=f"sel_cli_sup_{i}",
+                                                use_container_width=True
+                                            ):
                                                 st.session_state.cliente_selecionado_ticket = cliente
                                                 st.rerun()
                                         
                                         st.markdown("---")
                             else:
-                                st.warning(f"⚠️ Nenhum cliente encontrado para: {termo_busca_cliente}")
+                                st.warning(f"⚠️ Nenhum cliente encontrado: {termo_busca_cliente}")
                                 st.info("💡 Cadastre o cliente primeiro na aba 'Total'")
                     
                     except Exception as e:
                         st.error(f"❌ Erro ao buscar: {e}")
+                        st.exception(e)
             
             elif btn_buscar_cliente:
                 st.warning("⚠️ Digite um nome ou telefone")
             
             # Botão cancelar
-            if st.button("❌ Cancelar", key="cancelar_busca"):
+            st.markdown("---")
+            if st.button("❌ Cancelar", key="cancelar_busca_sup"):
                 st.session_state.mostrar_form_novo = False
                 st.session_state.cliente_selecionado_ticket = None
                 st.rerun()
@@ -1184,16 +1198,19 @@ def render_suporte():
         else:
             cliente = st.session_state.cliente_selecionado_ticket
             
-            st.success(f"✅ Cliente: **{cliente.get('Nome', 'N/D')}** | {cliente.get('Telefone', 'N/D')}")
+            st.success(
+                f"✅ Cliente: **{cliente.get('Nome', 'N/D')}** | "
+                f"{cliente.get('Telefone', 'N/D')}"
+            )
             
-            if st.button("🔄 Trocar Cliente", key="trocar_cli"):
+            if st.button("🔄 Trocar Cliente", key="trocar_cli_sup"):
                 st.session_state.cliente_selecionado_ticket = None
                 st.rerun()
             
             st.markdown("---")
             st.info("📋 **Passo 2:** Preencha os detalhes do ticket")
             
-            with st.form(key="form_novo_ticket"):
+            with st.form(key="form_novo_ticket_sup"):
                 
                 st.markdown("### 👤 Dados do Cliente")
                 col1, col2, col3 = st.columns(3)
@@ -1212,9 +1229,15 @@ def render_suporte():
                 with col_f1:
                     tipo_problema = st.selectbox(
                         "🔧 Tipo de Problema *",
-                        ["Defeito no Produto", "Problema na Entrega", "Dúvida Técnica",
-                         "Reclamação de Atendimento", "Pedido de Reembolso",
-                         "Solicitação de Troca", "Outros"]
+                        [
+                            "Defeito no Produto",
+                            "Problema na Entrega",
+                            "Dúvida Técnica",
+                            "Reclamação de Atendimento",
+                            "Pedido de Reembolso",
+                            "Solicitação de Troca",
+                            "Outros"
+                        ]
                     )
                     
                     prioridade = st.selectbox(
@@ -1229,7 +1252,7 @@ def render_suporte():
                     )
                 
                 descricao = st.text_area(
-                    "📝 Descrição do Problema *",
+                    "📝 Descrição Completa do Problema *",
                     height=150,
                     placeholder="Descreva detalhadamente o problema..."
                 )
@@ -1259,12 +1282,12 @@ def render_suporte():
                 
                 # AÇÃO: CRIAR TICKET
                 if btn_criar:
-                    if not descricao:
+                    if not descricao.strip():
                         st.error("❌ Preencha a descrição do problema!")
                     else:
                         with st.spinner("Criando ticket..."):
                             try:
-                                conn = st.connection("gsheets", type="GSheetsConnection")
+                                conn = get_gsheets_connection()  # ✅ CORREÇÃO: Usar função correta
                                 
                                 # Gerar ID
                                 id_ticket = gerar_id_ticket()
@@ -1289,7 +1312,10 @@ def render_suporte():
                                 }
                                 
                                 # Adicionar à planilha
-                                df_novo = pd.concat([df_suporte, pd.DataFrame([novo_ticket])], ignore_index=True)
+                                df_novo = pd.concat(
+                                    [df_suporte, pd.DataFrame([novo_ticket])],
+                                    ignore_index=True
+                                )
                                 conn.update(worksheet="SUPORTE", data=df_novo)
                                 
                                 # Registrar log
@@ -1304,11 +1330,15 @@ def render_suporte():
                                 
                                 registrar_ticket_log_aberto(id_ticket, dados_log, aberto_por)
                                 
-                                # Limpar cache e session state
+                                # Limpar cache
                                 carregar_dados_suporte.clear()
+                                carregar_dados.clear()
+                                
+                                # Feedback
                                 st.success(f"✅ Ticket **{id_ticket}** criado com sucesso!")
                                 st.balloons()
                                 
+                                # Resetar estado
                                 st.session_state.mostrar_form_novo = False
                                 st.session_state.cliente_selecionado_ticket = None
                                 
@@ -1319,13 +1349,13 @@ def render_suporte():
                                 st.error(f"❌ Erro ao criar ticket: {e}")
                                 st.exception(e)
             
-            return  # Para não mostrar lista enquanto cria ticket
+            return  # Para não mostrar lista enquanto cria
     
     # ========== BUSCAR TICKET ==========
     if btn_buscar and termo_busca:
         with st.spinner("Buscando ticket..."):
             try:
-                conn = st.connection("gsheets", type="GSheetsConnection")
+                conn = get_gsheets_connection()  # ✅ CORREÇÃO
                 df_suporte = conn.read(worksheet="SUPORTE", ttl=0)
                 
                 if df_suporte.empty:
@@ -1337,21 +1367,28 @@ def render_suporte():
                     
                     # Buscar por ID
                     if 'ID_Ticket' in df_suporte.columns:
-                        mask_id = df_suporte['ID_Ticket'].astype(str).str.contains(termo_limpo, case=False, na=False, regex=False)
+                        mask_id = df_suporte['ID_Ticket'].astype(str).str.contains(
+                            termo_limpo, case=False, na=False, regex=False
+                        )
                         if mask_id.any():
                             resultado = df_suporte[mask_id].iloc[0]
                     
                     # Buscar por telefone
                     if resultado is None and 'Telefone' in df_suporte.columns:
                         tel_busca = limpar_telefone(termo_limpo)
-                        df_suporte['Tel_Limpo'] = df_suporte['Telefone'].apply(limpar_telefone)
-                        mask_tel = df_suporte['Tel_Limpo'].str.contains(tel_busca, case=False, na=False, regex=False)
-                        if mask_tel.any():
-                            resultado = df_suporte[mask_tel].iloc[0]
+                        if tel_busca:  # ✅ CORREÇÃO
+                            df_suporte['Tel_Limpo'] = df_suporte['Telefone'].apply(limpar_telefone)
+                            mask_tel = df_suporte['Tel_Limpo'].str.contains(
+                                tel_busca, case=False, na=False, regex=False
+                            )
+                            if mask_tel.any():
+                                resultado = df_suporte[mask_tel].iloc[0]
                     
                     # Buscar por nome
                     if resultado is None and 'Nome' in df_suporte.columns:
-                        mask_nome = df_suporte['Nome'].astype(str).str.contains(termo_limpo, case=False, na=False, regex=False)
+                        mask_nome = df_suporte['Nome'].astype(str).str.contains(
+                            termo_limpo, case=False, na=False, regex=False
+                        )
                         if mask_nome.any():
                             resultado = df_suporte[mask_nome].iloc[0]
                     
@@ -1363,6 +1400,7 @@ def render_suporte():
             
             except Exception as e:
                 st.error(f"❌ Erro na busca: {e}")
+                st.exception(e)
                 st.session_state.ticket_encontrado = None
     
     elif btn_buscar:
@@ -1381,14 +1419,14 @@ def render_suporte():
         
         st.success(f"✅ Ticket encontrado: **{id_ticket}** - {nome}")
         
-        if st.button("⬅️ Voltar para Lista", key="voltar_lista"):
+        if st.button("⬅️ Voltar para Lista", key="voltar_lista_sup"):
             st.session_state.ticket_encontrado = None
             st.rerun()
         
         st.markdown("---")
         st.subheader(f"📋 Detalhes do Ticket {id_ticket}")
         
-        # Exibir informações do ticket
+        # Informações do ticket
         col1, col2 = st.columns(2)
         
         with col1:
@@ -1419,7 +1457,7 @@ def render_suporte():
             st.caption("_Sem descrição_")
         
         st.markdown("---")
-        st.markdown("### 📝 Histórico")
+        st.markdown("### 📝 Histórico de Acompanhamento")
         
         ultimo = ticket.get('Último contato', '')
         if ultimo:
@@ -1437,33 +1475,40 @@ def render_suporte():
         
         return  # Para não mostrar lista quando está vendo ticket
     
-    # ========== LISTA DE TICKETS ==========
+    # ========== LISTA DE TICKETS ATIVOS ==========
     st.subheader("📋 Tickets Ativos")
     
     with st.spinner("Carregando tickets..."):
         df_suporte = carregar_dados_suporte()
     
     if df_suporte.empty:
-        st.info("Nenhum ticket ativo no momento")
-        st.write("Use o botão '**Novo Ticket**' acima para abrir um chamado")
+        st.info("📭 Nenhum ticket ativo no momento")
+        st.write("Use o botão '**➕ Novo Ticket**' acima para abrir um chamado")
         return
     
     # Métricas
-    hoje = datetime.now().date()
-    hoje_str = hoje.strftime('%d/%m/%Y')
-    
-    col_m1, col_m2, col_m3 = st.columns(3)
+    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     
     with col_m1:
-        st.metric("🎫 Total de Tickets", len(df_suporte))
+        st.metric("🎫 Total", len(df_suporte))
     
     with col_m2:
         urgentes = len(df_suporte[df_suporte['Prioridade'] == 'Urgente'])
         st.metric("🔴 Urgentes", urgentes)
     
     with col_m3:
-        em_aberto = len(df_suporte[df_suporte['Progresso'] < 100])
-        st.metric("⏳ Em Aberto", em_aberto)
+        if 'Progresso' in df_suporte.columns:
+            em_aberto = len(df_suporte[df_suporte['Progresso'] < 100])
+            st.metric("⏳ Em Aberto", em_aberto)
+        else:
+            st.metric("⏳ Em Aberto", len(df_suporte))
+    
+    with col_m4:
+        if 'Progresso' in df_suporte.columns:
+            resolvidos = len(df_suporte[df_suporte['Progresso'] >= 100])
+            st.metric("✅ Resolvidos", resolvidos)
+        else:
+            st.metric("✅ Resolvidos", 0)
     
     st.markdown("---")
     
@@ -1474,13 +1519,15 @@ def render_suporte():
     with col_f1:
         filtro_prioridade = st.selectbox(
             "Prioridade",
-            ["Todas", "Urgente", "Alta", "Média", "Baixa"]
+            ["Todas", "Urgente", "Alta", "Média", "Baixa"],
+            key="filtro_prio_sup"
         )
     
     with col_f2:
         busca_lista = st.text_input(
             "Buscar por nome",
-            placeholder="Digite o nome do cliente..."
+            placeholder="Digite o nome do cliente...",
+            key="busca_lista_sup"
         )
     
     # Aplicar filtros
@@ -1502,11 +1549,14 @@ def render_suporte():
     
     # Ordenar por prioridade
     ordem_prioridade = {'Urgente': 0, 'Alta': 1, 'Média': 2, 'Baixa': 3}
-    df_filtrado['Ordem'] = df_filtrado['Prioridade'].map(ordem_prioridade).fillna(4)
-    df_filtrado = df_filtrado.sort_values('Ordem')
+    if 'Prioridade' in df_filtrado.columns:
+        df_filtrado['Ordem'] = df_filtrado['Prioridade'].map(ordem_prioridade).fillna(4)
+        df_filtrado = df_filtrado.sort_values('Ordem')
     
     # Exibir tickets
-    st.subheader(f"📚 Lista de Tickets ({len(df_filtrado)})")
+    st.subheader(f"📚 Lista de Tickets ({len(df_filtrado)})
+
+")
     
     icones = {'Urgente': '🔴', 'Alta': '🟠', 'Média': '🟡', 'Baixa': '🟢'}
     
@@ -1551,11 +1601,16 @@ def render_suporte():
                     st.write(f"**📅 Próximo contato:** {proximo}")
             
             with col_acao:
-                if st.button("👁️ Ver Detalhes", key=f"ver_{idx}_{id_ticket}", use_container_width=True):
+                if st.button(
+                    "👁️ Ver Detalhes",
+                    key=f"ver_sup_{idx}_{id_ticket}",
+                    use_container_width=True
+                ):
                     st.session_state.ticket_encontrado = row.to_dict()
                     st.rerun()
             
             st.markdown("---")
+
 
 
 # ============================================================================
