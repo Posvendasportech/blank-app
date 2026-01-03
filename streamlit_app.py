@@ -35,10 +35,10 @@ def get_gsheets_connection():
 # ============================================================================
 
 def limpar_telefone(telefone):
-    """Remove caracteres especiais do telefone, deixando apenas números"""
-    if pd.isna(telefone) or telefone == '':
+    """Remove caracteres especiais do telefone para comparação"""
+    if not telefone or pd.isna(telefone):
         return ''
-    return ''.join(filter(str.isdigit, str(telefone)))
+    return re.sub(r'[^\d]', '', str(telefone))
 
 @st.cache_data(ttl=60)
 def carregar_dados(nome_aba, _force_refresh=False):
@@ -122,118 +122,85 @@ def finalizar_atendimento(index, dados_completos):
     except Exception as e:
         st.error(f"Erro ao finalizar: {e}")
         return False
+        
 def gerar_id_ticket():
-    """Gera ID único no formato TKT-2025-00014"""
+    """Gera um ID único para o ticket no formato TKT-YYYY-NNNNN"""
     try:
-        conn = get_gsheets_connection()
-        df_log = conn.read(worksheet="LOG_TICKETS_ABERTOS", ttl=0)
+        conn = st.connection("gsheets", type="GSheetsConnection")
+        df_suporte = conn.read(worksheet="SUPORTE", ttl=0)
         
         ano_atual = datetime.now().year
         
-        # Filtrar tickets do ano atual
-        if not df_log.empty and 'ID_Ticket' in df_log.columns:
-            tickets_ano = df_log[df_log['ID_Ticket'].str.contains(f'TKT-{ano_atual}', na=False)]
-            if not tickets_ano.empty:
-                # Pegar último número
-                ultimos_numeros = tickets_ano['ID_Ticket'].str.extract(r'TKT-\d{4}-(\d{5})')[0].astype(int)
-                proximo_numero = ultimos_numeros.max() + 1
-            else:
-                proximo_numero = 1
+        # Contar tickets do ano atual
+        if not df_suporte.empty and 'ID_Ticket' in df_suporte.columns:
+            tickets_ano = df_suporte[df_suporte['ID_Ticket'].str.contains(f'TKT-{ano_atual}', na=False)]
+            numero = len(tickets_ano) + 1
         else:
-            proximo_numero = 1
+            numero = 1
         
-        # Formatar com 5 dígitos
-        id_ticket = f"TKT-{ano_atual}-{proximo_numero:05d}"
-        return id_ticket
-        
-    except Exception as e:
-        st.error(f"Erro ao gerar ID: {e}")
-        return f"TKT-{datetime.now().year}-00001"
+        return f"TKT-{ano_atual}-{numero:05d}"
+    
+    except:
+        # Fallback caso haja erro
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        return f"TKT-{datetime.now().year}-{timestamp[-5:]}"
 
 
 def registrar_ticket_log_aberto(id_ticket, dados_ticket, aberto_por):
-    """Registra ticket na aba LOG_TICKETS_ABERTOS"""
+    """Registra a abertura do ticket em LOG_TICKETS_ABERTOS"""
     try:
-        conn = get_gsheets_connection()
+        conn = st.connection("gsheets", type="GSheetsConnection")
         df_log = conn.read(worksheet="LOG_TICKETS_ABERTOS", ttl=0)
         
-        agora = datetime.now()
-        dias_semana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
-        
-        nova_linha = {
+        novo_log = {
+            'Data_Registro': datetime.now().strftime('%d/%m/%Y %H:%M'),
             'ID_Ticket': id_ticket,
-            'Data_Abertura': agora.strftime('%d/%m/%Y'),
-            'Hora_Abertura': agora.strftime('%H:%M:%S'),
             'Nome_Cliente': dados_ticket.get('Nome', ''),
             'Telefone': dados_ticket.get('Telefone', ''),
-            'Classificacao_Cliente': dados_ticket.get('Classificacao', ''),
-            'Tipo_Problema': dados_ticket.get('Tipo_Problema', ''),
+            'Classificacao': dados_ticket.get('Classificacao', ''),
+            'Tipo_Problema': dados_ticket.get('TipoProblema', ''),
             'Prioridade': dados_ticket.get('Prioridade', ''),
-            'Descricao_Resumida': dados_ticket.get('Descricao', ''),
-            'Aberto_Por': aberto_por,
-            'Dia_Semana': dias_semana[agora.weekday()]
+            'Descricao': dados_ticket.get('Descricao', ''),
+            'Aberto_Por': aberto_por
         }
         
-        df_novo = pd.concat([df_log, pd.DataFrame([nova_linha])], ignore_index=True)
-        conn.update(worksheet="LOG_TICKETS_ABERTOS", data=df_novo)
-        return True
+        df_log_novo = pd.concat([df_log, pd.DataFrame([novo_log])], ignore_index=True)
+        conn.update(worksheet="LOG_TICKETS_ABERTOS", data=df_log_novo)
         
     except Exception as e:
-        st.error(f"Erro ao registrar no log de abertos: {e}")
-        return False
+        st.warning(f"⚠️ Log não registrado: {e}")
 
 
 def registrar_ticket_log_resolvido(id_ticket, dados_resolucao, resolvido_por):
-    """Registra ticket resolvido na aba LOG_TICKETS_RESOLVIDOS"""
+    """Registra a resolução do ticket em LOG_TICKETS_RESOLVIDOS"""
     try:
-        conn = get_gsheets_connection()
+        conn = st.connection("gsheets", type="GSheetsConnection")
+        df_log = conn.read(worksheet="LOG_TICKETS_RESOLVIDOS", ttl=0)
         
-        # Buscar dados originais do ticket no LOG_ABERTOS
-        df_log_abertos = conn.read(worksheet="LOG_TICKETS_ABERTOS", ttl=0)
-        ticket_original = df_log_abertos[df_log_abertos['ID_Ticket'] == id_ticket]
-        
-        if ticket_original.empty:
-            st.warning(f"Ticket {id_ticket} não encontrado no log de abertos")
-            return False
-        
-        ticket_orig = ticket_original.iloc[0]
-        
-        # Calcular tempo de resolução
-        data_abertura_str = ticket_orig.get('Data_Abertura', '')
-        hora_abertura_str = ticket_orig.get('Hora_Abertura', '')
-        
-        try:
-            data_hora_abertura = datetime.strptime(f"{data_abertura_str} {hora_abertura_str}", '%d/%m/%Y %H:%M:%S')
-            data_hora_resolucao = datetime.now()
-            tempo_resolucao = (data_hora_resolucao - data_hora_abertura).total_seconds() / 3600  # em horas
-        except:
-            tempo_resolucao = 0
-        
-        # Registrar em LOG_TICKETS_RESOLVIDOS
-        df_log_resolvidos = conn.read(worksheet="LOG_TICKETS_RESOLVIDOS", ttl=0)
-        
-        nova_linha = {
+        novo_log = {
+            'Data_Resolucao': datetime.now().strftime('%d/%m/%Y %H:%M'),
             'ID_Ticket': id_ticket,
-            'Data_Abertura': ticket_orig.get('Data_Abertura', ''),
-            'Data_Resolucao': datetime.now().strftime('%d/%m/%Y'),
-            'Tempo_Resolucao_Horas': round(tempo_resolucao, 2),
-            'Nome_Cliente': ticket_orig.get('Nome_Cliente', ''),
-            'Telefone': ticket_orig.get('Telefone', ''),
-            'Tipo_Problema': ticket_orig.get('Tipo_Problema', ''),
-            'Prioridade': ticket_orig.get('Prioridade', ''),
-            'Como_Foi_Resolvido': dados_resolucao.get('Solucao', ''),
+            'Solucao_Aplicada': dados_resolucao.get('Solucao', ''),
             'Resultado_Final': dados_resolucao.get('Resultado', ''),
             'Gerou_Conversao': dados_resolucao.get('Conversao', 'Não'),
             'Resolvido_Por': resolvido_por
         }
         
-        df_novo = pd.concat([df_log_resolvidos, pd.DataFrame([nova_linha])], ignore_index=True)
-        conn.update(worksheet="LOG_TICKETS_RESOLVIDOS", data=df_novo)
-        return True
+        df_log_novo = pd.concat([df_log, pd.DataFrame([novo_log])], ignore_index=True)
+        conn.update(worksheet="LOG_TICKETS_RESOLVIDOS", data=df_log_novo)
         
     except Exception as e:
-        st.error(f"Erro ao registrar no log de resolvidos: {e}")
-        return False
+        st.warning(f"⚠️ Log de resolução não registrado: {e}")
+
+@st.cache_data(ttl=60)
+def carregar_dados_suporte():
+    """Carrega dados da planilha SUPORTE com cache"""
+    try:
+        conn = st.connection("gsheets", type="GSheetsConnection")
+        return conn.read(worksheet="SUPORTE", ttl=0)
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {e}")
+        return pd.DataFrame()
 
 
 
@@ -1086,7 +1053,7 @@ def render_em_atendimento():
 # ============================================================================
 
 def render_suporte():
-    """Renderiza a página de Suporte - Gestão de Tickets com Busca Unificada"""
+    """Renderiza a página de Suporte - Gestão de Tickets"""
     
     st.title("🆘 Suporte ao Cliente")
     st.markdown("Gerencie tickets de suporte com acompanhamento personalizado")
@@ -1110,8 +1077,7 @@ def render_suporte():
     with col_busca1:
         termo_busca = st.text_input(
             "Digite o ID do Ticket, Nome ou Telefone do cliente",
-            placeholder="Ex: TKT-2025-00014 ou João Silva ou 11 99999-9999",
-            help="Busca por ID, nome ou telefone em todos os tickets",
+            placeholder="Ex: TKT-2026-00001 ou João Silva ou 11 99999-9999",
             key="busca_ticket"
         )
     
@@ -1123,238 +1089,198 @@ def render_suporte():
     
     st.markdown("---")
     
-    # ========== FORMULÁRIO: CRIAR NOVO TICKET ==========
+    # ========== ABRIR FORMULÁRIO NOVO TICKET ==========
     if btn_novo_ticket:
         st.session_state.mostrar_form_novo = True
         st.session_state.ticket_encontrado = None
-        if 'cliente_selecionado_ticket' not in st.session_state:
-            st.session_state.cliente_selecionado_ticket = None
+        st.session_state.cliente_selecionado_ticket = None
     
+    # ========== FORMULÁRIO: CRIAR NOVO TICKET ==========
     if st.session_state.mostrar_form_novo:
         st.subheader("🎫 Abrir Novo Ticket de Suporte")
         
-        # ========== ETAPA 1: BUSCAR CLIENTE NA ABA TOTAL ==========
+        # ETAPA 1: BUSCAR E SELECIONAR CLIENTE
         if st.session_state.cliente_selecionado_ticket is None:
             st.info("📋 **Passo 1:** Busque o cliente na base de dados")
             
-            col_busca_cliente1, col_busca_cliente2 = st.columns([3, 1])
+            col_bc1, col_bc2 = st.columns([3, 1])
             
-            with col_busca_cliente1:
+            with col_bc1:
                 termo_busca_cliente = st.text_input(
                     "🔍 Buscar Cliente (Nome ou Telefone)",
-                    placeholder="Digite o nome ou telefone do cliente",
-                    key="busca_cliente_novo_ticket"
+                    placeholder="Digite o nome ou telefone",
+                    key="busca_cliente_novo"
                 )
             
-            with col_busca_cliente2:
+            with col_bc2:
                 btn_buscar_cliente = st.button(
-                    "🔍 Buscar Cliente", 
-                    type="primary", 
+                    "🔍 Buscar",
+                    type="primary",
                     use_container_width=True,
-                    key="btn_buscar_cliente_ticket"
+                    key="btn_buscar_cli"
                 )
             
-            # Realizar busca na aba Total
             if btn_buscar_cliente and termo_busca_cliente:
                 with st.spinner("Buscando cliente..."):
                     try:
-                        conn = get_gsheets_connection()
+                        conn = st.connection("gsheets", type="GSheetsConnection")
                         df_total = conn.read(worksheet="Total", ttl=0)
                         
                         if df_total.empty:
-                            st.warning("⚠️ Nenhum cliente encontrado na base de dados")
+                            st.warning("⚠️ Nenhum cliente na base de dados")
                         else:
                             termo_limpo = termo_busca_cliente.strip()
-                            telefone_limpo = limpar_telefone(termo_limpo)
-                            
                             resultados = []
                             
-                            # Buscar por telefone primeiro
-                            if 'Telefone' in df_total.columns and telefone_limpo:
-                                df_total['Telefone_Limpo'] = df_total['Telefone'].astype(str).apply(limpar_telefone)
-                                mask_tel = df_total['Telefone_Limpo'].str.contains(telefone_limpo, case=False, na=False, regex=False)
-                                resultados_tel = df_total[mask_tel]
-                                
-                                if not resultados_tel.empty:
-                                    resultados = resultados_tel.to_dict('records')
+                            # Buscar por telefone
+                            if 'Telefone' in df_total.columns:
+                                telefone_busca = limpar_telefone(termo_limpo)
+                                df_total['Tel_Limpo'] = df_total['Telefone'].apply(limpar_telefone)
+                                mask_tel = df_total['Tel_Limpo'].str.contains(telefone_busca, case=False, na=False, regex=False)
+                                resultados = df_total[mask_tel].head(10).to_dict('records')
                             
-                            # Se não encontrou por telefone, buscar por nome
+                            # Se não encontrou, buscar por nome
                             if not resultados and 'Nome' in df_total.columns:
                                 mask_nome = df_total['Nome'].astype(str).str.contains(termo_limpo, case=False, na=False, regex=False)
-                                resultados_nome = df_total[mask_nome]
-                                
-                                if not resultados_nome.empty:
-                                    resultados = resultados_nome.to_dict('records')
+                                resultados = df_total[mask_nome].head(10).to_dict('records')
                             
                             if resultados:
                                 st.success(f"✅ {len(resultados)} cliente(s) encontrado(s)!")
-                                
-                                # Mostrar resultados para seleção
-                                st.markdown("---")
                                 st.markdown("**Selecione o cliente:**")
                                 
-                                for i, cliente in enumerate(resultados[:10]):
-                                    nome_cliente = cliente.get('Nome', 'N/D')
-                                    tel_cliente = cliente.get('Telefone', 'N/D')
-                                    class_cliente = cliente.get('Classificação', 'Não classificado')
-                                    
+                                for i, cliente in enumerate(resultados):
                                     with st.container():
                                         col1, col2 = st.columns([4, 1])
                                         
                                         with col1:
-                                            st.write(f"**{nome_cliente}**")
-                                            st.caption(f"📱 {tel_cliente} | 🏷️ {class_cliente}")
+                                            st.write(f"**{cliente.get('Nome', 'N/D')}**")
+                                            st.caption(f"📱 {cliente.get('Telefone', 'N/D')} | 🏷️ {cliente.get('Classificação', 'N/D')}")
                                         
                                         with col2:
-                                            if st.button(
-                                                "✅ Selecionar", 
-                                                key=f"selecionar_cliente_{i}_{nome_cliente}",
-                                                use_container_width=True
-                                            ):
+                                            if st.button("✅ Selecionar", key=f"sel_cli_{i}", use_container_width=True):
                                                 st.session_state.cliente_selecionado_ticket = cliente
                                                 st.rerun()
                                         
                                         st.markdown("---")
                             else:
                                 st.warning(f"⚠️ Nenhum cliente encontrado para: {termo_busca_cliente}")
-                                st.info("💡 **Dica:** Se o cliente não existe na base, cadastre-o primeiro na aba Total")
+                                st.info("💡 Cadastre o cliente primeiro na aba 'Total'")
                     
                     except Exception as e:
-                        st.error(f"❌ Erro ao buscar cliente: {e}")
-                        st.write("**Detalhes do erro:**", str(e))
+                        st.error(f"❌ Erro ao buscar: {e}")
             
-            elif btn_buscar_cliente and not termo_busca_cliente:
-                st.warning("⚠️ Digite um nome ou telefone para buscar")
+            elif btn_buscar_cliente:
+                st.warning("⚠️ Digite um nome ou telefone")
             
-            # Opção para cancelar
-            st.markdown("---")
-            if st.button("❌ Cancelar", key="cancelar_busca_cliente"):
+            # Botão cancelar
+            if st.button("❌ Cancelar", key="cancelar_busca"):
                 st.session_state.mostrar_form_novo = False
                 st.session_state.cliente_selecionado_ticket = None
                 st.rerun()
             
-            return  # Retorna até o cliente ser selecionado
+            return  # Para aqui até selecionar cliente
         
-        # ========== ETAPA 2: FORMULÁRIO COM DADOS PRÉ-PREENCHIDOS ==========
+        # ETAPA 2: FORMULÁRIO COM DADOS DO CLIENTE
         else:
             cliente = st.session_state.cliente_selecionado_ticket
             
-            # Exibir cliente selecionado
-            st.success(f"✅ Cliente selecionado: **{cliente.get('Nome', 'N/D')}** | {cliente.get('Telefone', 'N/D')}")
+            st.success(f"✅ Cliente: **{cliente.get('Nome', 'N/D')}** | {cliente.get('Telefone', 'N/D')}")
             
-            if st.button("🔄 Trocar Cliente", key="trocar_cliente_ticket"):
+            if st.button("🔄 Trocar Cliente", key="trocar_cli"):
                 st.session_state.cliente_selecionado_ticket = None
                 st.rerun()
             
             st.markdown("---")
             st.info("📋 **Passo 2:** Preencha os detalhes do ticket")
             
-            with st.form(key="form_novo_ticket_suporte"):
+            with st.form(key="form_novo_ticket"):
                 
-                # Dados do cliente (somente leitura via st.info)
                 st.markdown("### 👤 Dados do Cliente")
+                col1, col2, col3 = st.columns(3)
                 
-                col_info1, col_info2, col_info3 = st.columns(3)
+                with col1:
+                    st.info(f"**Nome:**\n{cliente.get('Nome', 'N/D')}")
+                with col2:
+                    st.info(f"**Telefone:**\n{cliente.get('Telefone', 'N/D')}")
+                with col3:
+                    st.info(f"**Classificação:**\n{cliente.get('Classificação', 'N/D')}")
                 
-                with col_info1:
-                    st.info(f"**Nome:**  \n{cliente.get('Nome', 'N/D')}")
-                
-                with col_info2:
-                    st.info(f"**Telefone:**  \n{cliente.get('Telefone', 'N/D')}")
-                
-                with col_info3:
-                    st.info(f"**Classificação:**  \n{cliente.get('Classificação', 'Não classificado')}")
-                
-                st.markdown("---")
                 st.markdown("### 🎫 Detalhes do Ticket")
                 
-                col_form1, col_form2 = st.columns(2)
+                col_f1, col_f2 = st.columns(2)
                 
-                with col_form1:
+                with col_f1:
                     tipo_problema = st.selectbox(
                         "🔧 Tipo de Problema *",
-                        ["Defeito no Produto", "Problema na Entrega", "Dúvida Técnica", 
-                         "Reclamação de Atendimento", "Pedido de Reembolso", 
+                        ["Defeito no Produto", "Problema na Entrega", "Dúvida Técnica",
+                         "Reclamação de Atendimento", "Pedido de Reembolso",
                          "Solicitação de Troca", "Outros"]
                     )
                     
-                    prioridade_novo = st.selectbox(
+                    prioridade = st.selectbox(
                         "⚠️ Prioridade *",
                         ["Baixa", "Média", "Alta", "Urgente"]
                     )
                 
-                with col_form2:
+                with col_f2:
                     aberto_por = st.text_input(
                         "👨‍💼 Aberto Por",
-                        placeholder="Seu nome",
                         value="Sistema CRM"
                     )
                 
-                descricao_problema_novo = st.text_area(
-                    "📝 Descrição Completa do Problema *",
+                descricao = st.text_area(
+                    "📝 Descrição do Problema *",
                     height=150,
-                    placeholder="Descreva detalhadamente o problema relatado pelo cliente..."
+                    placeholder="Descreva detalhadamente o problema..."
                 )
                 
                 st.markdown("---")
                 
-                col_btn_form1, col_btn_form2, col_btn_form3 = st.columns(3)
+                col_btn1, col_btn2 = st.columns(2)
                 
-                with col_btn_form1:
-                    btn_criar_ticket = st.form_submit_button(
+                with col_btn1:
+                    btn_criar = st.form_submit_button(
                         "✅ Criar Ticket",
                         type="primary",
                         use_container_width=True
                     )
                 
-                with col_btn_form2:
-                    btn_voltar_busca = st.form_submit_button(
-                        "🔄 Trocar Cliente",
-                        use_container_width=True
-                    )
-                
-                with col_btn_form3:
-                    btn_cancelar_form = st.form_submit_button(
+                with col_btn2:
+                    btn_cancelar = st.form_submit_button(
                         "❌ Cancelar",
                         use_container_width=True
                     )
                 
-                # ========== AÇÃO: VOLTAR À BUSCA ==========
-                if btn_voltar_busca:
-                    st.session_state.cliente_selecionado_ticket = None
-                    st.rerun()
-                
-                # ========== AÇÃO: CANCELAR ==========
-                if btn_cancelar_form:
+                # AÇÃO: CANCELAR
+                if btn_cancelar:
                     st.session_state.mostrar_form_novo = False
                     st.session_state.cliente_selecionado_ticket = None
                     st.rerun()
                 
-                # ========== AÇÃO: CRIAR TICKET ==========
-                if btn_criar_ticket:
-                    if not descricao_problema_novo:
-                        st.error("❌ Descreva o problema!")
+                # AÇÃO: CRIAR TICKET
+                if btn_criar:
+                    if not descricao:
+                        st.error("❌ Preencha a descrição do problema!")
                     else:
                         with st.spinner("Criando ticket..."):
                             try:
-                                conn = get_gsheets_connection()
+                                conn = st.connection("gsheets", type="GSheetsConnection")
                                 
-                                nome_cliente_novo = cliente.get('Nome', 'N/D')
-                                telefone_cliente_novo = cliente.get('Telefone', 'N/D')
-                                classificacao_novo = cliente.get('Classificação', 'Não classificado')
-                                
+                                # Gerar ID
                                 id_ticket = gerar_id_ticket()
                                 
+                                # Ler planilha atual
                                 df_suporte = conn.read(worksheet="SUPORTE", ttl=0)
                                 
-                                novo_ticket_suporte = {
+                                # Criar novo ticket
+                                novo_ticket = {
                                     'ID_Ticket': id_ticket,
-                                    'Nome': nome_cliente_novo,
-                                    'Telefone': telefone_cliente_novo,
-                                    'Classificação': classificacao_novo,
+                                    'Nome': cliente.get('Nome', 'N/D'),
+                                    'Telefone': cliente.get('Telefone', 'N/D'),
+                                    'Classificação': cliente.get('Classificação', 'Não classificado'),
                                     'Tipo_Problema': tipo_problema,
-                                    'Prioridade': prioridade_novo,
-                                    'Descrição do problema': descricao_problema_novo,
+                                    'Prioridade': prioridade,
+                                    'Descrição do problema': descricao,
                                     'Data de abertura': datetime.now().strftime('%d/%m/%Y %H:%M'),
                                     'Último contato': '',
                                     'Próximo contato': '',
@@ -1362,729 +1288,274 @@ def render_suporte():
                                     'Observações': f'Ticket criado via CRM por {aberto_por}'
                                 }
                                 
-                                df_suporte_novo = pd.concat([df_suporte, pd.DataFrame([novo_ticket_suporte])], ignore_index=True)
-                                conn.update(worksheet="SUPORTE", data=df_suporte_novo)
+                                # Adicionar à planilha
+                                df_novo = pd.concat([df_suporte, pd.DataFrame([novo_ticket])], ignore_index=True)
+                                conn.update(worksheet="SUPORTE", data=df_novo)
                                 
+                                # Registrar log
                                 dados_log = {
-                                    'Nome': nome_cliente_novo,
-                                    'Telefone': telefone_cliente_novo,
-                                    'Classificacao': classificacao_novo,
-                                    'Tipo_Problema': tipo_problema,
-                                    'Prioridade': prioridade_novo,
-                                    'Descricao': descricao_problema_novo
+                                    'Nome': cliente.get('Nome', ''),
+                                    'Telefone': cliente.get('Telefone', ''),
+                                    'Classificacao': cliente.get('Classificação', ''),
+                                    'TipoProblema': tipo_problema,
+                                    'Prioridade': prioridade,
+                                    'Descricao': descricao
                                 }
                                 
                                 registrar_ticket_log_aberto(id_ticket, dados_log, aberto_por)
                                 
-                                carregar_dados.clear()
+                                # Limpar cache e session state
+                                carregar_dados_suporte.clear()
                                 st.success(f"✅ Ticket **{id_ticket}** criado com sucesso!")
                                 st.balloons()
                                 
                                 st.session_state.mostrar_form_novo = False
                                 st.session_state.cliente_selecionado_ticket = None
+                                
                                 time.sleep(2)
                                 st.rerun()
                                 
                             except Exception as e:
                                 st.error(f"❌ Erro ao criar ticket: {e}")
+                                st.exception(e)
             
-            st.markdown("---")
-            return  # Retorna para não mostrar a lista enquanto está criando
-
-    # ========== REALIZAR BUSCA ==========
+            return  # Para não mostrar lista enquanto cria ticket
+    
+    # ========== BUSCAR TICKET ==========
     if btn_buscar and termo_busca:
         with st.spinner("Buscando ticket..."):
             try:
-                conn = get_gsheets_connection()
+                conn = st.connection("gsheets", type="GSheetsConnection")
                 df_suporte = conn.read(worksheet="SUPORTE", ttl=0)
                 
                 if df_suporte.empty:
-                    st.warning("⚠️ Nenhum ticket encontrado no sistema")
+                    st.warning("⚠️ Nenhum ticket no sistema")
                     st.session_state.ticket_encontrado = None
                 else:
                     termo_limpo = termo_busca.strip()
-                    telefone_limpo = limpar_telefone(termo_limpo)
-                    
-                    # Buscar por ID do Ticket
                     resultado = None
+                    
+                    # Buscar por ID
                     if 'ID_Ticket' in df_suporte.columns:
-                        mask_id = df_suporte['ID_Ticket'].astype(str).str.contains(termo_limpo, case=False, na=False)
-                        resultado_id = df_suporte[mask_id]
-                        if not resultado_id.empty:
-                            resultado = resultado_id.iloc[0]
+                        mask_id = df_suporte['ID_Ticket'].astype(str).str.contains(termo_limpo, case=False, na=False, regex=False)
+                        if mask_id.any():
+                            resultado = df_suporte[mask_id].iloc[0]
                     
-                    # Se não encontrou por ID, buscar por telefone
+                    # Buscar por telefone
                     if resultado is None and 'Telefone' in df_suporte.columns:
-                        df_suporte['Telefone_Limpo'] = df_suporte['Telefone'].apply(limpar_telefone)
-                        mask_tel = df_suporte['Telefone_Limpo'].str.contains(telefone_limpo, case=False, na=False, regex=False)
-                        resultado_tel = df_suporte[mask_tel]
-                        if not resultado_tel.empty:
-                            resultado = resultado_tel.iloc[0]
+                        tel_busca = limpar_telefone(termo_limpo)
+                        df_suporte['Tel_Limpo'] = df_suporte['Telefone'].apply(limpar_telefone)
+                        mask_tel = df_suporte['Tel_Limpo'].str.contains(tel_busca, case=False, na=False, regex=False)
+                        if mask_tel.any():
+                            resultado = df_suporte[mask_tel].iloc[0]
                     
-                    # Se não encontrou, buscar por nome
+                    # Buscar por nome
                     if resultado is None and 'Nome' in df_suporte.columns:
-                        mask_nome = df_suporte['Nome'].astype(str).str.contains(termo_limpo, case=False, na=False)
-                        resultado_nome = df_suporte[mask_nome]
-                        if not resultado_nome.empty:
-                            resultado = resultado_nome.iloc[0]
+                        mask_nome = df_suporte['Nome'].astype(str).str.contains(termo_limpo, case=False, na=False, regex=False)
+                        if mask_nome.any():
+                            resultado = df_suporte[mask_nome].iloc[0]
                     
                     if resultado is not None:
                         st.session_state.ticket_encontrado = resultado.to_dict()
                     else:
-                        st.warning(f"⚠️ Nenhum ticket encontrado para: {termo_busca}")
+                        st.warning(f"⚠️ Ticket não encontrado: {termo_busca}")
                         st.session_state.ticket_encontrado = None
-                        
+            
             except Exception as e:
                 st.error(f"❌ Erro na busca: {e}")
                 st.session_state.ticket_encontrado = None
     
-    elif btn_buscar and not termo_busca:
-        st.warning("⚠️ Digite um ID, nome ou telefone para buscar")
+    elif btn_buscar:
+        st.warning("⚠️ Digite algo para buscar")
     
-    # ========== EXIBIR TICKET ENCONTRADO (VISÃO DETALHADA) ==========
+    # ========== EXIBIR TICKET ENCONTRADO ==========
     if st.session_state.ticket_encontrado is not None:
         ticket = st.session_state.ticket_encontrado
         
         id_ticket = ticket.get('ID_Ticket', 'N/D')
-        nome_cliente = ticket.get('Nome', 'N/D')
+        nome = ticket.get('Nome', 'N/D')
         prioridade = ticket.get('Prioridade', 'Média')
         
-        # Ícone de prioridade
-        icones_prioridade = {
-            'Urgente': '🔴',
-            'Alta': '🟠',
-            'Média': '🟡',
-            'Baixa': '🟢'
-        }
-        icone = icones_prioridade.get(prioridade, '⚪')
+        icones = {'Urgente': '🔴', 'Alta': '🟠', 'Média': '🟡', 'Baixa': '🟢'}
+        icone = icones.get(prioridade, '⚪')
         
-        st.success(f"✅ Ticket encontrado: **{id_ticket}** - {nome_cliente}")
+        st.success(f"✅ Ticket encontrado: **{id_ticket}** - {nome}")
         
-        # Botão para voltar à lista
-        if st.button("⬅️ Voltar para Lista de Tickets", key="voltar_lista"):
+        if st.button("⬅️ Voltar para Lista", key="voltar_lista"):
             st.session_state.ticket_encontrado = None
             st.rerun()
         
         st.markdown("---")
+        st.subheader(f"📋 Detalhes do Ticket {id_ticket}")
         
-        # ========== BUSCAR HISTÓRICO COMPLETO DO CLIENTE ==========
-        st.subheader(f"📋 Histórico Completo do Ticket {id_ticket}")
+        # Exibir informações do ticket
+        col1, col2 = st.columns(2)
         
-        try:
-            conn = get_gsheets_connection()
-            df_suporte_completo = conn.read(worksheet="SUPORTE", ttl=0)
-            
-            # Buscar TODOS os tickets deste cliente (por nome e telefone)
-            telefone_cliente = ticket.get('Telefone', '')
-            
-            historico_tickets = []
-            
-            if not df_suporte_completo.empty:
-                if 'Telefone' in df_suporte_completo.columns and telefone_cliente:
-                    df_suporte_completo['Telefone_Limpo'] = df_suporte_completo['Telefone'].apply(limpar_telefone)
-                    telefone_limpo_busca = limpar_telefone(telefone_cliente)
-                    
-                    historico_tickets = df_suporte_completo[
-                        df_suporte_completo['Telefone_Limpo'].str.contains(telefone_limpo_busca, case=False, na=False, regex=False)
-                    ].to_dict('records')
-                elif 'Nome' in df_suporte_completo.columns:
-                    historico_tickets = df_suporte_completo[
-                        df_suporte_completo['Nome'].str.contains(nome_cliente, case=False, na=False)
-                    ].to_dict('records')
-            
-            # Exibir resumo
-            col_resumo1, col_resumo2, col_resumo3 = st.columns(3)
-            
-            with col_resumo1:
-                st.metric("🎫 Total de Tickets", len(historico_tickets), help="Tickets abertos por este cliente")
-            
-            with col_resumo2:
-                tickets_abertos = len([t for t in historico_tickets if float(t.get('Progresso', 0) or 0) < 100])
-                st.metric("⏳ Em Aberto", tickets_abertos)
-            
-            with col_resumo3:
-                tickets_resolvidos = len([t for t in historico_tickets if float(t.get('Progresso', 0) or 0) >= 100])
-                st.metric("✅ Resolvidos", tickets_resolvidos)
-            
-            st.markdown("---")
-            
-            # ========== CARDS DE HISTÓRICO ==========
-            if historico_tickets:
-                st.subheader(f"📚 Histórico de Tickets ({len(historico_tickets)})")
-                
-                # Ordenar por data de abertura (mais recente primeiro)
-                historico_tickets_ordenado = sorted(
-                    historico_tickets, 
-                    key=lambda x: x.get('Data de abertura', ''), 
-                    reverse=True
-                )
-                
-                for hist_ticket in historico_tickets_ordenado:
-                    id_hist = hist_ticket.get('ID_Ticket', 'N/D')
-                    prioridade_hist = hist_ticket.get('Prioridade', 'Média')
-                    progresso_hist = hist_ticket.get('Progresso', 0)
-                    icone_hist = icones_prioridade.get(prioridade_hist, '⚪')
-                    
-                    # Badge de status
-                    try:
-                        prog_valor = float(progresso_hist) if progresso_hist else 0
-                    except:
-                        prog_valor = 0
-                    
-                    if prog_valor >= 100:
-                        badge_status = "✅ RESOLVIDO"
-                    elif prog_valor >= 50:
-                        badge_status = "🔄 EM ANDAMENTO"
-                    else:
-                        badge_status = "🆕 ABERTO"
-                    
-                    titulo_card_hist = f"{badge_status} | {icone_hist} {id_hist} | {prioridade_hist} | {prog_valor}%"
-                    
-                    # Expandir automaticamente o ticket atual
-                    expandir = (id_hist == id_ticket)
-                    
-                    with st.expander(titulo_card_hist, expanded=expandir):
-                        col_esq_hist, col_dir_hist = st.columns([1, 1])
-                        
-                        # ========== COLUNA ESQUERDA: INFORMAÇÕES DO TICKET ==========
-                        with col_esq_hist:
-                            st.markdown("### 📋 Dados do Ticket")
-                            
-                            st.write(f"**🎫 ID:** {id_hist}")
-                            st.write(f"**👤 Nome:** {hist_ticket.get('Nome', 'N/D')}")
-                            st.write(f"**📱 Telefone:** {hist_ticket.get('Telefone', 'N/D')}")
-                            st.write(f"**🏷️ Classificação:** {hist_ticket.get('Classificação', 'N/D')}")
-                            st.write(f"**🔧 Tipo:** {hist_ticket.get('Tipo_Problema', 'N/D')}")
-                            st.write(f"**{icone_hist} Prioridade:** {prioridade_hist}")
-                            
-                            st.markdown("---")
-                            
-                            # Barra de progresso
-                            st.markdown("### 📊 Progresso")
-                            
-                            try:
-                                progresso_valor = float(progresso_hist) if progresso_hist else 0
-                                progresso_decimal = max(0.0, min(1.0, progresso_valor / 100))
-                            except:
-                                progresso_decimal = 0.0
-                            
-                            st.progress(progresso_decimal)
-                            st.write(f"**{prog_valor}% concluído**")
-                            
-                            # Labels de progresso
-                            if prog_valor == 0:
-                                st.info("🆕 Ticket aberto - Aguardando primeiro contato")
-                            elif prog_valor == 25:
-                                st.info("📞 Primeiro contato realizado")
-                            elif prog_valor == 50:
-                                st.warning("🔄 Em andamento - Acompanhamento ativo")
-                            elif prog_valor == 75:
-                                st.success("✨ Quase concluído - Finalizando")
-                            elif prog_valor >= 100:
-                                st.success("✅ Pronto para finalizar")
-                            
-                            st.markdown("---")
-                            
-                            # Descrição do problema
-                            st.markdown("### 🔍 Descrição do Problema")
-                            
-                            descricao_hist_raw = hist_ticket.get('Descrição do problema', '')
-                            descricao_hist = str(descricao_hist_raw) if descricao_hist_raw else ''
-                            if descricao_hist and descricao_hist.strip():
-                                st.error(f"**Problema relatado:**\n\n{descricao_hist}")
-                            else:
-                                st.caption("_Sem descrição registrada_")
-                            
-                            st.markdown("---")
-                            
-                            # Histórico de acompanhamento
-                            st.markdown("### 📝 Histórico")
-                            
-                            data_abertura_hist = hist_ticket.get('Data de abertura', 'N/D')
-                            st.write(f"**📅 Aberto em:** {data_abertura_hist}")
-                            
-                            ultimo_contato_hist = str(hist_ticket.get('Último contato', '')) if hist_ticket.get('Último contato') else ''
-                            if ultimo_contato_hist and ultimo_contato_hist.strip():
-                                st.info(f"**Último acompanhamento:**\n\n{ultimo_contato_hist}")
-                            else:
-                                st.caption("_Nenhum acompanhamento registrado ainda_")
-                            
-                            proximo_contato_hist = str(hist_ticket.get('Próximo contato', '')) if hist_ticket.get('Próximo contato') else ''
-                            if proximo_contato_hist and proximo_contato_hist.strip():
-                                hoje_str = datetime.now().strftime('%d/%m/%Y')
-                                if proximo_contato_hist == hoje_str:
-                                    st.success(f"**📅 Próximo contato:** {proximo_contato_hist} ✅ HOJE")
-                                else:
-                                    st.info(f"**📅 Próximo contato:** {proximo_contato_hist}")
-                            
-                            obs_hist = str(hist_ticket.get('Observações', '')) if hist_ticket.get('Observações') else ''
-                            if obs_hist and obs_hist.strip():
-                                st.info(f"**💬 Observações:** {obs_hist}")
-
-
-                        # ========== COLUNA DIREITA: ATUALIZAR TICKET ==========
-                        with col_dir_hist:
-                            if id_hist == id_ticket:
-                                st.markdown("### ✏️ Registrar Acompanhamento")
-                                
-                                # Obter índice real do DataFrame
-                                df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
-                                idx_real = df_suporte_atual[df_suporte_atual['ID_Ticket'] == id_ticket].index[0]
-                                
-                                with st.form(key=f"form_atualizar_{id_ticket}"):
-                                    
-                                    st.info("💡 Registre o acompanhamento e atualize o status")
-                                    
-                                    novo_acompanhamento = st.text_area(
-                                        "📝 Como foi o contato de hoje?",
-                                        height=120,
-                                        placeholder="Descreva o que foi conversado...",
-                                        help="Registre o acompanhamento realizado"
-                                    )
-                                    
-                                    nova_data_contato = st.date_input(
-                                        "📅 Próximo Contato:",
-                                        value=None,
-                                        help="Quando será o próximo acompanhamento?"
-                                    )
-                                    
-                                    novo_progresso = st.selectbox(
-                                        "📊 Atualizar Progresso:",
-                                        [0, 25, 50, 75, 100],
-                                        index=[0, 25, 50, 75, 100].index(int(prog_valor)) if int(prog_valor) in [0, 25, 50, 75, 100] else 0,
-                                        help="Atualize o percentual de conclusão"
-                                    )
-                                    
-                                    st.caption("""
-                                    **Níveis de progresso:**
-                                    - 0% = Ticket aberto
-                                    - 25% = Primeiro contato
-                                    - 50% = Em andamento
-                                    - 75% = Quase concluído
-                                    - 100% = Pronto para finalizar
-                                    """)
-                                    
-                                    novas_obs = st.text_area(
-                                        "💬 Observações:",
-                                        height=60,
-                                        placeholder="Informações extras..."
-                                    )
-                                    
-                                    st.markdown("---")
-                                    
-                                    col_btn1, col_btn2 = st.columns(2)
-                                    
-                                    with col_btn1:
-                                        btn_atualizar = st.form_submit_button(
-                                            "✅ Atualizar",
-                                            type="primary",
-                                            use_container_width=True
-                                        )
-                                    
-                                    with col_btn2:
-                                        btn_finalizar = st.form_submit_button(
-                                            "🎉 Finalizar",
-                                            type="secondary",
-                                            use_container_width=True
-                                        )
-                                    
-                                    # ========== AÇÃO: ATUALIZAR ==========
-                                    if btn_atualizar:
-                                        if not novo_acompanhamento:
-                                            st.error("❌ Preencha como foi o contato!")
-                                        elif not nova_data_contato:
-                                            st.error("❌ Selecione a data do próximo contato!")
-                                        else:
-                                            with st.spinner("Atualizando..."):
-                                                try:
-                                                    df_suporte_atual = conn.read(worksheet="SUPORTE", ttl=0)
-                                                    
-                                                    df_suporte_atual.at[idx_real, 'Último contato'] = novo_acompanhamento
-                                                    df_suporte_atual.at[idx_real, 'Próximo contato'] = nova_data_contato.strftime('%d/%m/%Y')
-                                                    df_suporte_atual.at[idx_real, 'Progresso'] = novo_progresso
-                                                    if novas_obs:
-                                                        df_suporte_atual.at[idx_real, 'Observações'] = novas_obs
-                                                    
-                                                    conn.update(worksheet="SUPORTE", data=df_suporte_atual)
-                                                    carregar_dados.clear()
-                                                    
-                                                    st.success(f"✅ Ticket atualizado! Progresso: {novo_progresso}%")
-                                                    time.sleep(1)
-                                                    st.rerun()
-                                                    
-                                                except Exception as e:
-                                                    st.error(f"❌ Erro: {e}")
-                                    
-                                    # ========== AÇÃO: FINALIZAR ==========
-                                    if btn_finalizar:
-                                        if novo_progresso < 100:
-                                            st.warning("⚠️ Recomendamos marcar como 100% antes de finalizar")
-                                        
-                                        st.session_state[f'finalizar_{id_ticket}'] = True
-                                
-                                # Campos de finalização fora do form
-                                if st.session_state.get(f'finalizar_{id_ticket}', False):
-                                    st.markdown("---")
-                                    st.markdown("### 📝 Informações de Finalização")
-                                    
-                                    with st.form(key=f"form_finalizar_{id_ticket}"):
-                                        solucao_final = st.text_area(
-                                            "Como foi resolvido? *",
-                                            height=100,
-                                            placeholder="Descreva a solução aplicada..."
-                                        )
-                                        
-                                        resultado_final = st.selectbox(
-                                            "Resultado Final *",
-                                            ["Problema Resolvido", "Cliente Satisfeito", 
-                                             "Reembolso Concedido", "Troca Realizada", 
-                                             "Não Resolvido", "Cliente Insatisfeito"]
-                                        )
-                                        
-                                        gerou_conversao = st.radio(
-                                            "Gerou nova venda?",
-                                            ["Não", "Sim"],
-                                            horizontal=True
-                                        )
-                                        
-                                        resolvido_por = st.text_input(
-                                            "Resolvido por",
-                                            value="Sistema CRM"
-                                        )
-                                        
-                                        col_fin1, col_fin2 = st.columns(2)
-                                        
-                                        with col_fin1:
-                                            btn_confirmar_fin = st.form_submit_button(
-                                                "✅ Confirmar",
-                                                type="primary",
-                                                use_container_width=True
-                                            )
-                                        
-                                        with col_fin2:
-                                            btn_cancelar_fin = st.form_submit_button(
-                                                "❌ Cancelar",
-                                                use_container_width=True
-                                            )
-                                        
-                                        if btn_cancelar_fin:
-                                            del st.session_state[f'finalizar_{id_ticket}']
-                                            st.rerun()
-                                        
-                                        if btn_confirmar_fin:
-                                            if not solucao_final:
-                                                st.error("❌ Descreva como foi resolvido!")
-                                            else:
-                                                with st.spinner("Finalizando..."):
-                                                    try:
-                                                        # 1. Registrar em LOG_TICKETS_RESOLVIDOS
-                                                        dados_resolucao = {
-                                                            'Solucao': solucao_final,
-                                                            'Resultado': resultado_final,
-                                                            'Conversao': gerou_conversao
-                                                        }
-                                                        
-                                                        registrar_ticket_log_resolvido(id_ticket, dados_resolucao, resolvido_por)
-                                                        
-                                                        # 2. Mover para AGENDAMENTOS_ATIVOS
-                                                        df_agendamentos = conn.read(worksheet="AGENDAMENTOS_ATIVOS", ttl=0)
-                                                        
-                                                        prox_contato = nova_data_contato.strftime('%d/%m/%Y') if nova_data_contato else ''
-                                                        
-                                                        novo_agendamento = {
-                                                            'Data de contato': datetime.now().strftime('%d/%m/%Y'),
-                                                            'Nome': ticket.get('Nome', ''),
-                                                            'Classificação': ticket.get('Classificação', ''),
-                                                            'Valor': '',
-                                                            'Telefone': ticket.get('Telefone', ''),
-                                                            'Relato da conversa': f"[SUPORTE {id_ticket} CONCLUÍDO] {solucao_final}",
-                                                            'Follow up': 'Acompanhamento pós-suporte',
-                                                            'Data de chamada': prox_contato,
-                                                            'Observação': f"Ticket resolvido. Resultado: {resultado_final}"
-                                                        }
-                                                        
-                                                        df_agendamentos_novo = pd.concat([df_agendamentos, pd.DataFrame([novo_agendamento])], ignore_index=True)
-                                                        conn.update(worksheet="AGENDAMENTOS_ATIVOS", data=df_agendamentos_novo)
-                                                        
-                                                        # 3. Remover de SUPORTE
-                                                        df_suporte_final = conn.read(worksheet="SUPORTE", ttl=0)
-                                                        df_suporte_novo = df_suporte_final.drop(idx_real).reset_index(drop=True)
-                                                        conn.update(worksheet="SUPORTE", data=df_suporte_novo)
-                                                        
-                                                        carregar_dados.clear()
-                                                        st.success(f"🎉 Ticket {id_ticket} finalizado! Cliente movido para Agendamentos Ativos")
-                                                        st.balloons()
-                                                        
-                                                        st.session_state.ticket_encontrado = None
-                                                        del st.session_state[f'finalizar_{id_ticket}']
-                                                        time.sleep(2)
-                                                        st.rerun()
-                                                        
-                                                    except Exception as e:
-                                                        st.error(f"❌ Erro ao finalizar: {e}")
-                            else:
-                                st.info("ℹ️ Este é um ticket histórico. Selecione o ticket atual para atualizar.")
-                        
-                        st.markdown("---")
-            
-            else:
-                st.info("ℹ️ Nenhum histórico encontrado para este cliente")
-                
-        except Exception as e:
-            st.error(f"❌ Erro ao carregar histórico: {e}")
+        with col1:
+            st.write(f"**{icone} Prioridade:** {prioridade}")
+            st.write(f"**👤 Nome:** {nome}")
+            st.write(f"**📱 Telefone:** {ticket.get('Telefone', 'N/D')}")
+            st.write(f"**🏷️ Classificação:** {ticket.get('Classificação', 'N/D')}")
         
-        return  # Retorna para não mostrar a lista quando está em modo busca
-
-    # ========== VISÃO GERAL - LISTA DE TICKETS ==========
-    st.subheader("📊 Gestão de Tickets de Suporte")
+        with col2:
+            st.write(f"**🔧 Tipo:** {ticket.get('Tipo_Problema', 'N/D')}")
+            st.write(f"**📅 Aberto em:** {ticket.get('Data de abertura', 'N/D')}")
+            
+            progresso = ticket.get('Progresso', 0)
+            try:
+                prog_val = float(progresso) if progresso else 0
+            except:
+                prog_val = 0
+            
+            st.write(f"**📊 Progresso:** {prog_val}%")
+            st.progress(prog_val / 100)
+        
+        st.markdown("---")
+        st.markdown("### 🔍 Descrição do Problema")
+        descricao = ticket.get('Descrição do problema', '')
+        if descricao:
+            st.error(f"**Problema relatado:**\n\n{descricao}")
+        else:
+            st.caption("_Sem descrição_")
+        
+        st.markdown("---")
+        st.markdown("### 📝 Histórico")
+        
+        ultimo = ticket.get('Último contato', '')
+        if ultimo:
+            st.info(f"**Último acompanhamento:**\n\n{ultimo}")
+        else:
+            st.caption("_Nenhum acompanhamento registrado_")
+        
+        proximo = ticket.get('Próximo contato', '')
+        if proximo:
+            st.info(f"**📅 Próximo contato:** {proximo}")
+        
+        obs = ticket.get('Observações', '')
+        if obs:
+            st.info(f"**💬 Observações:** {obs}")
+        
+        return  # Para não mostrar lista quando está vendo ticket
     
-    # Carregar dados
-    with st.spinner("Carregando tickets de suporte..."):
-        df_suporte = carregar_dados("SUPORTE")
+    # ========== LISTA DE TICKETS ==========
+    st.subheader("📋 Tickets Ativos")
+    
+    with st.spinner("Carregando tickets..."):
+        df_suporte = carregar_dados_suporte()
     
     if df_suporte.empty:
-        st.info("✅ Nenhum ticket de suporte ativo no momento")
-        st.write("👉 Use o botão **➕ Novo Ticket** acima para abrir um chamado")
+        st.info("Nenhum ticket ativo no momento")
+        st.write("Use o botão '**Novo Ticket**' acima para abrir um chamado")
         return
     
-    # ========== FILTRAR TICKETS DO DIA E VENCIDOS ==========
-    hoje_dt = datetime.now()
-    hoje_str_br = hoje_dt.strftime('%d/%m/%Y')
-    
-    df_hoje = pd.DataFrame()
-    df_vencidos = pd.DataFrame()
-    
-    if 'Próximo contato' in df_suporte.columns:
-        # Tickets de hoje
-        df_hoje = df_suporte[df_suporte['Próximo contato'] == hoje_str_br].copy()
-        
-        # Tickets vencidos
-        vencidos_lista = []
-        for idx, row in df_suporte.iterrows():
-            data_contato_str = row.get('Próximo contato', '')
-            if data_contato_str and data_contato_str != '':
-                try:
-                    data_contato_dt = datetime.strptime(data_contato_str, '%d/%m/%Y')
-                    if data_contato_dt.date() < hoje_dt.date():
-                        vencidos_lista.append(idx)
-                except:
-                    pass
-        
-        if vencidos_lista:
-            df_vencidos = df_suporte.loc[vencidos_lista].copy()
-    
-    # ========== DASHBOARD DE MÉTRICAS ==========
-    st.subheader("📊 Resumo de Suporte")
-    
-    # Contar por prioridade
-    prioridades = {'Urgente': 0, 'Alta': 0, 'Média': 0, 'Baixa': 0}
-    
-    if 'Prioridade' in df_suporte.columns:
-        for p in prioridades.keys():
-            prioridades[p] = len(df_suporte[df_suporte['Prioridade'] == p])
-    
     # Métricas
-    col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
+    hoje = datetime.now().date()
+    hoje_str = hoje.strftime('%d/%m/%Y')
+    
+    col_m1, col_m2, col_m3 = st.columns(3)
     
     with col_m1:
-        st.metric("📋 Total de Tickets", len(df_suporte))
+        st.metric("🎫 Total de Tickets", len(df_suporte))
     
     with col_m2:
-        st.metric("📅 Hoje", len(df_hoje), help="Tickets agendados para hoje")
+        urgentes = len(df_suporte[df_suporte['Prioridade'] == 'Urgente'])
+        st.metric("🔴 Urgentes", urgentes)
     
     with col_m3:
-        st.metric("🔥 Vencidos", len(df_vencidos),
-                  delta=f"-{len(df_vencidos)}" if len(df_vencidos) > 0 else "0",
-                  delta_color="inverse",
-                  help="Tickets com data de contato vencida")
-    
-    with col_m4:
-        st.metric("🔴 Urgente", prioridades['Urgente'], 
-                  delta=f"-{prioridades['Urgente']}" if prioridades['Urgente'] > 0 else "0",
-                  delta_color="inverse")
-    
-    with col_m5:
-        total_criticos = prioridades['Urgente'] + prioridades['Alta']
-        st.metric("⚠️ Críticos", total_criticos,
-                  delta=f"-{total_criticos}" if total_criticos > 0 else "0",
-                  delta_color="inverse")
-    
-    # Alertas
-    if prioridades['Urgente'] > 0:
-        st.error(f"🚨 **ATENÇÃO:** Você tem {prioridades['Urgente']} ticket(s) URGENTE(S)! Priorize-os imediatamente.")
-    
-    if len(df_vencidos) > 0:
-        st.warning(f"⚠️ **ATENÇÃO:** Você tem {len(df_vencidos)} ticket(s) VENCIDO(S) de dias anteriores!")
+        em_aberto = len(df_suporte[df_suporte['Progresso'] < 100])
+        st.metric("⏳ Em Aberto", em_aberto)
     
     st.markdown("---")
     
-    # ========== FILTROS ==========
+    # Filtros
     st.subheader("🔍 Filtros")
-    
-    col_f1, col_f2, col_f3 = st.columns(3)
+    col_f1, col_f2 = st.columns(2)
     
     with col_f1:
-        visualizar = st.selectbox(
-            "Visualizar:",
-            ["Todos", "Hoje", "Vencidos"],
-            help="Escolha quais tickets deseja ver"
+        filtro_prioridade = st.selectbox(
+            "Prioridade",
+            ["Todas", "Urgente", "Alta", "Média", "Baixa"]
         )
     
     with col_f2:
         busca_lista = st.text_input(
-            "Buscar na lista:",
-            "",
-            placeholder="Digite o nome...",
-            key="busca_lista_suporte"
+            "Buscar por nome",
+            placeholder="Digite o nome do cliente..."
         )
-    
-    with col_f3:
-        filtro_prioridade = st.selectbox(
-            "Prioridade:",
-            ["Todas", "Urgente", "Alta", "Média", "Baixa"]
-        )
-    
-    # Selecionar dataset
-    if visualizar == "Hoje":
-        df_trabalho = df_hoje.copy()
-    elif visualizar == "Vencidos":
-        df_trabalho = df_vencidos.copy()
-    else:
-        df_trabalho = df_suporte.copy()
     
     # Aplicar filtros
-    df_filt = df_trabalho.copy()
+    df_filtrado = df_suporte.copy()
     
-    if busca_lista and 'Nome' in df_filt.columns:
-        df_filt = df_filt[df_filt['Nome'].str.contains(busca_lista, case=False, na=False)]
+    if filtro_prioridade != "Todas":
+        df_filtrado = df_filtrado[df_filtrado['Prioridade'] == filtro_prioridade]
     
-    if filtro_prioridade != 'Todas' and 'Prioridade' in df_filt.columns:
-        df_filt = df_filt[df_filt['Prioridade'] == filtro_prioridade]
+    if busca_lista:
+        df_filtrado = df_filtrado[
+            df_filtrado['Nome'].astype(str).str.contains(busca_lista, case=False, na=False, regex=False)
+        ]
     
     st.markdown("---")
     
-    # ========== LISTA DE TICKETS ==========
-    st.subheader(f"🎫 Tickets de Suporte ({len(df_filt)})")
-    
-    if df_filt.empty:
-        if visualizar == "Hoje":
-            st.info("✅ Nenhum ticket agendado para hoje!")
-        elif visualizar == "Vencidos":
-            st.success("✅ Você não tem tickets vencidos! Parabéns!")
-        else:
-            st.info("Nenhum ticket encontrado com os filtros aplicados")
+    if df_filtrado.empty:
+        st.info("Nenhum ticket encontrado com os filtros aplicados")
         return
     
-    # Ordenar por prioridade (Urgente > Alta > Média > Baixa)
+    # Ordenar por prioridade
     ordem_prioridade = {'Urgente': 0, 'Alta': 1, 'Média': 2, 'Baixa': 3}
-    if 'Prioridade' in df_filt.columns:
-        df_filt['_ordem'] = df_filt['Prioridade'].map(ordem_prioridade).fillna(4)
-        df_filt = df_filt.sort_values('_ordem')
+    df_filtrado['Ordem'] = df_filtrado['Prioridade'].map(ordem_prioridade).fillna(4)
+    df_filtrado = df_filtrado.sort_values('Ordem')
     
-    # Ícones de prioridade
-    icones_prioridade = {
-        'Urgente': '🔴',
-        'Alta': '🟠',
-        'Média': '🟡',
-        'Baixa': '🟢'
-    }
+    # Exibir tickets
+    st.subheader(f"📚 Lista de Tickets ({len(df_filtrado)})")
     
-    # Cards de tickets (versão resumida para lista)
-    for idx, ticket in df_filt.iterrows():
+    icones = {'Urgente': '🔴', 'Alta': '🟠', 'Média': '🟡', 'Baixa': '🟢'}
+    
+    for idx, row in df_filtrado.iterrows():
+        id_ticket = row.get('ID_Ticket', 'N/D')
+        nome = row.get('Nome', 'N/D')
+        prioridade = row.get('Prioridade', 'Média')
+        progresso = row.get('Progresso', 0)
         
-        # Dados do ticket
-        id_ticket = str(ticket.get('ID_Ticket', 'N/D')) if ticket.get('ID_Ticket') else 'N/D'
-        nome_cliente = str(ticket.get('Nome', 'N/D')) if ticket.get('Nome') else 'N/D'
-        prioridade = str(ticket.get('Prioridade', 'Média')) if ticket.get('Prioridade') else 'Média'
-        progresso = ticket.get('Progresso', 0)
-        
-        # Converter progresso corretamente
         try:
-            progresso_valor = float(progresso) if progresso else 0
+            prog_val = float(progresso) if progresso else 0
         except:
-            progresso_valor = 0
+            prog_val = 0
         
-        icone = icones_prioridade.get(prioridade, '⚪')
-        
-        # Verificar se está vencido
-        esta_vencido = False
-        proximo_contato_str = str(ticket.get('Próximo contato', '')) if ticket.get('Próximo contato') else ''
-        if proximo_contato_str and proximo_contato_str.strip():
-            try:
-                data_contato_dt = datetime.strptime(proximo_contato_str, '%d/%m/%Y')
-                if data_contato_dt.date() < hoje_dt.date():
-                    esta_vencido = True
-            except:
-                pass
+        icone = icones.get(prioridade, '⚪')
         
         # Badge de status
-        if esta_vencido:
-            badge = "🔥 VENCIDO"
-        elif proximo_contato_str == hoje_str_br:
-            badge = "📅 HOJE"
+        if prog_val >= 100:
+            badge = "✅ RESOLVIDO"
+        elif prog_val >= 50:
+            badge = "🔄 EM ANDAMENTO"
         else:
-            badge = "📋 ATIVO"
+            badge = "🆕 ABERTO"
         
-        # Título do card
-        titulo_card = f"{badge} | {icone} {prioridade.upper()} | 🎫 {id_ticket} | 👤 {nome_cliente} | 📊 {progresso_valor}%"
+        titulo = f"{badge} | {icone} {id_ticket} | {nome} | {prog_val}%"
         
-        # Expandir automaticamente tickets urgentes ou vencidos
-        expandir = (prioridade == 'Urgente' or esta_vencido)
+        expandir = prioridade == 'Urgente'
         
-        with st.expander(titulo_card, expanded=expandir):
-            
-            col_info, col_acoes = st.columns([2, 1])
+        with st.expander(titulo, expanded=expandir):
+            col_info, col_acao = st.columns([3, 1])
             
             with col_info:
-                st.write(f"**🎫 ID do Ticket:** {id_ticket}")
-                st.write(f"**👤 Cliente:** {nome_cliente}")
-                
-                telefone_ticket = str(ticket.get('Telefone', 'N/D')) if ticket.get('Telefone') else 'N/D'
-                st.write(f"**📱 Telefone:** {telefone_ticket}")
-                
-                tipo_problema_ticket = str(ticket.get('Tipo_Problema', 'N/D')) if ticket.get('Tipo_Problema') else 'N/D'
-                st.write(f"**🔧 Tipo:** {tipo_problema_ticket}")
-                
+                st.write(f"**🎫 ID:** {id_ticket}")
+                st.write(f"**👤 Cliente:** {nome}")
+                st.write(f"**📱 Telefone:** {row.get('Telefone', 'N/D')}")
                 st.write(f"**{icone} Prioridade:** {prioridade}")
+                st.write(f"**🔧 Tipo:** {row.get('Tipo_Problema', 'N/D')}")
+                st.write(f"**📅 Aberto:** {row.get('Data de abertura', 'N/D')}")
                 
-                # Progresso
-                try:
-                    progresso_decimal = max(0.0, min(1.0, progresso_valor / 100))
-                except:
-                    progresso_decimal = 0.0
-                
-                st.progress(progresso_decimal)
-                st.caption(f"{progresso_valor}% concluído")
-                
-                # Descrição resumida
-                descricao_raw = ticket.get('Descrição do problema', '')
-                descricao = str(descricao_raw) if descricao_raw else ''
-                if descricao and descricao.strip():
-                    st.info(f"**Problema:** {descricao[:150]}{'...' if len(descricao) > 150 else ''}")
-                
-                # Datas
-                data_abertura = str(ticket.get('Data de abertura', 'N/D')) if ticket.get('Data de abertura') else 'N/D'
-                st.write(f"**📅 Aberto em:** {data_abertura}")
-                
-                if proximo_contato_str and proximo_contato_str.strip():
-                    if esta_vencido:
-                        st.error(f"**⚠️ Próximo contato:** {proximo_contato_str} (VENCIDO)")
-                    elif proximo_contato_str == hoje_str_br:
-                        st.success(f"**📅 Próximo contato:** {proximo_contato_str} (HOJE)")
-                    else:
-                        st.info(f"**📅 Próximo contato:** {proximo_contato_str}")
+                proximo = row.get('Próximo contato', '')
+                if proximo:
+                    st.write(f"**📅 Próximo contato:** {proximo}")
             
-            with col_acoes:
-                st.markdown("### 🎯 Ações")
-                
-                # Botão para ver detalhes completos
-                if st.button(f"📋 Ver Detalhes", key=f"ver_detalhes_{idx}_{id_ticket}", use_container_width=True):
-                    st.session_state.ticket_encontrado = ticket.to_dict()
+            with col_acao:
+                if st.button("👁️ Ver Detalhes", key=f"ver_{idx}_{id_ticket}", use_container_width=True):
+                    st.session_state.ticket_encontrado = row.to_dict()
                     st.rerun()
-                
-                st.caption(f"Clique para ver o histórico completo e atualizar o ticket")
-        
-        st.markdown("---")
+            
+            st.markdown("---")
 
 
 # ============================================================================
